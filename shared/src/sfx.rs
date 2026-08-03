@@ -355,6 +355,11 @@ unsafe fn custom_set_voice(v: usize, keyon: bool) {
         // the lead) was playing that corrupt wavetable, dumping a huge 80-320Hz
         // rumble (~15x PICO-8) onto the lead. Play the triangle base here too.
         let wav_idx = if cwave == 7 { 0 } else { cwave & 7 };
+        // Deliberately NOT through psx-sfx, unlike the menu one-shots: these
+        // are periodic wavetables that have to loop. Their blocks carry the
+        // loop-start flag, so silicon latches the repeat address off the table
+        // itself as it decodes, and pointing it at psx-spu's silence block
+        // instead would stop every note after one pass.
         voice.set_start_addr(SpuAddr::new(wt_addr(wav_idx, long)));
         Voice::key_on(1 << v);
         CHANNELS[v].keyed_on = true;

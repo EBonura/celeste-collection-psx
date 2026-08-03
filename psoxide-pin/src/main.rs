@@ -5,7 +5,7 @@ use std::process::ExitCode;
 
 /// Must match the rev in Cargo.toml: it is what the hydrated tree is stamped
 /// with, so an unchanged pin skips the copy.
-const REV: &str = "b4f33474eee90a58a5177fc18a5eb30bb4c11655";
+const REV: &str = "f6acab68d8b3a49eca2436e0c5f45ec55274c629";
 
 fn main() -> ExitCode {
     let into = std::env::args()

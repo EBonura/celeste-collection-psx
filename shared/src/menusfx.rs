@@ -5,13 +5,17 @@
 //! 0..15 the [`crate::sfx`] engine uses -- so the launcher and the in-game pause
 //! overlay can fire UI sounds without disturbing the game's audio.
 
+use psx_sfx::{OneShot, Sample as SfxSample};
 use psx_spu as spu;
-use spu::{Adsr, Pitch, SpuAddr, Voice, Volume};
+use spu::{Adsr, SpuAddr, Voice, Volume};
+
+/// Decoded samples in one ADPCM block, for turning MENU_SFX's sample counts
+/// into the block count psx-sfx times a cutoff from.
+const SAMPLES_PER_BLOCK: u32 = 28;
 
 include!("menu_sfx_data.rs"); // MENU_SFX_ADPCM, MENU_SFX, SFX_NAV / CONFIRM / TRANSITION
 
-const SPU_BASE: u32 = 0x4000; // clear of the PICO-8 waveforms (0x1000..~0x1900)
-const PITCH_22K: u16 = 0x0800; // a 22050 Hz sample on the 44100 Hz SPU
+const SPU_BASE: u32 = 0x4000; // clear of the PICO-8 waveforms (0x1010..~0x1910)
 const VOL_BASE: i16 = 0x2800; // pre-scale level (scaled by the SFX-volume setting)
 const VOICES: [u8; 3] = [16, 17, 18]; // round-robin so quick sounds don't cut each other
 
@@ -31,16 +35,28 @@ pub fn play(id: usize) {
         return;
     }
     unsafe {
-        let off = MENU_SFX[id].0;
+        let (off, samples) = MENU_SFX[id];
         let v = VOICES[NEXT % VOICES.len()];
         NEXT = NEXT.wrapping_add(1);
         let vol = (VOL_BASE as i32 * crate::sfx::sfx_volume() as i32 / 8) as i16;
-        let voice = Voice::new(v);
-        voice.set_volume(Volume(vol), Volume(vol));
-        voice.set_pitch(Pitch::raw(PITCH_22K));
-        voice.set_start_addr(SpuAddr::new(SPU_BASE + off));
-        // instant attack, full sustain; the ADPCM end flag (0x01) mutes the voice.
-        voice.set_adsr(Adsr { lower: 0x000F, upper: 0x0000 });
-        Voice::key_on(1 << v);
+        // Through psx-sfx so the repeat address is written. These are
+        // one-shots, last block flag 0x01 and no loop, and on END silicon
+        // jumps to that register rather than carrying on -- so without it the
+        // voice landed in whatever a PICO-8 wavetable had left there. The
+        // instant release below is why that was never audible here, which
+        // makes it luck rather than correctness.
+        //
+        // 22050 Hz is what the bank is cooked at, so configure_sample derives
+        // the same 0x0800 pitch PITCH_22K spelt out by hand.
+        let sample = SfxSample::resident(
+            SpuAddr::new(SPU_BASE + off),
+            22_050,
+            samples.div_ceil(SAMPLES_PER_BLOCK),
+        );
+        OneShot::new(sample, Volume(vol))
+            // Instant attack, full sustain, fastest release the hardware
+            // encodes.
+            .with_adsr(Adsr { lower: 0x000F, upper: 0x0000 })
+            .play(Voice::new(v));
     }
 }

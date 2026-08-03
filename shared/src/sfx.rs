@@ -50,9 +50,14 @@ const EMPTY_AUDIO: AudioData = AudioData {
     music_pattern_count: 0,
 };
 
-const SPU_WAVEFORM_BASE: u32 = 0x1000;
+/// psx-spu keeps the first usable block of SPU RAM, 0x1000..0x1010, for the
+/// silence a finished one-shot parks on, and upload_adpcm rejects a bank laid
+/// over it. This used to start at 0x1000 exactly, which would have quietly
+/// eaten that block; the short tables use 352 of the 512 bytes to 0x1210, so
+/// the move costs nothing.
+const SPU_WAVEFORM_BASE: u32 = 0x1010;
 /// The long (448-sample) wavetables sit just past the 352-byte short tables.
-const SPU_WAVEFORM_LONG_BASE: u32 = 0x1200;
+const SPU_WAVEFORM_LONG_BASE: u32 = 0x1210;
 /// Tonal notes with key below this use the LONG (8x) wavetable to suppress
 /// short-wavetable imaging; at/above it the short table is used (imaging is already
 /// out of band, and the long table's SPU pitch would pass the 0x3FFF ceiling).

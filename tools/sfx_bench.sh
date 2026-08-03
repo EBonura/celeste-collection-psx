@@ -16,7 +16,7 @@ SECS="${SECS:-135}"
 echo "== build $GAME soundtest =="
 ( cd "games/$GAME" && cargo build --release --bin soundtest >/dev/null 2>&1 )
 echo "== pack disc =="
-( cd third_party/PSoXide/tools/mkisopsx && cargo run --release -- \
+( cd .psoxide/tools/mkisopsx && cargo run --release -- \
     --exe "$ROOT/$EXE" --out "$ROOT/dist/${GAME}_soundtest.bin" --volume PICO8PSX >/dev/null 2>&1 )
 echo "== capture ${SECS}s SPU -> $WAV =="
 cargo run -q --manifest-path tools/psx-audio-capture/Cargo.toml --bin psx-audio-capture -- \

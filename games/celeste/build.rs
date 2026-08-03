@@ -12,7 +12,7 @@ fn main() {
         .parent()
         .and_then(|p| p.parent())
         .expect("game crate must live at <repo>/games/<name>");
-    let ld = repo_root.join("third_party/PSoXide/sdk/psoxide.ld");
+    let ld = repo_root.join(".psoxide/sdk/psoxide.ld");
     let ld = ld.canonicalize().unwrap_or(ld);
 
     // `-T` selects the linker script; `--oformat=binary` dumps a flat

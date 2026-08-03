@@ -38,6 +38,6 @@ lto           = true
 # The shared PICO-8 runtime + the SDK crates this crate touches directly.
 [dependencies]
 pico8   = { path = "../../shared" }
-psx-rt  = { path = "../../third_party/PSoXide/sdk/crates/psx-rt" }
-psx-gpu = { path = "../../third_party/PSoXide/sdk/crates/psx-gpu" }
-psx-pad = { path = "../../third_party/PSoXide/sdk/crates/psx-pad" }
+psx-rt  = { path = "../../.psoxide/sdk/crates/psx-rt" }
+psx-gpu = { path = "../../.psoxide/sdk/crates/psx-gpu" }
+psx-pad = { path = "../../.psoxide/sdk/crates/psx-pad" }

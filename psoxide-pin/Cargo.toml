@@ -1,0 +1,21 @@
+# Which PSoXide this game is built against. Cargo owns the pin: the rev below
+# goes into psoxide-pin/Cargo.lock and Cargo caches that checkout once per
+# machine rather than once per game.
+#
+# `make` runs this crate, and psoxide_link::hydrate_pinned copies the checkout
+# Cargo compiled it from into ../.psoxide, so the game's plain path
+# dependencies and the linker script both resolve. Nothing here points into
+# .psoxide -- a pin that did could not be read before that tree existed, which
+# is the whole reason a clean clone works.
+#
+# To move the SDK: change rev here and PSOXIDE_REV in the Makefile.
+[package]
+name    = "psoxide-pin"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+psoxide-link = { git = "https://github.com/EBonura/PSoXide.git", rev = "b53c668911c41b9933110b55a3f6179bebc03467" }

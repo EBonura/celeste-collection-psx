@@ -32,3 +32,8 @@ AGENTS.md
 # Python
 __pycache__/
 *.pyc
+
+# Hydrated by psoxide-link from the pin in psoxide-pin/. Never committed:
+# the pin is the source of truth, this is a cache.
+.psoxide/
+psoxide-pin/target/

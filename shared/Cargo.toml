@@ -11,12 +11,12 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-psx-gpu  = { path = "../third_party/PSoXide/sdk/crates/psx-gpu" }
-psx-vram = { path = "../third_party/PSoXide/sdk/crates/psx-vram" }
-psx-io   = { path = "../third_party/PSoXide/sdk/crates/psx-io" }
-psx-hw   = { path = "../third_party/PSoXide/crates/psx-hw" }
-psx-spu  = { path = "../third_party/PSoXide/sdk/crates/psx-spu" }
-psx-sfx  = { path = "../third_party/PSoXide/sdk/crates/psx-sfx" }
-psx-font = { path = "../third_party/PSoXide/sdk/crates/psx-font" }
-psx-pad  = { path = "../third_party/PSoXide/sdk/crates/psx-pad" }
-psx-mc   = { path = "../third_party/PSoXide/sdk/crates/psx-mc" }
+psx-gpu  = { path = "../.psoxide/sdk/crates/psx-gpu" }
+psx-vram = { path = "../.psoxide/sdk/crates/psx-vram" }
+psx-io   = { path = "../.psoxide/sdk/crates/psx-io" }
+psx-hw   = { path = "../.psoxide/crates/psx-hw" }
+psx-spu  = { path = "../.psoxide/sdk/crates/psx-spu" }
+psx-sfx  = { path = "../.psoxide/sdk/crates/psx-sfx" }
+psx-font = { path = "../.psoxide/sdk/crates/psx-font" }
+psx-pad  = { path = "../.psoxide/sdk/crates/psx-pad" }
+psx-mc   = { path = "../.psoxide/sdk/crates/psx-mc" }

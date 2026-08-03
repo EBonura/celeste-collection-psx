@@ -18,6 +18,6 @@ name = "frametest"
 path = "src/bin/frametest.rs"
 
 [dependencies]
-emulator-core    = { path = "../../third_party/PSoXide/emu/crates/emulator-core" }
-psx-iso          = { path = "../../third_party/PSoXide/crates/psx-iso" }
-psoxide-settings = { path = "../../third_party/PSoXide/emu/crates/psoxide-settings" }
+emulator-core    = { path = "../../.psoxide/emu/crates/emulator-core" }
+psx-iso          = { path = "../../.psoxide/crates/psx-iso" }
+psoxide-settings = { path = "../../.psoxide/emu/crates/psoxide-settings" }

@@ -7,7 +7,7 @@
 # targets add disc packing via the submodule's mkisopsx tool.
 
 ROOT     := $(CURDIR)
-PSOXIDE  := $(ROOT)/third_party/PSoXide
+PSOXIDE  := $(ROOT)/.psoxide
 MKISOPSX := $(PSOXIDE)/tools/mkisopsx
 TARGET   := mipsel-sony-psx
 DIST     := $(ROOT)/dist
@@ -20,7 +20,7 @@ DIST     := $(ROOT)/dist
 PSOXIDE_LIB     ?= $(HOME)/Downloads/ps1 games
 COLLECTION_NAME := Celeste Classic Collection
 
-.PHONY: help submodule clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
+.PHONY: help psoxide clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
 
 help:
 	@echo "pico8-psx targets:"
@@ -34,8 +34,18 @@ help:
 	@echo "  make submodule          - init/update the pinned PSoXide submodule"
 	@echo "  make clean              - remove build output"
 
-submodule:
-	git submodule update --init --recursive
+# Which PSoXide this is built against. Cargo owns the pin (psoxide-pin/), and
+# psoxide-link copies the resolved checkout to .psoxide so the path
+# dependencies and the linker script resolve. PSOXIDE_FROM=/path/to/tree
+# overrides it, which is how the demo disc puts every program on one SDK.
+PSOXIDE_FROM ?=
+psoxide:
+	@if [ -n "$(PSOXIDE_FROM)" ]; then \
+		cargo run -q --manifest-path $(PSOXIDE_FROM)/tools/psoxide-link/Cargo.toml -- \
+			--from "$(PSOXIDE_FROM)" --into $(PSOXIDE); \
+	else \
+		cargo run -q --manifest-path $(ROOT)/psoxide-pin/Cargo.toml -- $(PSOXIDE); \
+	fi
 
 clean:
 	rm -rf $(DIST)
@@ -50,7 +60,7 @@ clean:
 COLLECTION_DIR := $(ROOT)/games/celeste-collection
 COLLECTION_EXE := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.exe
 
-collection:
+collection: psoxide
 	cd $(COLLECTION_DIR) && cargo build --release
 	@echo "EXE  -> $(COLLECTION_EXE)"
 

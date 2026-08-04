@@ -28,8 +28,17 @@ dependencies = [
  "psx-io",
  "psx-mc",
  "psx-pad",
+ "psx-sfx",
  "psx-spu",
  "psx-vram",
+]
+
+[[package]]
+name = "psx-asset"
+version = "0.1.0"
+dependencies = [
+ "psx-gte",
+ "psxed-format",
 ]
 
 [[package]]
@@ -49,6 +58,20 @@ version = "0.1.0"
 dependencies = [
  "psx-hw",
  "psx-io",
+]
+
+[[package]]
+name = "psx-gte"
+version = "0.1.0"
+dependencies = [
+ "psx-gte-core",
+]
+
+[[package]]
+name = "psx-gte-core"
+version = "0.1.0"
+dependencies = [
+ "psx-math",
 ]
 
 [[package]]
@@ -83,6 +106,7 @@ version = "0.1.0"
 dependencies = [
  "psx-hw",
  "psx-io",
+ "psx-math",
 ]
 
 [[package]]
@@ -91,6 +115,14 @@ version = "0.1.0"
 dependencies = [
  "psx-hw",
  "psx-io",
+]
+
+[[package]]
+name = "psx-sfx"
+version = "0.1.0"
+dependencies = [
+ "psx-asset",
+ "psx-spu",
 ]
 
 [[package]]
@@ -108,3 +140,7 @@ dependencies = [
  "psx-hw",
  "psx-io",
 ]
+
+[[package]]
+name = "psxed-format"
+version = "0.1.0"

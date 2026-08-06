@@ -96,7 +96,7 @@ collection-release: collection-disc
 CELESTE_DIR := $(ROOT)/games/celeste
 CELESTE_EXE := $(CELESTE_DIR)/target/$(TARGET)/release/celeste.exe
 
-celeste:
+celeste: psoxide
 	cd $(CELESTE_DIR) && cargo build --release
 	@echo "EXE  -> $(CELESTE_EXE)"
 
@@ -112,7 +112,7 @@ celeste-disc: celeste
 CELESTE2_DIR := $(ROOT)/games/celeste2
 CELESTE2_EXE := $(CELESTE2_DIR)/target/$(TARGET)/release/celeste2.exe
 
-celeste2:
+celeste2: psoxide
 	cd $(CELESTE2_DIR) && cargo build --release
 	@echo "EXE  -> $(CELESTE2_EXE)"
 

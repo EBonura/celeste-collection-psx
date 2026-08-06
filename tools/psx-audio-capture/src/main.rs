@@ -20,7 +20,6 @@ use emulator_core::{
 };
 
 const SAMPLE_RATE: u32 = 44_100;
-const DEFAULT_BIOS: &str = "/Users/ebonura/Downloads/ps1 bios/SCPH1001.BIN";
 const STEP_CAP: u64 = 6_000_000_000; // backstop so a stuck cart can't run forever
 
 fn arg(flag: &str) -> Option<String> {
@@ -47,7 +46,9 @@ fn main() {
     let out = arg("--out").unwrap_or_else(|| "/tmp/psx_audio.wav".into());
     let seconds: f32 = arg("--seconds").and_then(|s| s.parse().ok()).unwrap_or(20.0);
     let skip: f32 = arg("--skip").and_then(|s| s.parse().ok()).unwrap_or(0.0);
-    let bios_path = arg("--bios").unwrap_or_else(|| DEFAULT_BIOS.into());
+    let bios_path = arg("--bios")
+        .or_else(|| std::env::var("PSX_BIOS").ok())
+        .expect("--bios <path> or PSX_BIOS env var required");
 
     let bios = std::fs::read(&bios_path).expect("BIOS readable");
     let disc = load_disc(Path::new(&disc_path)).expect("disc readable");

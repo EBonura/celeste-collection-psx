@@ -17,7 +17,6 @@ use emulator_core::{
     DISC_FAST_BOOT_WARMUP_STEPS,
 };
 
-const DEFAULT_BIOS: &str = "/Users/ebonura/Downloads/ps1 bios/SCPH1001.BIN";
 const CYCLES_PER_FRAME: u64 = 564_480; // ~33.8688 MHz / 60
 const STEP_CAP: u64 = 6_000_000_000;
 
@@ -57,7 +56,9 @@ fn main() {
     let hold = mask_arg("--hold").unwrap_or(0);
     let press_at: i64 = arg("--press-at").and_then(|s| s.parse().ok()).unwrap_or(-1);
     let press_mask = mask_arg("--press-mask").unwrap_or(0x4000);
-    let bios_path = arg("--bios").unwrap_or_else(|| DEFAULT_BIOS.into());
+    let bios_path = arg("--bios")
+        .or_else(|| std::env::var("PSX_BIOS").ok())
+        .expect("--bios <path> or PSX_BIOS env var required");
 
     let bios = std::fs::read(&bios_path).expect("BIOS readable");
     let disc = load_disc(Path::new(&disc_path)).expect("disc readable");

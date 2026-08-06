@@ -8,6 +8,16 @@ The **Celeste Classic Collection**: two full, playable ports, **Celeste** (the o
 dissolve transitions, UI sounds, a follow camera, side-gradient borders, and an in-game pause
 menu for volume, screen mode, and borders). Verified end to end on a modchipped console.
 
+## Play it
+
+The collection's disc image is on
+[itch.io](https://bonnie-studios.itch.io/celeste-classic-collection-psx). It
+also ships on the
+[PSoXide Demo Disc](https://bonnie-studios.itch.io/psoxide-demo-disc) with
+nine other programs, and that disc runs
+[in your browser](https://bonnie-studios.itch.io/psoxide) on the PSoXide
+page, no console needed.
+
 ## Build & run
 
 ```sh

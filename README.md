@@ -12,10 +12,8 @@ menu for volume, screen mode, and borders). Verified end to end on a modchipped 
 
 The collection's disc image is on
 [itch.io](https://bonnie-studios.itch.io/celeste-classic-collection-psx). It
-also ships on the
-[PSoXide Demo Disc](https://bonnie-studios.itch.io/psoxide-demo-disc) with
-nine other programs, and that disc runs
-[in your browser](https://bonnie-studios.itch.io/psoxide) on the PSoXide
+also ships on the PSoXide Demo Disc with nine other programs, and that disc
+runs [in your browser](https://bonnie-studios.itch.io/psoxide) on the PSoXide
 page, no console needed.
 
 ## Build & run

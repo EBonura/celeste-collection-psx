@@ -1,37 +1,77 @@
 name: Deploy to itch.io
 
-# Pushes the prebuilt PS1 disc image (release/) to itch.io via butler. The disc
-# is built locally with `make collection-release`, so no PS1 toolchain runs on
-# CI. Triggers when release/ changes, or run manually.
-#
-# One-time setup in the GitHub repo (Settings -> Secrets and variables -> Actions):
-#   - BUTLER_API_KEY = your itch.io API key (https://itch.io/user/settings/api-keys)
-#
-# Set ITCH_TARGET below to "<your-itch-user>/<your-game-page>". The ":psx" suffix
-# is the butler channel (an arbitrary label for this download).
-
 on:
   push:
     branches: [main]
     paths:
-      - 'release/**'
+      - "release/**"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish after validating the package
+        required: true
+        default: false
+        type: boolean
 
-env:
-  ITCH_TARGET: bonnie-studios/celeste-classic-collection-psx
-  ITCH_CHANNEL: psx
+permissions:
+  contents: read
+
+concurrency:
+  group: itch-celeste-collection-psx
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the reviewed release
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Push to itch.io via butler
+      - name: Validate version and disc package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          crate_version="$(awk -F'"' '/^version[[:space:]]*=/{print $2; exit}' games/celeste-collection/Cargo.toml)"
+          [[ "${version}" == "${crate_version}" ]] || {
+            echo "VERSION ${version} does not match collection Cargo.toml ${crate_version}" >&2
+            exit 1
+          }
+          grep -Fq "v${version}" release/README.txt || {
+            echo "release/README.txt does not identify v${version}" >&2
+            exit 1
+          }
+          mapfile -t cues < <(find release -maxdepth 1 -type f -name '*.cue' -print)
+          [[ "${#cues[@]}" -eq 1 ]] || {
+            echo "release must contain exactly one CUE" >&2
+            exit 1
+          }
+          bin_name="$(awk -F'"' '/^FILE /{print $2; exit}' "${cues[0]}")"
+          [[ -n "${bin_name}" && -f "release/${bin_name}" ]] || {
+            echo "${cues[0]} references a missing BIN: ${bin_name}" >&2
+            exit 1
+          }
+          [[ "$(grep -c '^[[:space:]]*TRACK ' "${cues[0]}")" -eq 1 ]] || {
+            echo "Celeste Collection release must contain exactly one data track" >&2
+            exit 1
+          }
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Retain the verified package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: celeste-collection-psx-${{ steps.package.outputs.version }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Validate destination and optionally publish
+        uses: EBonura/PSoXide/.github/actions/itch-publish@7f989e2580df66fe824c2853dfe3722ae2c1bb58
+        with:
+          source-dir: release
+          target: bonnie-studios/celeste-classic-collection-psx:psx
+          user-version: ${{ steps.package.outputs.version }}
+          publish: ${{ github.event_name == 'push' || inputs.publish }}
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-        run: |
-          curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
-          unzip butler.zip
-          chmod +x butler
-          ./butler push --userversion "$(cat VERSION)" ./release "${ITCH_TARGET}:${ITCH_CHANNEL}"

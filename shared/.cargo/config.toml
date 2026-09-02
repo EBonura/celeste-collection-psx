@@ -12,3 +12,10 @@ target = "mipsel-sony-psx"
 # memcpy/memset shims compiler-builtins needs on bare metal.
 build-std = ["core"]
 build-std-features = ["compiler-builtins-mem"]
+
+[target.mipsel-sony-psx]
+# LLVM's MIPS delay-slot filler hoists loads into branch delay slots without
+# re-checking the R3000 load-delay hazard, so the next instruction on either
+# path can read the stale register. The backward search is the one that does
+# it; PSoXide's own guest build carries the same flag.
+rustflags = ["-C", "llvm-args=-disable-mips-df-backward-search"]

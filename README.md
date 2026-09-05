@@ -1,4 +1,4 @@
-# pico8-psx
+# Celeste Classic Collection PSX
 
 [PICO-8](https://www.lexaloffle.com/pico-8.php) games demade for the **PlayStation 1**,
 built on the [PSoXide](https://github.com/EBonura/PSoXide) Rust SDK. Real hardware, real discs.
@@ -12,22 +12,27 @@ menu for volume, screen mode, and borders). Verified end to end on a modchipped 
 
 The collection's disc image is on
 [itch.io](https://bonnie-studios.itch.io/celeste-classic-collection-psx). It
-also ships on the PSoXide Demo Disc with nine other programs, and that disc
+also ships on the
+[PSoXide Demo Disc](https://bonnie-studios.itch.io/psoxide-demo-disc), which
 runs [in your browser](https://bonnie-studios.itch.io/psoxide) on the PSoXide
 page, no console needed.
 
 ## Build & run
 
 ```sh
-git clone --recursive https://github.com/EBonura/pico8-psx
+git clone https://github.com/EBonura/celeste-collection-psx.git
+cd celeste-collection-psx
 
 make collection-disc  # the collection       -> dist/celeste-collection.{bin,cue}
 make celeste-disc     # standalone Celeste   -> dist/celeste.{bin,cue}
 make celeste2-disc    # standalone Celeste 2 -> dist/celeste2.{bin,cue}
 ```
 
-Rust **nightly** is pinned by `rust-toolchain.toml` (rustup auto-installs it). Boot the `.cue`
-in [PSoXide](https://github.com/EBonura/PSoXide) (or another PS1 emulator), or burn it to a CD-R
+Install Rust through rustup, Make and host C/C++ build tools. Rust **nightly** is
+pinned by `rust-toolchain.toml`. `make` hydrates the historical SDK pin from
+`psoxide-pin/` into ignored `.psoxide/`; no SDK submodule or sibling clone is
+required. Boot the `.cue` with its adjacent `.bin`
+in [PSoXide Emulator](https://github.com/EBonura/PSoXide-emulator) (or another PS1 emulator), or burn it to a CD-R
 for real hardware. In the launcher: D-pad to choose, X to play; hold Select+Start in-game to
 return.
 
@@ -47,7 +52,9 @@ fixed against it:
   and the dithering and side gradients are drawn to read correctly on a CRT.
 
 The hardware-accuracy work itself (SPU / GPU / CLUT fidelity, plus an on-disc conformance suite)
-lives in [PSoXide](https://github.com/EBonura/PSoXide). Burn with e.g.
+lives in [the SDK](https://github.com/EBonura/PSoXide),
+[emulator](https://github.com/EBonura/PSoXide-emulator), and the
+[hardware suite](https://github.com/EBonura/PSoXide-editor/tree/main/engine/examples/hardware-tests). Burn with e.g.
 `cdrdao write --driver generic-mmc celeste-collection.cue` and boot on a modchipped console.
 
 ## Layout
@@ -55,8 +62,10 @@ lives in [PSoXide](https://github.com/EBonura/PSoXide). Burn with e.g.
 Each game is a standalone Cargo workspace exposing `run()`, shipped on its own or linked into the
 `celeste-collection` launcher (both games in one combined EXE, packed into a single `.bin`/`.cue`
 disc image). Shared runtime (rendering, SPU audio, fonts, pause menu) lives in `shared/`. The
-PSoXide SDK is pinned as a git submodule under `third_party/`; `tools/` holds the PICO-8 to Rust
-asset/audio converters.
+PSoXide SDK revision is recorded in `psoxide-pin/`; `tools/` holds the PICO-8 to Rust
+asset/audio converters. The optional `tools/psx-audio-capture` host tool also
+uses emulator libraries; those are not linked into the PS1 games. Combined-disc
+builds pass `PSOXIDE_FROM` explicitly to select the tested split components.
 
 ## Credits
 

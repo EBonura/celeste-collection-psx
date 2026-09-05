@@ -38,7 +38,7 @@ fn main() {
         backend::camera((t / 8) & 63, 0);
         // Flat colour field over the whole 128-space play area.
         backend::rectfill(0, 0, 127, 127, 1); // dark blue
-        // Columns dither (sparse dots), fill colour 8 (red), top half.
+                                              // Columns dither (sparse dots), fill colour 8 (red), top half.
         backend::fillp_rect(0, 0, 127, 63, 8, backend::FILLP_COLUMNS);
         // Fog dither (50% checker), fill colour 7 (white), bottom half.
         backend::fillp_rect(0, 64, 127, 127, 7, backend::FILLP_FOG);

@@ -41,7 +41,11 @@ fn mask_arg(flag: &str) -> Option<u16> {
 }
 
 fn load_disc(path: &Path) -> Result<psx_iso::Disc, String> {
-    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("cue")) {
+    if path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("cue"))
+    {
         psoxide_settings::library::load_disc_from_cue(path)
     } else {
         let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -113,7 +117,11 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(if press_at >= 0 { press_at + 120 } else { 120 });
     const PROF_BASE: u32 = 0x8001_0000;
-    let mut pc_hist: Vec<u64> = if profile { vec![0u64; 0x80_000] } else { Vec::new() };
+    let mut pc_hist: Vec<u64> = if profile {
+        vec![0u64; 0x80_000]
+    } else {
+        Vec::new()
+    };
     let mut prof_samples: u64 = 0;
 
     let mut steps = 0u64;
@@ -200,5 +208,7 @@ fn main() {
         ppm.extend_from_slice(&px[..3]);
     }
     std::fs::write(&out, &ppm).expect("write PPM");
-    eprintln!("[frametest] {frames} frames, hold=0x{hold:04x} press_at={press_at} -> {out} ({w}x{h})");
+    eprintln!(
+        "[frametest] {frames} frames, hold=0x{hold:04x} press_at={press_at} -> {out} ({w}x{h})"
+    );
 }

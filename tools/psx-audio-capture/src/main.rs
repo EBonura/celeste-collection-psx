@@ -33,7 +33,11 @@ fn arg(flag: &str) -> Option<String> {
 }
 
 fn load_disc(path: &Path) -> Result<psx_iso::Disc, String> {
-    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("cue")) {
+    if path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("cue"))
+    {
         psoxide_settings::library::load_disc_from_cue(path)
     } else {
         let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -44,7 +48,9 @@ fn load_disc(path: &Path) -> Result<psx_iso::Disc, String> {
 fn main() {
     let disc_path = arg("--disc").expect("--disc <cue|bin> required");
     let out = arg("--out").unwrap_or_else(|| "/tmp/psx_audio.wav".into());
-    let seconds: f32 = arg("--seconds").and_then(|s| s.parse().ok()).unwrap_or(20.0);
+    let seconds: f32 = arg("--seconds")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20.0);
     let skip: f32 = arg("--skip").and_then(|s| s.parse().ok()).unwrap_or(0.0);
     let bios_path = arg("--bios")
         .or_else(|| std::env::var("PSX_BIOS").ok())
@@ -58,13 +64,18 @@ fn main() {
     warm_bios_for_disc_fast_boot(&mut bus, &mut cpu, DISC_FAST_BOOT_WARMUP_STEPS)
         .expect("BIOS warmup");
     let info = fast_boot_disc_with_hle(&mut bus, &mut cpu, &disc, false).expect("fast boot");
-    eprintln!("[capture] fast-boot entry=0x{:08x} payload={}B", info.initial_pc, info.payload_len);
+    eprintln!(
+        "[capture] fast-boot entry=0x{:08x} payload={}B",
+        info.initial_pc, info.payload_len
+    );
     bus.cdrom.insert_disc(Some(disc));
     bus.attach_digital_pad_port1();
 
     // Optional: press Cross (0x4000) for ~0.4s starting at this second, to drive
     // a title screen into gameplay before/while capturing.
-    let press_at: f32 = arg("--press-at").and_then(|s| s.parse().ok()).unwrap_or(-1.0);
+    let press_at: f32 = arg("--press-at")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(-1.0);
 
     let skip_samples = (skip * SAMPLE_RATE as f32) as usize;
     let target = skip_samples + (seconds * SAMPLE_RATE as f32) as usize;
@@ -100,10 +111,18 @@ fn main() {
         samples.extend(bus.spu.drain_audio());
     }
 
-    let out_samples = if samples.len() > skip_samples { &samples[skip_samples..] } else { &[] };
+    let out_samples = if samples.len() > skip_samples {
+        &samples[skip_samples..]
+    } else {
+        &[]
+    };
     write_wav(Path::new(&out), out_samples).expect("write WAV");
 
-    let peak = out_samples.iter().map(|&(l, r)| l.abs().max(r.abs())).max().unwrap_or(0);
+    let peak = out_samples
+        .iter()
+        .map(|&(l, r)| l.abs().max(r.abs()))
+        .max()
+        .unwrap_or(0);
     eprintln!(
         "[capture] steps={steps} captured={:.2}s peak={peak} ({:.1}%) -> {out}",
         out_samples.len() as f32 / SAMPLE_RATE as f32,

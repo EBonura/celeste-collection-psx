@@ -12,6 +12,8 @@ jobs:
         run: |
           rustup toolchain install nightly-2026-03-25 --component rust-src
           rustup default nightly-2026-03-25
+      - name: Hydrate the pinned PSoXide dependencies
+        run: make psoxide
       - name: Check shared/ for the host target
         run: |
           HOST=$(rustc -vV | sed -n 's/host: //p')

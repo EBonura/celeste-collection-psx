@@ -17,7 +17,7 @@
 #![allow(static_mut_refs)]
 
 use crate::assets::gfx::GFX_DATA;
-use crate::assets::levels::{LEVELS, LevelMeta};
+use crate::assets::levels::{LevelMeta, LEVELS};
 use crate::assets::tilemap::TILE_FLAGS;
 use pico8::backend::{self, Cart};
 use pico8::debug;
@@ -101,11 +101,23 @@ fn update_input() {
         // 8 frames (a buffer of 4 here halved the real-time grace and made jumps
         // feel unresponsive).
         let jump = held(IN_JUMP);
-        JUMP_PRESSED = if jump && !JUMP_HELD { 8 } else if jump { (JUMP_PRESSED - 1).max(0) } else { 0 };
+        JUMP_PRESSED = if jump && !JUMP_HELD {
+            8
+        } else if jump {
+            (JUMP_PRESSED - 1).max(0)
+        } else {
+            0
+        };
         JUMP_HELD = jump;
 
         let grap = held(IN_GRAPPLE);
-        GRAP_PRESSED = if grap && !GRAP_HELD { 8 } else if grap { (GRAP_PRESSED - 1).max(0) } else { 0 };
+        GRAP_PRESSED = if grap && !GRAP_HELD {
+            8
+        } else if grap {
+            (GRAP_PRESSED - 1).max(0)
+        } else {
+            0
+        };
         GRAP_HELD = grap;
     }
 }
@@ -186,7 +198,10 @@ struct Vec2 {
     x: Fix32,
     y: Fix32,
 }
-const VZ: Vec2 = Vec2 { x: Fix32::ZERO, y: Fix32::ZERO };
+const VZ: Vec2 = Vec2 {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+};
 
 #[derive(Clone, Copy)]
 struct Obj {
@@ -218,7 +233,7 @@ struct Obj {
     breaking: bool,
     ox: Fix32,
     oy: Fix32,
-    rdir: i32, // spawner direction
+    rdir: i32,   // spawner direction
     link: usize, // reference to another object (berry.player), MAX = none
     // player
     state: i32,
@@ -240,7 +255,7 @@ struct Obj {
     grapple_jump_grace_y: Fix32,
     t_grapple_pickup: i32,
     wipe_timer: i32,
-    oid: i32, // spawn id = level*100 + tx + ty*128 (checkpoint/berry persistence)
+    oid: i32,   // spawn id = level*100 + tx + ty*128 (checkpoint/berry persistence)
     flash: i32, // berry pickup flash-ring timer
 }
 
@@ -319,19 +334,19 @@ static mut CAM_MODE: i32 = 1;
 static mut C_OFFSET: i32 = 0; // camera mode 6/7 follow offset
 static mut C_FLAG: bool = false; // camera mode 6 latch
 static mut FRAMES: i32 = 0; // for time()-driven wobble (and the run timer)
-// Run timer + run stats (HH:MM:SS HUD, end score panel). TIMER_F counts rendered
-// frames toward a second (FRAMES itself is the time() wobble clock, kept separate).
+                            // Run timer + run stats (HH:MM:SS HUD, end score panel). TIMER_F counts rendered
+                            // frames toward a second (FRAMES itself is the time() wobble clock, kept separate).
 static mut TIMER_F: i32 = 0;
 static mut SECONDS: i32 = 0;
 static mut MINUTES: i32 = 0;
 static mut BERRY_COUNT: i32 = 0;
 static mut DEATH_COUNT: i32 = 0;
 static mut SHOW_SCORE: i32 = -1; // <0 = inactive; ramps up on the finale
-// Title / level-intro / fade state.
+                                 // Title / level-intro / fade state.
 static mut TITLE_FLASH: i32 = i32::MIN; // MIN = not started; counts down once set
-// The titlescreen ignores jump/grapple until they've been released once after
-// boot, so the X still held from the launcher's "play" (or a "quit to menu")
-// doesn't instantly skip the title. Set true once both are up.
+                                        // The titlescreen ignores jump/grapple until they've been released once after
+                                        // boot, so the X still held from the launcher's "play" (or a "quit to menu")
+                                        // doesn't instantly skip the title. Set true once both are up.
 static mut TITLE_READY: bool = false;
 static mut LEVEL_INTRO: i32 = 0;
 static mut INFADE: i32 = 60; // level-entry wipe (counts up to 60)
@@ -344,13 +359,20 @@ struct Cloud {
     y: Fix32,
     s: Fix32,
 }
-const CLOUD0: Cloud = Cloud { x: Fix32::ZERO, y: Fix32::ZERO, s: Fix32::ZERO };
+const CLOUD0: Cloud = Cloud {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+    s: Fix32::ZERO,
+};
 static mut SNOW: [Vec2; 26] = [VZ; 26];
 static mut CLOUDS: [Cloud; 26] = [CLOUD0; 26];
 
 unsafe fn init_particles() {
     for i in 0..26 {
-        SNOW[i] = Vec2 { x: rng::rnd(fi(132)), y: rng::rnd(fi(132)) };
+        SNOW[i] = Vec2 {
+            x: rng::rnd(fi(132)),
+            y: rng::rnd(fi(132)),
+        };
         CLOUDS[i] = Cloud {
             x: rng::rnd(fi(132)),
             y: rng::rnd(fi(132)),
@@ -382,8 +404,16 @@ unsafe fn draw_clouds(scale: Fix32, oy: Fix32, sy: Fix32, color: i32, count: usi
         let (xi, yi) = (x.to_int() as i16, y.to_int() as i16);
         fill(xi, yi, (s / fi(3)).to_int() as i16);
         if i % 2 == 0 {
-            fill((x - s / fi(3)).to_int() as i16, yi, (s / fi(5)).to_int() as i16);
-            fill((x + s / fi(3)).to_int() as i16, yi, (s / fi(6)).to_int() as i16);
+            fill(
+                (x - s / fi(3)).to_int() as i16,
+                yi,
+                (s / fi(5)).to_int() as i16,
+            );
+            fill(
+                (x + s / fi(3)).to_int() as i16,
+                yi,
+                (s / fi(6)).to_int() as i16,
+            );
         }
         c.x += fi(4 - (i as i32) % 4) * fx(0.25) * HALF;
         CLOUDS[i] = c;
@@ -393,9 +423,18 @@ unsafe fn draw_clouds(scale: Fix32, oy: Fix32, sy: Fix32, color: i32, count: usi
 /// Apply a level's palette swap (matches the `pal` closures in the level table).
 unsafe fn apply_level_pal(pal_id: i32) {
     match pal_id {
-        1 => { backend::pal(2, 12); backend::pal(5, 2); }
-        2 => { backend::pal(2, 14); backend::pal(5, 2); }
-        3 => { backend::pal(2, 1); backend::pal(7, 11); }
+        1 => {
+            backend::pal(2, 12);
+            backend::pal(5, 2);
+        }
+        2 => {
+            backend::pal(2, 14);
+            backend::pal(5, 2);
+        }
+        3 => {
+            backend::pal(2, 1);
+            backend::pal(7, 11);
+        }
         _ => {}
     }
 }
@@ -412,7 +451,12 @@ unsafe fn draw_snow() {
         let mut s = SNOW[i];
         let px = fi(CAM_X) + (s.x - fi(CAM_X) * HALF).rem_floor(fi(132)) - fi(2);
         let py = fi(CAM_Y) + (s.y - fi(CAM_Y) * HALF).rem_floor(fi(132));
-        backend::circfill(px.to_int() as i16, py.to_int() as i16, (i as i32 % 2) as i16, 7);
+        backend::circfill(
+            px.to_int() as i16,
+            py.to_int() as i16,
+            (i as i32 % 2) as i16,
+            7,
+        );
         s.x += fi(4 - (i as i32) % 4) * HALF;
         s.y += (t * fx(0.25) + fi(i as i32) * fx(0.1)).sin() * HALF; // 60fps: halved (matches x)
         SNOW[i] = s;
@@ -549,11 +593,11 @@ unsafe fn check_solid(i: usize, ox: Fix32, oy: Fix32) -> bool {
 // On-collide kind: how the moving object reacts to a wall.
 #[derive(Clone, Copy, PartialEq)]
 enum Collide {
-    None,       // pass through (no stop)
-    Stop,       // zero remainder + speed (base object)
-    Player,     // player corner-correct then stop
-    SnowballX,  // snowball: corner-correct over a lip, else hurt, else bounce back
-    PullX,      // grappled-object pull: corner-correct around a corner, else end pull
+    None,      // pass through (no stop)
+    Stop,      // zero remainder + speed (base object)
+    Player,    // player corner-correct then stop
+    SnowballX, // snowball: corner-correct over a lip, else hurt, else bounce back
+    PullX,     // grappled-object pull: corner-correct around a corner, else end pull
 }
 
 unsafe fn move_x(i: usize, amount: Fix32, c: Collide) -> bool {
@@ -656,7 +700,15 @@ unsafe fn pull_on_collide_x(i: usize, step: i32) -> bool {
 
 /// corner_correct (simplified to the cases the player uses): try to nudge
 /// around a blocking corner. `func` = avoid hazards.
-unsafe fn corner_correct(i: usize, dx: i32, dy: i32, side: i32, look: i32, only_sign: i32, avoid_hazard: bool) -> bool {
+unsafe fn corner_correct(
+    i: usize,
+    dx: i32,
+    dy: i32,
+    side: i32,
+    look: i32,
+    only_sign: i32,
+    avoid_hazard: bool,
+) -> bool {
     if dx != 0 {
         let mut k = 1;
         while k <= side {
@@ -751,7 +803,10 @@ unsafe fn init_obj(i: usize) {
             OBJ[i].hit_h = fi(6);
             OBJ[i].spr = fi(2);
             PLAYER = i;
-            SCARF = [Vec2 { x: OBJ[i].x, y: OBJ[i].y }; 5];
+            SCARF = [Vec2 {
+                x: OBJ[i].x,
+                y: OBJ[i].y,
+            }; 5];
         }
         ObjType::SpikeV => {
             if !check_solid(i, Fix32::ZERO, fi(1)) {
@@ -796,7 +851,11 @@ unsafe fn init_obj(i: usize) {
         ObjType::SpawnerR | ObjType::SpawnerL => {
             // PICO-8 spawn period is 32 frames at 30fps -> 64 at 60fps (offset + update).
             OBJ[i].timer = (OBJ[i].x.to_int() / 8) % 64;
-            OBJ[i].rdir = if OBJ[i].otype == ObjType::SpawnerR { 1 } else { -1 };
+            OBJ[i].rdir = if OBJ[i].otype == ObjType::SpawnerR {
+                1
+            } else {
+                -1
+            };
             OBJ[i].spr = fi(-1); // invisible
         }
         _ => {}
@@ -983,7 +1042,7 @@ unsafe fn obj_on_release(obj: usize, thrown: bool) {
                 OBJ[obj].stop = true;
             }
             OBJ[obj].timer = 16; // thrown_timer (60fps: PICO-8 8 doubled) -- the
-            // window where a just-thrown snowball can't hurt the player
+                                 // window where a just-thrown snowball can't hurt the player
         }
         ObjType::Springboard => {
             if thrown {
@@ -1072,7 +1131,11 @@ unsafe fn player_update(i: usize) {
             // gravity (increments halved)
             if !on_ground {
                 let max = if held(IN_DOWN) { fx(5.2) } else { fx(4.4) };
-                let g = if OBJ[i].spd.y.abs() < fx(0.2) && JUMP_HELD { fx(0.2) } else { fx(0.4) };
+                let g = if OBJ[i].spd.y.abs() < fx(0.2) && JUMP_HELD {
+                    fx(0.2)
+                } else {
+                    fx(0.4)
+                };
                 OBJ[i].spd.y = (OBJ[i].spd.y + g).min(max);
             }
             // variable jump
@@ -1107,7 +1170,11 @@ unsafe fn player_update(i: usize) {
                 }
             }
             // throw grapple
-            if HAVE_GRAPPLE && OBJ[i].holding == NONE && OBJ[i].t_grapple_cooldown <= 0 && consume_grapple_press() {
+            if HAVE_GRAPPLE
+                && OBJ[i].holding == NONE
+                && OBJ[i].t_grapple_cooldown <= 0
+                && consume_grapple_press()
+            {
                 start_grapple(i);
             }
         }
@@ -1125,7 +1192,11 @@ unsafe fn player_update(i: usize) {
                 if hit == 0 {
                     hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y + fi(1));
                 }
-                let mode = if OBJ[i].grapple_hit != NONE { OBJ[OBJ[i].grapple_hit].grapple_mode } else { 0 };
+                let mode = if OBJ[i].grapple_hit != NONE {
+                    OBJ[OBJ[i].grapple_hit].grapple_mode
+                } else {
+                    0
+                };
                 if hit == 0 {
                     OBJ[i].grapple_x += dir; // 60fps: PICO-8 dir*2, halved
                 } else if hit == 1 {
@@ -1325,7 +1396,11 @@ unsafe fn player_update(i: usize) {
     }
 
     // apply movement (velocity moves -> halved inside move_x/move_y)
-    let collide = if OBJ[i].state == 99 { Collide::Stop } else { Collide::Player };
+    let collide = if OBJ[i].state == 99 {
+        Collide::Stop
+    } else {
+        Collide::Player
+    };
     let sx = OBJ[i].spd.x;
     let sy = OBJ[i].spd.y;
     move_x(i, sx, collide);
@@ -1375,7 +1450,11 @@ unsafe fn player_update(i: usize) {
                 }
             }
             ObjType::Berry => {
-                if overlaps(i, j, Fix32::ZERO, Fix32::ZERO) && OBJ[j].link == NONE && OBJ[j].timer == 0 && !OBJ[j].stop {
+                if overlaps(i, j, Fix32::ZERO, Fix32::ZERO)
+                    && OBJ[j].link == NONE
+                    && OBJ[j].timer == 0
+                    && !OBJ[j].stop
+                {
                     OBJ[j].link = i; // collected -> follow player
                     OBJ[j].timer = 0;
                     OBJ[j].flash = 10; // pickup flash ring (60fps: PICO-8 5 doubled)
@@ -1446,7 +1525,9 @@ unsafe fn player_update(i: usize) {
     }
 
     // death / pit (only level 1 finishes by falling off the right)
-    if OBJ[i].state < 99 && (OBJ[i].y > fi(LVL_H * 8 + 16) || hazard_check(i, Fix32::ZERO, Fix32::ZERO)) {
+    if OBJ[i].state < 99
+        && (OBJ[i].y > fi(LVL_H * 8 + 16) || hazard_check(i, Fix32::ZERO, Fix32::ZERO))
+    {
         if LVL_INDEX == 1 && OBJ[i].x > fi(LVL_W * 8 - 64) {
             OBJ[i].state = 100;
             OBJ[i].wipe_timer = -30; // 60fps: PICO-8 -15 doubled
@@ -1524,7 +1605,10 @@ unsafe fn player_draw(i: usize) {
     // is unchanged (it still stops fast moves from streaking the scarf into stray
     // pixels across the level).
     let t = fi(FRAMES) / fi(60);
-    let mut last = Vec2 { x: o.x - fi(o.facing), y: o.y - fi(3) };
+    let mut last = Vec2 {
+        x: o.x - fi(o.facing),
+        y: o.y - fi(3),
+    };
     for k in 1..=5 {
         let mut s = SCARF[k - 1];
         s.x += (last.x - s.x - fi(o.facing)) / fx(3.0);
@@ -1551,18 +1635,51 @@ unsafe fn player_draw(i: usize) {
     // grapple rope (active grapple: the original's wavy double-line, not a faint
     // straight line). amplitude = 2*grapple_wave, freqs per the cart.
     if o.state >= 10 && o.state <= 12 {
-        draw_sine_h(o.x, o.grapple_x, o.y - fi(3), 7, o.grapple_wave * fi(2), fi(6), fx(0.08), 6);
+        draw_sine_h(
+            o.x,
+            o.grapple_x,
+            o.y - fi(3),
+            7,
+            o.grapple_wave * fi(2),
+            fi(6),
+            fx(0.08),
+            6,
+        );
     }
     // retracting grapple: dark underline (1) then white rope (7), as in the original
     if o.grapple_retract {
-        backend::line(o.x.to_int() as i16, (o.y - fi(2)).to_int() as i16, o.grapple_x.to_int() as i16, (o.grapple_y + fi(1)).to_int() as i16, 1);
-        backend::line(o.x.to_int() as i16, (o.y - fi(3)).to_int() as i16, o.grapple_x.to_int() as i16, (o.grapple_y).to_int() as i16, 7);
+        backend::line(
+            o.x.to_int() as i16,
+            (o.y - fi(2)).to_int() as i16,
+            o.grapple_x.to_int() as i16,
+            (o.grapple_y + fi(1)).to_int() as i16,
+            1,
+        );
+        backend::line(
+            o.x.to_int() as i16,
+            (o.y - fi(3)).to_int() as i16,
+            o.grapple_x.to_int() as i16,
+            (o.grapple_y).to_int() as i16,
+            7,
+        );
     }
-    backend::spr(o.spr.floor_int(), (o.x - fi(4)).to_int() as i16, (o.y - fi(8)).to_int() as i16, o.facing != 1, false);
+    backend::spr(
+        o.spr.floor_int(),
+        (o.x - fi(4)).to_int() as i16,
+        (o.y - fi(8)).to_int() as i16,
+        o.facing != 1,
+        false,
+    );
 
     // grapple-pickup celebration: the hookshot raised overhead + a spinning star burst
     if o.state == 50 && o.t_grapple_pickup > 0 {
-        backend::spr(20, (o.x - fi(4)).to_int() as i16, (o.y - fi(18)).to_int() as i16, false, false);
+        backend::spr(
+            20,
+            (o.x - fi(4)).to_int() as i16,
+            (o.y - fi(18)).to_int() as i16,
+            false,
+            false,
+        );
         let ty = o.y - fi(14);
         for k in 0..=16 {
             let ang = t * fi(4) + fi(k) / fi(16);
@@ -1677,7 +1794,11 @@ unsafe fn obj_update(i: usize) {
                 if sy < Fix32::ZERO {
                     OBJ[i].spd.y = Fix32::ZERO;
                 } else {
-                    OBJ[i].spd.y = if sy >= fi(2) { sy * fx(-0.4) } else { Fix32::ZERO };
+                    OBJ[i].spd.y = if sy >= fi(2) {
+                        sy * fx(-0.4)
+                    } else {
+                        Fix32::ZERO
+                    };
                     OBJ[i].spd.x = OBJ[i].spd.x * fx(0.5);
                 }
             }
@@ -1803,10 +1924,20 @@ unsafe fn camera_target() -> (i32, i32) {
     let mut ty = 0;
     match CAM_MODE {
         1 => {
-            tx = if px < 42 { 0 } else { (px - 48).max(40).min(wlim) };
+            tx = if px < 42 {
+                0
+            } else {
+                (px - 48).max(40).min(wlim)
+            };
         }
         2 => {
-            tx = if px < 120 { 0 } else if px > 136 { 128 } else { px - 64 };
+            tx = if px < 120 {
+                0
+            } else if px > 136 {
+                128
+            } else {
+                px - 64
+            };
             ty = (py - 64).min(hlim).max(0);
         }
         3 => {
@@ -1814,11 +1945,23 @@ unsafe fn camera_target() -> (i32, i32) {
             if lv.barrier_x >= 0 {
                 camera_x_barrier(lv.barrier_x, px, &mut tx);
             }
-            ty = if py < lv.barrier_y * 8 + 3 { 0 } else { lv.barrier_y * 8 };
+            ty = if py < lv.barrier_y * 8 + 3 {
+                0
+            } else {
+                lv.barrier_y * 8
+            };
         }
         4 => {
-            let sx = if px % 128 > 8 && px % 128 < 120 { (px / 128) * 128 + 64 } else { px };
-            let sy = if py % 128 > 4 && py % 128 < 124 { (py / 128) * 128 + 64 } else { py };
+            let sx = if px % 128 > 8 && px % 128 < 120 {
+                (px / 128) * 128 + 64
+            } else {
+                px
+            };
+            let sy = if py % 128 > 4 && py % 128 < 124 {
+                (py / 128) * 128 + 64
+            } else {
+                py
+            };
             tx = (sx - 64).min(wlim).max(0);
             ty = (sy - 64).min(hlim).max(0);
         }
@@ -1897,7 +2040,7 @@ unsafe fn goto_level(index: i32) {
     LVL_INDEX = idx;
     let m = &LEVELS[idx as usize];
     LEVEL_CHECKPOINT = -1; // checkpoints don't carry across levels
-    // Titled levels show a 60-frame intro card (doubled to 120 for 60fps).
+                           // Titled levels show a 60-frame intro card (doubled to 120 for 60fps).
     LEVEL_INTRO = if m.title.is_empty() { 0 } else { 120 };
     if idx == 2 {
         psfx(17, 8, 16);
@@ -1924,7 +2067,11 @@ unsafe fn goto_level(index: i32) {
 }
 
 unsafe fn next_level() {
-    let next = if LVL_INDEX + 1 >= LEVELS.len() as i32 { 1 } else { LVL_INDEX + 1 };
+    let next = if LVL_INDEX + 1 >= LEVELS.len() as i32 {
+        1
+    } else {
+        LVL_INDEX + 1
+    };
     goto_level(next);
 }
 
@@ -2141,7 +2288,13 @@ pub fn draw() {
         backend::camera((CAM_X + jx) as i16, (CAM_Y + jy) as i16);
 
         // cls(level.bg): fill the playfield (plus a margin) with the bg colour
-        backend::rectfill((CAM_X - 20) as i16, (CAM_Y - 20) as i16, (CAM_X + 148) as i16, (CAM_Y + 148) as i16, lv.bg);
+        backend::rectfill(
+            (CAM_X - 20) as i16,
+            (CAM_Y - 20) as i16,
+            (CAM_X + 148) as i16,
+            (CAM_Y + 148) as i16,
+            lv.bg,
+        );
 
         // background clouds in the level's colour (solid)
         draw_clouds(fi(1), Fix32::ZERO, fi(1), lv.clouds, 26, -1);
@@ -2160,7 +2313,15 @@ pub fn draw() {
         // (`if fget(tile,0) then spr(...)`). Mask 0 would draw EVERY non-zero tile,
         // including object-spawn tiles (spawners spr=-1, grappler, checkpoint, ...),
         // leaving static "ghost" tiles the cart never draws.
-        backend::map(cam_col, cam_row, (cam_col * 8) as i16, (cam_row * 8) as i16, cols, rows, 1);
+        backend::map(
+            cam_col,
+            cam_row,
+            (cam_col * 8) as i16,
+            (cam_row * 8) as i16,
+            cols,
+            rows,
+            1,
+        );
         // per-level palette swap: overdraw the flag-7 tiles with the swap applied
         if lv.pal_id != 0 {
             backend::flush(); // let the base tiles finish with the unswapped CLUT
@@ -2201,7 +2362,11 @@ pub fn draw() {
         // foreground fog, pinned to the level's bottom edge. fogmode 1 dithers the
         // clouds with the 50% checker (PICO-8 fillp); fogmode 2 draws them solid.
         if lv.fogmode != 0 {
-            let dither = if lv.fogmode == 1 { backend::FILLP_FOG as i32 } else { -1 };
+            let dither = if lv.fogmode == 1 {
+                backend::FILLP_FOG as i32
+            } else {
+                -1
+            };
             draw_clouds(fx(1.25), fi(LVL_H * 8 + 1), Fix32::ZERO, 7, 16, dither);
         }
 
@@ -2271,7 +2436,13 @@ unsafe fn draw_sine_h(
         pset(ax, ay.floor_int() as i16, col);
 
         // fill the vertical gap back to the previous sample so the rope is solid
-        let step = if ay.0 > last_y.0 { 1 } else if ay.0 < last_y.0 { -1 } else { 0 };
+        let step = if ay.0 > last_y.0 {
+            1
+        } else if ay.0 < last_y.0 {
+            -1
+        } else {
+            0
+        };
         let mut fy = ay;
         while step != 0 && (fy - last_y).abs() > fi(1) {
             fy = fy - fi(step);
@@ -2432,7 +2603,11 @@ unsafe fn draw_title() {
     let mut swapped = false;
     if flashing {
         let c = if TITLE_FLASH > 20 {
-            if TITLE_FLASH % 20 < 10 { 7 } else { 10 }
+            if TITLE_FLASH % 20 < 10 {
+                7
+            } else {
+                10
+            }
         } else if TITLE_FLASH > 10 {
             2
         } else if TITLE_FLASH > 0 {
@@ -2482,7 +2657,12 @@ unsafe fn draw_intro() {
         two_digits(LVL_INDEX - 2, &mut buf[6..8]);
         // drop a leading zero for single-digit level numbers
         if buf[6] == b'0' {
-            print_center(&[buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[7]], 64, 64 - 8, 7);
+            print_center(
+                &[buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[7]],
+                64,
+                64 - 8,
+                7,
+            );
         } else {
             print_center(&buf, 64, 64 - 8, 7);
         }
@@ -2516,14 +2696,26 @@ unsafe fn draw_wipes() {
         let e = fi(OBJ[PLAYER].wipe_timer - 10) / fi(24); // 60fps: -5/12 doubled
         for i in 0..128 {
             let s = wave(i, e);
-            backend::rectfill(CAM_X as i16, (CAM_Y + i) as i16, (CAM_X + s) as i16, (CAM_Y + i) as i16, 0);
+            backend::rectfill(
+                CAM_X as i16,
+                (CAM_Y + i) as i16,
+                (CAM_X + s) as i16,
+                (CAM_Y + i) as i16,
+                0,
+            );
         }
     }
     if INFADE < 30 {
         let e = fi(INFADE) / fi(24); // 60fps: PICO-8 /12 doubled
         for i in 0..128 {
             let s = wave(i, e);
-            backend::rectfill((CAM_X + s) as i16, (CAM_Y + i) as i16, (CAM_X + 128) as i16, (CAM_Y + i) as i16, 0);
+            backend::rectfill(
+                (CAM_X + s) as i16,
+                (CAM_Y + i) as i16,
+                (CAM_X + 128) as i16,
+                (CAM_Y + i) as i16,
+                0,
+            );
         }
     }
 }

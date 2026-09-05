@@ -4,4 +4,6 @@
 #![no_main]
 extern crate psx_rt;
 #[no_mangle]
-fn main() { celeste::run_synth_song(9); }
+fn main() {
+    celeste::run_synth_song(9);
+}

@@ -59,10 +59,10 @@ pub enum Exit {
 pub struct Pause {
     sel: u8,
     prev: u8,
-    blip: i32,        // SFX id played when nudging a volume slider, so it's audible
-    fly: bool,        // show the debug "FLY" row (toggles pico8::debug fly mode)
-    changed: bool,    // a PERSISTED setting was touched; save to card on close
-    font: FontAtlas,  // PSX (non-PICO-8) typeface for the menu text
+    blip: i32,       // SFX id played when nudging a volume slider, so it's audible
+    fly: bool,       // show the debug "FLY" row (toggles pico8::debug fly mode)
+    changed: bool,   // a PERSISTED setting was touched; save to card on close
+    font: FontAtlas, // PSX (non-PICO-8) typeface for the menu text
 }
 
 impl Pause {
@@ -73,14 +73,29 @@ impl Pause {
     pub fn new(blip: i32, fly: bool) -> Self {
         let font = FontAtlas::upload(&BASIC, FONT_TPAGE, FONT_CLUT);
         crate::icons::upload();
-        Pause { sel: ROW_SFX, prev: 0xFF, blip, fly, changed: false, font }
+        Pause {
+            sel: ROW_SFX,
+            prev: 0xFF,
+            blip,
+            fly,
+            changed: false,
+            font,
+        }
     }
 
     fn row_count(&self) -> u8 {
-        if self.fly { 7 } else { 6 }
+        if self.fly {
+            7
+        } else {
+            6
+        }
     }
     fn pixel_row(&self) -> u8 {
-        if self.fly { 3 } else { 2 }
+        if self.fly {
+            3
+        } else {
+            2
+        }
     }
     fn screen_row(&self) -> u8 {
         self.pixel_row() + 1
@@ -250,7 +265,12 @@ impl Pause {
             let fw = self.font.text_width("Fly") as i16;
             crate::icons::draw(&crate::icons::TRIANGLE, sx(28) + fw + 4, sy(fly_y) - 3);
             let on = crate::debug::fly_enabled();
-            self.text(92, fly_y, if on { "On" } else { "Off" }, if on { T_GREEN } else { T_DIM });
+            self.text(
+                92,
+                fly_y,
+                if on { "On" } else { "Off" },
+                if on { T_GREEN } else { T_DIM },
+            );
         }
 
         // pixel scale toggle (1x native vs 2x doubled)
@@ -290,7 +310,11 @@ impl Pause {
             self.text(74, borders_y, name, if lit { T_WHITE } else { T_GREY });
         }
 
-        let quit_t = if self.sel == self.quit_row() { T_WHITE } else { T_GREY };
+        let quit_t = if self.sel == self.quit_row() {
+            T_WHITE
+        } else {
+            T_GREY
+        };
         self.text(28, quit_y, "Quit to Menu", quit_t);
 
         // footer: the Start button icon + "Resume" (centred as a group)
@@ -319,7 +343,8 @@ impl Pause {
             backend::rectfill(tx, y + 1, tx + fw, y + 3, if lit { 11 } else { 3 });
         }
         let kx = tx + fw;
-        backend::rectfill(kx - 1, y - 1, kx + 1, y + 5, if lit { 7 } else { 6 }); // handle
+        backend::rectfill(kx - 1, y - 1, kx + 1, y + 5, if lit { 7 } else { 6 });
+        // handle
     }
 
     /// Black 1px outline (4 diagonals) behind text at screen `(x, y)`, so labels
@@ -344,4 +369,3 @@ impl Pause {
         self.font.draw_text_gradient(x, sy(py), s, top, bottom);
     }
 }
-

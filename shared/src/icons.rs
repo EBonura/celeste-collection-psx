@@ -12,23 +12,37 @@ use psx_gpu::{self as gpu};
 use psx_vram::{upload_16bpp, TexDepth, Tpage, VramRect};
 
 pub use crate::icons_data::Cell;
-pub use crate::icons_data::{CIRCLE, CROSS, SELECT, START, TRIANGLE};
 use crate::icons_data::{ATLAS, ATLAS_H, ATLAS_W};
+pub use crate::icons_data::{CIRCLE, CROSS, SELECT, START, TRIANGLE};
 
 const ICON_TPAGE: Tpage = Tpage::new(576, 0, TexDepth::Bit15);
 
 /// Upload the icon atlas to VRAM (call once per menu/pause open).
 pub fn upload() {
-    upload_16bpp(VramRect::new(576, 0, ATLAS_W as u16, ATLAS_H as u16), &ATLAS);
+    upload_16bpp(
+        VramRect::new(576, 0, ATLAS_W as u16, ATLAS_H as u16),
+        &ATLAS,
+    );
 }
 
 /// Draw `cell` at screen `(x, y)`, native size. Returns its width (for layout).
 pub fn draw(cell: &Cell, x: i16, y: i16) -> i16 {
     let (u, v, w, h) = (cell.u, cell.v, cell.w, cell.h);
-    let verts = [(x, y), (x + w as i16, y), (x, y + h as i16), (x + w as i16, y + h as i16)];
+    let verts = [
+        (x, y),
+        (x + w as i16, y),
+        (x, y + h as i16),
+        (x + w as i16, y + h as i16),
+    ];
     let uvs = [(u, v), (u + w, v), (u, v + h), (u + w, v + h)];
     // 15bpp: clut word ignored; texel 0x0000 is transparent.
-    gpu::draw_quad_textured(verts, uvs, 0, ICON_TPAGE.uv_tpage_word(0), (0x80, 0x80, 0x80));
+    gpu::draw_quad_textured(
+        verts,
+        uvs,
+        0,
+        ICON_TPAGE.uv_tpage_word(0),
+        (0x80, 0x80, 0x80),
+    );
     w as i16
 }
 

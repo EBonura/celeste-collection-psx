@@ -49,15 +49,27 @@ impl Fix32 {
     }
     #[inline]
     pub fn abs(self) -> Fix32 {
-        if self.0 >= 0 { self } else { Fix32(self.0.wrapping_neg()) }
+        if self.0 >= 0 {
+            self
+        } else {
+            Fix32(self.0.wrapping_neg())
+        }
     }
     #[inline]
     pub fn min(self, b: Fix32) -> Fix32 {
-        if self.0 < b.0 { self } else { b }
+        if self.0 < b.0 {
+            self
+        } else {
+            b
+        }
     }
     #[inline]
     pub fn max(self, b: Fix32) -> Fix32 {
-        if self.0 > b.0 { self } else { b }
+        if self.0 > b.0 {
+            self
+        } else {
+            b
+        }
     }
     /// `_fix32_mod`: `((a % b) + b) % b`.
     #[inline]

@@ -19,7 +19,7 @@ use psx_gpu::material::{TextureMaterial, TextureWindow};
 use psx_gpu::{self as gpu};
 use psx_hw::gpu::{pack_color, pack_texcoord, pack_vertex, pack_xy};
 use psx_io::gpu::{wait_cmd_ready, write_gp0};
-use psx_vram::{Clut, TexDepth, Tpage, VramRect, upload_16bpp};
+use psx_vram::{upload_16bpp, Clut, TexDepth, Tpage, VramRect};
 
 /// A game's PICO-8 graphics data: the doubled 256x256 4bpp spritesheet and the
 /// tilemap (cells + per-sprite flags). Registered once via [`set_cart`]; the
@@ -36,16 +36,21 @@ pub struct Cart {
     pub map_w: usize,
 }
 
-const EMPTY_CART: Cart = Cart { gfx: &[], tilemap: &[], tile_flags: &[], map_w: 128 };
+const EMPTY_CART: Cart = Cart {
+    gfx: &[],
+    tilemap: &[],
+    tile_flags: &[],
+    map_w: 128,
+};
 
 // ---- VRAM layout (off-screen, right of the framebuffers) ----
 const GFX_TPAGE: Tpage = Tpage::new(640, 0, TexDepth::Bit4); // 256x256 4bpp -> 64 halfwords wide
 const FONT_TPAGE: Tpage = Tpage::new(704, 0, TexDepth::Bit4); // 256x170 4bpp
-// Two ping-pong slots for the sprite palette. The PS1 GPU caches the CLUT and
-// reloads it only when the clut *word* changes -- NOT when its VRAM is
-// overwritten -- so a pal() recolour must land in the OTHER slot to force a
-// reload, else the sprite keeps the stale palette on hardware (Madeline's hair
-// stuck red). Both 16 entries, side by side on the free row below the framebuffers.
+                                                              // Two ping-pong slots for the sprite palette. The PS1 GPU caches the CLUT and
+                                                              // reloads it only when the clut *word* changes -- NOT when its VRAM is
+                                                              // overwritten -- so a pal() recolour must land in the OTHER slot to force a
+                                                              // reload, else the sprite keeps the stale palette on hardware (Madeline's hair
+                                                              // stuck red). Both 16 entries, side by side on the free row below the framebuffers.
 const SPRITE_CLUT_A: Clut = Clut::new(0, 480);
 const SPRITE_CLUT_B: Clut = Clut::new(16, 480);
 const TEXT_CLUT: Clut = Clut::new(0, 481); // one row, re-uploaded per print colour
@@ -92,9 +97,18 @@ pub fn set_cart(cart: Cart) {
 /// sprite CLUT to VRAM. Call once after `gpu::init`.
 pub fn upload_assets(cart: Cart) {
     set_cart(cart);
-    upload_16bpp(VramRect::new(GFX_TPAGE.x(), GFX_TPAGE.y(), 64, 256), cart.gfx);
-    upload_16bpp(VramRect::new(FONT_TPAGE.x(), FONT_TPAGE.y(), 64, 170), &FONT_DATA);
-    upload_16bpp(VramRect::new(sprite_clut().x(), sprite_clut().y(), 16, 1), &PICO8_CLUT);
+    upload_16bpp(
+        VramRect::new(GFX_TPAGE.x(), GFX_TPAGE.y(), 64, 256),
+        cart.gfx,
+    );
+    upload_16bpp(
+        VramRect::new(FONT_TPAGE.x(), FONT_TPAGE.y(), 64, 170),
+        &FONT_DATA,
+    );
+    upload_16bpp(
+        VramRect::new(sprite_clut().x(), sprite_clut().y(), 16, 1),
+        &PICO8_CLUT,
+    );
     upload_fillp();
 }
 
@@ -103,7 +117,10 @@ pub fn upload_assets(cart: Cart) {
 /// for PICO-8-font text. Coordinates are PICO-8 128-space (scaled 2x, centred);
 /// set `camera(0, 0)` first. Call once after `gpu::init`.
 pub fn upload_font() {
-    upload_16bpp(VramRect::new(FONT_TPAGE.x(), FONT_TPAGE.y(), 64, 170), &FONT_DATA);
+    upload_16bpp(
+        VramRect::new(FONT_TPAGE.x(), FONT_TPAGE.y(), 64, 170),
+        &FONT_DATA,
+    );
     pal_reset();
 }
 
@@ -212,7 +229,16 @@ fn offscreen_cell(x: i16, y: i16, sz: i16) -> bool {
 /// span. At 1x the span downsamples the doubled cell back to native 8x8 -- exact,
 /// because the sheet is a nearest-neighbour 2x double (each texel pair is equal).
 #[inline]
-fn draw_cell(x: i16, y: i16, u0: u8, v0: u8, clut_word: u16, tpage: Tpage, flip_x: bool, flip_y: bool) {
+fn draw_cell(
+    x: i16,
+    y: i16,
+    u0: u8,
+    v0: u8,
+    clut_word: u16,
+    tpage: Tpage,
+    flip_x: bool,
+    flip_y: bool,
+) {
     let sc = unsafe { SCALE };
     let sz = 8 * sc;
     if offscreen_cell(x, y, sz) {
@@ -233,7 +259,13 @@ fn draw_cell(x: i16, y: i16, u0: u8, v0: u8, clut_word: u16, tpage: Tpage, flip_
     let (vt, vb) = if flip_y { (v_hi, v0) } else { (v0, v_hi) };
     let verts = [(x, y), (x + sz, y), (x, y + sz), (x + sz, y + sz)];
     let uvs = [(ul, vt), (ur, vt), (ul, vb), (ur, vb)];
-    gpu::draw_quad_textured(verts, uvs, clut_word, tpage.uv_tpage_word(0), (0x80, 0x80, 0x80));
+    gpu::draw_quad_textured(
+        verts,
+        uvs,
+        clut_word,
+        tpage.uv_tpage_word(0),
+        (0x80, 0x80, 0x80),
+    );
 }
 
 /// PICO-8 `spr()`. Draws 8x8 PICO-8 sprite `n` at PICO-8 `(x,y)`.
@@ -244,7 +276,16 @@ pub fn spr(n: i32, x: i16, y: i16, flip_x: bool, flip_y: bool) {
     let u0 = ((n % 16) * 16) as u8;
     let v0 = ((n / 16) * 16) as u8;
     begin_sprite_pass();
-    draw_cell(sx(x), sy(y), u0, v0, sprite_clut().uv_clut_word(), GFX_TPAGE, flip_x, flip_y);
+    draw_cell(
+        sx(x),
+        sy(y),
+        u0,
+        v0,
+        sprite_clut().uv_clut_word(),
+        GFX_TPAGE,
+        flip_x,
+        flip_y,
+    );
 }
 
 /// `mget(x,y)` -- raw map fetch (NOT camera/room relative).
@@ -286,7 +327,11 @@ pub fn map(mx: i32, my: i32, tx: i16, ty: i16, mw: i32, mh: i32, mask: i32) {
             }
             if mask != 0 {
                 let flags = cart.tile_flags.get(t as usize).copied().unwrap_or(0) as i32;
-                let keep = if mask == 4 { flags == 4 } else { flags & (1 << (mask - 1)) != 0 };
+                let keep = if mask == 4 {
+                    flags == 4
+                } else {
+                    flags & (1 << (mask - 1)) != 0
+                };
                 if !keep {
                     continue;
                 }
@@ -327,8 +372,11 @@ pub fn rectfill(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
 pub const FILLP_COLUMNS: usize = 0; // sparse dots (background pillars)
 pub const FILLP_FOG: usize = 1; // 50% checkerboard (fog)
 pub const FILLP_CRUMBLE: usize = 2; // checkerboard, opposite phase (crumble crack)
-const FILLP_VALUES: [u16; 3] =
-    [0b0000_1000_0000_0010, 0b0101_1010_0101_1010, 0b1010_0101_1010_0101];
+const FILLP_VALUES: [u16; 3] = [
+    0b0000_1000_0000_0010,
+    0b0101_1010_0101_1010,
+    0b1010_0101_1010_0101,
+];
 
 /// Build an 8x8 4bpp tile from a cart 4x4 fillp pattern: texel 1 where the bit is
 /// set (drawn), 0 elsewhere (transparent). 16 halfwords (2 wide x 8 tall).
@@ -358,7 +406,10 @@ fn upload_fillp() {
     let mut i = 0;
     while i < FILLP_VALUES.len() {
         let tile = build_pattern(FILLP_VALUES[i]);
-        upload_16bpp(VramRect::new(FILLP_TPAGE.x() + (i as u16) * 2, FILLP_TPAGE.y(), 2, 8), &tile);
+        upload_16bpp(
+            VramRect::new(FILLP_TPAGE.x() + (i as u16) * 2, FILLP_TPAGE.y(), 2, 8),
+            &tile,
+        );
         i += 1;
     }
 }
@@ -383,11 +434,18 @@ unsafe fn set_tex_window(mask_x: u32, mask_y: u32, off_x: u32, off_y: u32) {
 /// Callers must `set_tex_window(0,0,0,0)` after their draws to restore sprites/map.
 unsafe fn fillp_material(c: i32, pattern: usize) -> TextureMaterial {
     let col = PICO8_CLUT[(PAL[(c as usize) & 15] as usize) & 15];
-    upload_16bpp(VramRect::new(FILL_CLUT.x(), FILL_CLUT.y(), 2, 1), &[0u16, col]);
+    upload_16bpp(
+        VramRect::new(FILL_CLUT.x(), FILL_CLUT.y(), 2, 1),
+        &[0u16, col],
+    );
     FILLP_TPAGE.apply_as_draw_mode();
     let win = TextureWindow::power_of_two_tile((pattern as u8) * 8, 0, 8, 8); // 8x8 tile @ pattern*8
-    TextureMaterial::opaque(FILL_CLUT.uv_clut_word(), FILLP_TPAGE.uv_tpage_word(0), (0x80, 0x80, 0x80))
-        .with_texture_window(win)
+    TextureMaterial::opaque(
+        FILL_CLUT.uv_clut_word(),
+        FILLP_TPAGE.uv_tpage_word(0),
+        (0x80, 0x80, 0x80),
+    )
+    .with_texture_window(win)
 }
 
 /// PICO-8 `fillp(pattern) rectfill(x0,y0,x1,y1,c)`: a dithered rectangle. The
@@ -408,7 +466,12 @@ pub fn fillp_rect(x0: i16, y0: i16, x1: i16, y1: i16, c: i32, pattern: usize) {
         let mat = fillp_material(c, pattern);
         let (u0, v0) = ((lx - CAM_X) as u8, (ty - CAM_Y) as u8);
         let (u1, v1) = ((rx - CAM_X) as u8, (by - CAM_Y) as u8);
-        let verts = [(sx(lx), sy(ty)), (sx(rx), sy(ty)), (sx(lx), sy(by)), (sx(rx), sy(by))];
+        let verts = [
+            (sx(lx), sy(ty)),
+            (sx(rx), sy(ty)),
+            (sx(lx), sy(by)),
+            (sx(rx), sy(by)),
+        ];
         let uvs = [(u0, v0), (u1, v0), (u0, v1), (u1, v1)];
         gpu::draw_quad_textured_material(verts, uvs, mat);
         set_tex_window(0, 0, 0, 0); // reset the window so sprites/map sample fully
@@ -435,9 +498,18 @@ pub fn fillp_circfill(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize) {
                 return;
             }
             let (u0, u1, v) = ((lx - camx) as u8, (rx - camx) as u8, (yy - camy) as u8);
-            let verts =
-                [(sx(lx), sy(yy)), (sx(rx), sy(yy)), (sx(lx), sy(yy + 1)), (sx(rx), sy(yy + 1))];
-            let uvs = [(u0, v), (u1, v), (u0, v.wrapping_add(1)), (u1, v.wrapping_add(1))];
+            let verts = [
+                (sx(lx), sy(yy)),
+                (sx(rx), sy(yy)),
+                (sx(lx), sy(yy + 1)),
+                (sx(rx), sy(yy + 1)),
+            ];
+            let uvs = [
+                (u0, v),
+                (u1, v),
+                (u0, v.wrapping_add(1)),
+                (u1, v.wrapping_add(1)),
+            ];
             gpu::draw_quad_textured_material(verts, uvs, mat);
         };
         let r2 = radius as i32 * radius as i32;
@@ -489,11 +561,11 @@ pub fn quad(p: [(i16, i16); 4], c: i32) {
 // black (the gradient was invisible on console). Brightened ~3x so the top
 // reads clearly on a TV while the bottom still fades toward the dark playfield.
 const SIDE_PRESETS: [((u8, u8, u8), (u8, u8, u8)); 5] = [
-    ((0, 0, 0), (0, 0, 0)),                          // Off (black)
-    ((0x66, 0x3c, 0x96), (0x12, 0x0c, 0x30)),        // Dusk (purple)
-    ((0x30, 0x6c, 0x96), (0x0c, 0x18, 0x36)),        // Ocean (teal)
-    ((0x84, 0x36, 0x36), (0x24, 0x0c, 0x0c)),        // Ember (red)
-    ((0x3c, 0x66, 0x42), (0x0c, 0x18, 0x12)),        // Forest (green)
+    ((0, 0, 0), (0, 0, 0)),                   // Off (black)
+    ((0x66, 0x3c, 0x96), (0x12, 0x0c, 0x30)), // Dusk (purple)
+    ((0x30, 0x6c, 0x96), (0x0c, 0x18, 0x36)), // Ocean (teal)
+    ((0x84, 0x36, 0x36), (0x24, 0x0c, 0x0c)), // Ember (red)
+    ((0x3c, 0x66, 0x42), (0x0c, 0x18, 0x12)), // Forest (green)
 ];
 static mut SIDE_PRESET: u8 = 1; // default: the Dusk gradient
 
@@ -598,13 +670,27 @@ pub fn circ(cx: i16, cy: i16, radius: i16, c: i32) {
     let dot = |x: i16, y: i16| {
         let x0 = sx(x);
         let y0 = sy(y);
-        gpu::draw_quad_flat([(x0, y0), (x0 + 2, y0), (x0, y0 + 2), (x0 + 2, y0 + 2)], r, g, b);
+        gpu::draw_quad_flat(
+            [(x0, y0), (x0 + 2, y0), (x0, y0 + 2), (x0 + 2, y0 + 2)],
+            r,
+            g,
+            b,
+        );
     };
     let mut x = radius as i32;
     let mut y = 0i32;
     let mut err = 0i32;
     while x >= y {
-        for (ox, oy) in [(x, y), (y, x), (-x, y), (-y, x), (x, -y), (y, -x), (-x, -y), (-y, -x)] {
+        for (ox, oy) in [
+            (x, y),
+            (y, x),
+            (-x, y),
+            (-y, x),
+            (x, -y),
+            (y, -x),
+            (-x, -y),
+            (-y, -x),
+        ] {
             dot(cx + ox as i16, cy + oy as i16);
         }
         y += 1;
@@ -626,7 +712,10 @@ pub fn circ(cx: i16, cy: i16, radius: i16, c: i32) {
 /// with a per-colour CLUT.
 pub fn print(s: &[u8], x: i16, y: i16, c: i32) {
     let clut_idx = (unsafe { PAL[(c as usize) & 15] }) as usize;
-    upload_16bpp(VramRect::new(TEXT_CLUT.x(), TEXT_CLUT.y(), 16, 1), &TEXT_CLUTS[clut_idx & 15]);
+    upload_16bpp(
+        VramRect::new(TEXT_CLUT.x(), TEXT_CLUT.y(), 16, 1),
+        &TEXT_CLUTS[clut_idx & 15],
+    );
     let clut_word = TEXT_CLUT.uv_clut_word();
     FONT_TPAGE.apply_as_draw_mode();
 

@@ -38,9 +38,20 @@ struct C1Part {
     off: Fix32,
     c: i32,
 }
-const C1C0: C1Cloud = C1Cloud { x: Fix32::ZERO, y: Fix32::ZERO, spd: Fix32::ZERO, w: Fix32::ZERO };
-const C1P0: C1Part =
-    C1Part { x: Fix32::ZERO, y: Fix32::ZERO, s: Fix32::ZERO, spd: Fix32::ZERO, off: Fix32::ZERO, c: 6 };
+const C1C0: C1Cloud = C1Cloud {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+    spd: Fix32::ZERO,
+    w: Fix32::ZERO,
+};
+const C1P0: C1Part = C1Part {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+    s: Fix32::ZERO,
+    spd: Fix32::ZERO,
+    off: Fix32::ZERO,
+    c: 6,
+};
 
 // ---- Celeste 2 backdrop: parallax clouds + snow ----
 #[derive(Clone, Copy)]
@@ -49,7 +60,11 @@ struct C2Cloud {
     y: Fix32,
     s: Fix32,
 }
-const C2C0: C2Cloud = C2Cloud { x: Fix32::ZERO, y: Fix32::ZERO, s: Fix32::ZERO };
+const C2C0: C2Cloud = C2Cloud {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+    s: Fix32::ZERO,
+};
 
 static mut C1CLOUDS: [C1Cloud; 17] = [C1C0; 17];
 static mut C1PARTS: [C1Part; 25] = [C1P0; 25];
@@ -152,8 +167,18 @@ unsafe fn draw_celeste2(frame: i32) {
         let (xi, yi) = (x.to_int() as i16, y.to_int() as i16);
         backend::circfill(xi, yi, (s / fi(3)).to_int() as i16, 13);
         if i % 2 == 0 {
-            backend::circfill((x - s / fi(3)).to_int() as i16, yi, (s / fi(5)).to_int() as i16, 13);
-            backend::circfill((x + s / fi(3)).to_int() as i16, yi, (s / fi(6)).to_int() as i16, 13);
+            backend::circfill(
+                (x - s / fi(3)).to_int() as i16,
+                yi,
+                (s / fi(5)).to_int() as i16,
+                13,
+            );
+            backend::circfill(
+                (x + s / fi(3)).to_int() as i16,
+                yi,
+                (s / fi(6)).to_int() as i16,
+                13,
+            );
         }
         c.x += fi(4 - (i as i32) % 4) * fx(0.25) * HALF;
     }
@@ -163,7 +188,12 @@ unsafe fn draw_celeste2(frame: i32) {
         let s = &mut SNOW[i];
         let px = s.0.rem_floor(fi(132)) - fi(2);
         let py = s.1.rem_floor(fi(132));
-        backend::circfill(px.to_int() as i16, py.to_int() as i16, (i as i32 % 2) as i16, 7);
+        backend::circfill(
+            px.to_int() as i16,
+            py.to_int() as i16,
+            (i as i32 % 2) as i16,
+            7,
+        );
         s.0 += fi(4 - (i as i32) % 4) * HALF;
         s.1 += (t * fx(0.25) + fi(i as i32) * fx(0.1)).sin() * HALF;
     }
@@ -222,7 +252,12 @@ pub fn draw_tracer(cx: i16, cy: i16, size: i16, frame: i32) {
             let b = (0xFF * f / TAIL) as u8;
             let sz = if k == 0 { 2 } else { 1 };
             gpu::draw_quad_flat(
-                [(x - sz, y - sz), (x + sz, y - sz), (x - sz, y + sz), (x + sz, y + sz)],
+                [
+                    (x - sz, y - sz),
+                    (x + sz, y - sz),
+                    (x - sz, y + sz),
+                    (x + sz, y + sz),
+                ],
                 r,
                 g,
                 b,

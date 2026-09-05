@@ -79,7 +79,9 @@ const MUSIC_STOP: u8 = 0x04;
 // Per-note volume (PICO-8 vol 0..7). Scaled so four music voices at max sum
 // to ~full-scale instead of clipping (which was adding harsh harmonics): vol 7
 // caps at 0x1000 (1/4 of the SPU's 0x4000 range).
-const VOL_TABLE: [u16; 8] = [0x0000, 0x0250, 0x0490, 0x06D0, 0x0920, 0x0B60, 0x0DB0, 0x1000];
+const VOL_TABLE: [u16; 8] = [
+    0x0000, 0x0250, 0x0490, 0x06D0, 0x0920, 0x0B60, 0x0DB0, 0x1000,
+];
 
 // --- hardware noise (instrument 6) ------------------------------------------
 // PICO-8's noise is continuous LFSR hiss; a looped sample wavetable just buzzes
@@ -149,7 +151,7 @@ struct Channel {
     note_vol: i32,    // the main note's volume 0..7 (scales the custom envelope)
     long_wt: bool,    // this voice loaded the long (8x) wavetable -> pitches use << 3
     playing_instr: i32, // plain-oscillator instrument currently sounding (-1 = none/
-                        // custom/noise) -- lets a continuing note avoid re-triggering.
+                      // custom/noise) -- lets a continuing note avoid re-triggering.
 }
 const CH0: Channel = Channel {
     sfx_id: -1,
@@ -204,7 +206,11 @@ static mut LAST_VOL: [i16; 16] = [0; 16];
 /// and voices 0..3 are music, 4..7 are SFX.
 unsafe fn apply_vol(v: usize, vol: i16) {
     LAST_VOL[v & 0xF] = vol;
-    let gain = if (v & 7) < SFX_VOICE_BASE { MUSIC_GAIN } else { SFX_GAIN } as i32;
+    let gain = if (v & 7) < SFX_VOICE_BASE {
+        MUSIC_GAIN
+    } else {
+        SFX_GAIN
+    } as i32;
     let scaled = (vol as i32 * gain / 8) as i16;
     Voice::new(v as u8).set_volume(Volume(scaled), Volume(scaled));
 }
@@ -618,7 +624,10 @@ unsafe fn start_channel_note(v: usize) {
         let buddy = v + PHASER_BUDDY;
         let bv = Voice::new(buddy as u8);
         apply_vol(buddy, vb);
-        bv.set_pitch(Pitch::raw(phaser_buddy_pitch(spu_pitch as i32, sfx_pitch(note))));
+        bv.set_pitch(Pitch::raw(phaser_buddy_pitch(
+            spu_pitch as i32,
+            sfx_pitch(note),
+        )));
         bv.set_start_addr(SpuAddr::new(tri));
         Voice::key_on((1 << v) | (1 << buddy));
         CHANNELS[v].keyed_on = true;
@@ -776,10 +785,18 @@ unsafe fn music_pattern_len() -> i32 {
         if loop_end > 0 && loop_end < 32 {
             continue; // a sub-loop never defines length
         }
-        let rows = if loop_end == 0 && loop_start > 0 { loop_start } else { 32 };
+        let rows = if loop_end == 0 && loop_start > 0 {
+            loop_start
+        } else {
+            32
+        };
         return rows * speed * TICK_PER_SPEED;
     }
-    if fallback > 0 { fallback } else { 32 * TICK_PER_SPEED }
+    if fallback > 0 {
+        fallback
+    } else {
+        32 * TICK_PER_SPEED
+    }
 }
 
 unsafe fn music_advance_pattern() {
@@ -827,16 +844,23 @@ pub fn init(audio: AudioData) {
             voice.set_volume(Volume(0), Volume(0));
             voice.set_pitch(Pitch::raw(0));
             voice.set_start_addr(SpuAddr::new(0));
-            voice.set_adsr(Adsr { lower: 0x000F, upper: 0x0000 });
+            voice.set_adsr(Adsr {
+                lower: 0x000F,
+                upper: 0x0000,
+            });
         }
         spu::upload_adpcm(SpuAddr::new(SPU_WAVEFORM_BASE), audio.waveform_adpcm);
         for w in 0..8 {
             WAVEFORM_ADDR[w] = SPU_WAVEFORM_BASE + audio.waveform_offset[w] as u32;
         }
         if !audio.waveform_adpcm_long.is_empty() {
-            spu::upload_adpcm(SpuAddr::new(SPU_WAVEFORM_LONG_BASE), audio.waveform_adpcm_long);
+            spu::upload_adpcm(
+                SpuAddr::new(SPU_WAVEFORM_LONG_BASE),
+                audio.waveform_adpcm_long,
+            );
             for w in 0..8 {
-                WAVEFORM_ADDR_LONG[w] = SPU_WAVEFORM_LONG_BASE + audio.waveform_offset_long[w] as u32;
+                WAVEFORM_ADDR_LONG[w] =
+                    SPU_WAVEFORM_LONG_BASE + audio.waveform_offset_long[w] as u32;
             }
         }
         CHANNELS = [CH0; 8];

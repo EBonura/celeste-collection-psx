@@ -81,7 +81,10 @@ struct Vec2 {
     x: Fix32,
     y: Fix32,
 }
-const VZERO: Vec2 = Vec2 { x: Fix32::ZERO, y: Fix32::ZERO };
+const VZERO: Vec2 = Vec2 {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+};
 
 #[derive(Clone, Copy)]
 struct VecI {
@@ -104,7 +107,12 @@ struct Hair {
     size: Fix32,
     is_last: bool,
 }
-const HAIR0: Hair = Hair { x: Fix32::ZERO, y: Fix32::ZERO, size: Fix32::ZERO, is_last: false };
+const HAIR0: Hair = Hair {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+    size: Fix32::ZERO,
+    is_last: false,
+};
 
 #[derive(Clone, Copy)]
 struct Particle {
@@ -139,7 +147,12 @@ struct Cloud {
     spd: Fix32,
     w: Fix32,
 }
-const CLOUD0: Cloud = Cloud { x: Fix32::ZERO, y: Fix32::ZERO, spd: Fix32::ZERO, w: Fix32::ZERO };
+const CLOUD0: Cloud = Cloud {
+    x: Fix32::ZERO,
+    y: Fix32::ZERO,
+    spd: Fix32::ZERO,
+    w: Fix32::ZERO,
+};
 
 // ---- object type table (order == tile-match order in load_room) ----
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -166,8 +179,24 @@ enum ObjType {
 use ObjType::*;
 
 const OBJ_ORDER: [ObjType; 18] = [
-    Player, PlayerSpawn, Spring, Balloon, Smoke, Platform, FallFloor, Fruit, FlyFruit, FakeWall, Key,
-    Chest, Lifeup, Message, BigChest, Orb, Flag, RoomTitle,
+    Player,
+    PlayerSpawn,
+    Spring,
+    Balloon,
+    Smoke,
+    Platform,
+    FallFloor,
+    Fruit,
+    FlyFruit,
+    FakeWall,
+    Key,
+    Chest,
+    Lifeup,
+    Message,
+    BigChest,
+    Orb,
+    Flag,
+    RoomTitle,
 ];
 
 fn type_tile(t: ObjType) -> i32 {
@@ -270,7 +299,12 @@ const OBJ0: Obj = Obj {
     flip_y: false,
     x: Fix32::ZERO,
     y: Fix32::ZERO,
-    hitbox: Hitbox { x: 0, y: 0, w: 8, h: 8 },
+    hitbox: Hitbox {
+        x: 0,
+        y: 0,
+        w: 8,
+        h: 8,
+    },
     spd: VZERO,
     rem: VZERO,
     p_jump: false,
@@ -399,13 +433,19 @@ fn spikes_at(x: Fix32, y: Fix32, w: i32, h: i32, xspd: Fix32, yspd: Fix32) -> bo
         let mut j = fi(0).max((y / fx(8.0)).floor()).to_int();
         while fi(j) <= fi(15).min((y + hf - fi(1)) / fx(8.0)) {
             let tile = tile_at(i, j);
-            if tile == 17 && ((y + hf - fi(1)).rem_floor(fi(8)) >= fi(6) || y + hf == fi(j * 8 + 8)) && yspd >= fi(0) {
+            if tile == 17
+                && ((y + hf - fi(1)).rem_floor(fi(8)) >= fi(6) || y + hf == fi(j * 8 + 8))
+                && yspd >= fi(0)
+            {
                 return true;
             } else if tile == 27 && (y).rem_floor(fi(8)) <= fi(2) && yspd <= fi(0) {
                 return true;
             } else if tile == 43 && (x).rem_floor(fi(8)) <= fi(2) && xspd <= fi(0) {
                 return true;
-            } else if tile == 59 && ((x + wf - fi(1)).rem_floor(fi(8)) >= fi(6) || x + wf == fi(i * 8 + 8)) && xspd >= fi(0) {
+            } else if tile == 59
+                && ((x + wf - fi(1)).rem_floor(fi(8)) >= fi(6) || x + wf == fi(i * 8 + 8))
+                && xspd >= fi(0)
+            {
                 return true;
             }
             j += 1;
@@ -435,7 +475,12 @@ unsafe fn obj_is_solid(o: *mut Obj, ox: Fix32, oy: Fix32) -> bool {
 }
 unsafe fn obj_is_ice(o: *mut Obj, ox: Fix32, oy: Fix32) -> bool {
     let hb = (*o).hitbox;
-    ice_at(((*o).x + fi(hb.x) + ox).to_int(), ((*o).y + fi(hb.y) + oy).to_int(), hb.w, hb.h)
+    ice_at(
+        ((*o).x + fi(hb.x) + ox).to_int(),
+        ((*o).y + fi(hb.y) + oy).to_int(),
+        hb.w,
+        hb.h,
+    )
 }
 unsafe fn obj_collide(o: *mut Obj, ty: ObjType, ox: Fix32, oy: Fix32) -> *mut Obj {
     for i in 0..MAX_OBJECTS {
@@ -443,10 +488,7 @@ unsafe fn obj_collide(o: *mut Obj, ty: ObjType, ox: Fix32, oy: Fix32) -> *mut Ob
         if other == o {
             continue;
         }
-        if (*other).active
-            && (*other).type_ == ty
-            && (*other).collideable
-        {
+        if (*other).active && (*other).type_ == ty && (*other).collideable {
             let oh = (*other).hitbox;
             let th = (*o).hitbox;
             if (*other).x + fi(oh.x) + fi(oh.w) > (*o).x + fi(th.x) + ox
@@ -538,7 +580,12 @@ unsafe fn init_object(ty: ObjType, x: Fix32, y: Fix32) -> *mut Obj {
     (*o).flip_y = false;
     (*o).x = x;
     (*o).y = y;
-    (*o).hitbox = Hitbox { x: 0, y: 0, w: 8, h: 8 };
+    (*o).hitbox = Hitbox {
+        x: 0,
+        y: 0,
+        w: 8,
+        h: 8,
+    };
     (*o).spd = VZERO;
     (*o).rem = VZERO;
     dispatch_init(o);
@@ -615,7 +662,12 @@ unsafe fn player_init(this: *mut Obj) {
     (*this).dash_effect_time = 0;
     (*this).dash_target = VZERO;
     (*this).dash_accel = VZERO;
-    (*this).hitbox = Hitbox { x: 1, y: 3, w: 6, h: 5 };
+    (*this).hitbox = Hitbox {
+        x: 1,
+        y: 3,
+        w: 6,
+        h: 5,
+    };
     (*this).spr_off = fi(0);
     (*this).was_on_ground = false;
     create_hair(this);
@@ -710,8 +762,16 @@ unsafe fn player_update(thisp: *mut Obj) {
     if (*this).dash_time > 0 {
         init_object(Smoke, (*this).x, (*this).y);
         (*this).dash_time -= 1;
-        (*this).spd.x = appr((*this).spd.x, (*this).dash_target.x, (*this).dash_accel.x * fx(0.5));
-        (*this).spd.y = appr((*this).spd.y, (*this).dash_target.y, (*this).dash_accel.y * fx(0.5));
+        (*this).spd.x = appr(
+            (*this).spd.x,
+            (*this).dash_target.x,
+            (*this).dash_accel.x * fx(0.5),
+        );
+        (*this).spd.y = appr(
+            (*this).spd.y,
+            (*this).dash_target.y,
+            (*this).dash_accel.y * fx(0.5),
+        );
     } else {
         let maxrun = fi(1);
         let mut accel = fx(0.6);
@@ -727,7 +787,11 @@ unsafe fn player_update(thisp: *mut Obj) {
         }
 
         if (*this).spd.x.abs() > maxrun {
-            (*this).spd.x = appr((*this).spd.x, sign((*this).spd.x) * maxrun, deccel * fx(0.5));
+            (*this).spd.x = appr(
+                (*this).spd.x,
+                sign((*this).spd.x) * maxrun,
+                deccel * fx(0.5),
+            );
         } else {
             (*this).spd.x = appr((*this).spd.x, fi(input) * maxrun, accel * fx(0.5));
         }
@@ -743,7 +807,8 @@ unsafe fn player_update(thisp: *mut Obj) {
             gravity = gravity * fx(0.5);
         }
 
-        if input != 0 && obj_is_solid(this, fi(input), fi(0)) && !obj_is_ice(this, fi(input), fi(0)) {
+        if input != 0 && obj_is_solid(this, fi(input), fi(0)) && !obj_is_ice(this, fi(input), fi(0))
+        {
             maxfall = fx(0.4);
             if rng::rnd(fi(20)) < fi(2) {
                 init_object(Smoke, (*this).x + fi(input * 6), (*this).y);
@@ -866,7 +931,13 @@ unsafe fn player_draw(this: *mut Obj) {
     }
     set_hair_color((*this).djump);
     draw_hair(this, if (*this).flip_x { -1 } else { 1 });
-    p8spr((*this).spr.to_int(), (*this).x.to_int(), (*this).y.to_int(), (*this).flip_x, (*this).flip_y);
+    p8spr(
+        (*this).spr.to_int(),
+        (*this).x.to_int(),
+        (*this).y.to_int(),
+        (*this).flip_x,
+        (*this).flip_y,
+    );
     backend::flush(); // draw the player with the hair palette before resetting it
     unset_hair_color();
 }
@@ -920,7 +991,13 @@ unsafe fn player_spawn_update(this: *mut Obj) {
 unsafe fn player_spawn_draw(this: *mut Obj) {
     set_hair_color(MAX_DJUMP);
     draw_hair(this, 1);
-    p8spr((*this).spr.to_int(), (*this).x.to_int(), (*this).y.to_int(), (*this).flip_x, (*this).flip_y);
+    p8spr(
+        (*this).spr.to_int(),
+        (*this).x.to_int(),
+        (*this).y.to_int(),
+        (*this).flip_x,
+        (*this).flip_y,
+    );
     backend::flush(); // draw with the hair palette before resetting it (shared CLUT)
     unset_hair_color();
 }
@@ -976,7 +1053,12 @@ unsafe fn balloon_init(this: *mut Obj) {
     (*this).offset = rng::rnd(fi(1));
     (*this).start = (*this).y;
     (*this).timer = 0;
-    (*this).hitbox = Hitbox { x: -1, y: -1, w: 10, h: 10 };
+    (*this).hitbox = Hitbox {
+        x: -1,
+        y: -1,
+        w: 10,
+        h: 10,
+    };
 }
 unsafe fn balloon_update(this: *mut Obj) {
     if (*this).spr == fi(22) {
@@ -1000,8 +1082,20 @@ unsafe fn balloon_update(this: *mut Obj) {
 }
 unsafe fn balloon_draw(this: *mut Obj) {
     if (*this).spr == fi(22) {
-        p8spr(13 + ((*this).offset * fi(8)).to_int() % 3, (*this).x.to_int(), (*this).y.to_int() + 6, false, false);
-        p8spr((*this).spr.to_int(), (*this).x.to_int(), (*this).y.to_int(), false, false);
+        p8spr(
+            13 + ((*this).offset * fi(8)).to_int() % 3,
+            (*this).x.to_int(),
+            (*this).y.to_int() + 6,
+            false,
+            false,
+        );
+        p8spr(
+            (*this).spr.to_int(),
+            (*this).x.to_int(),
+            (*this).y.to_int(),
+            false,
+            false,
+        );
     }
 }
 
@@ -1011,7 +1105,10 @@ unsafe fn fall_floor_init(this: *mut Obj) {
 }
 unsafe fn fall_floor_update(this: *mut Obj) {
     if (*this).state == 0 {
-        if obj_check(this, Player, fi(0), fi(-1)) || obj_check(this, Player, fi(-1), fi(0)) || obj_check(this, Player, fi(1), fi(0)) {
+        if obj_check(this, Player, fi(0), fi(-1))
+            || obj_check(this, Player, fi(-1), fi(0))
+            || obj_check(this, Player, fi(1), fi(0))
+        {
             break_fall_floor(this);
         }
     } else if (*this).state == 1 {
@@ -1036,7 +1133,13 @@ unsafe fn fall_floor_draw(this: *mut Obj) {
         if (*this).state != 1 {
             p8spr(23, (*this).x.to_int(), (*this).y.to_int(), false, false);
         } else {
-            p8spr(23 + (30 - (*this).delay) / 10, (*this).x.to_int(), (*this).y.to_int(), false, false);
+            p8spr(
+                23 + (30 - (*this).delay) / 10,
+                (*this).x.to_int(),
+                (*this).y.to_int(),
+                false,
+                false,
+            );
         }
     }
 }
@@ -1143,9 +1246,27 @@ unsafe fn fly_fruit_draw(this: *mut Obj) {
     } else {
         off = (off + fx(0.25)).rem_floor(fi(3));
     }
-    p8spr(45 + off.to_int(), (*this).x.to_int() - 6, (*this).y.to_int() - 2, true, false);
-    p8spr((*this).spr.to_int(), (*this).x.to_int(), (*this).y.to_int(), false, false);
-    p8spr(45 + off.to_int(), (*this).x.to_int() + 6, (*this).y.to_int() - 2, false, false);
+    p8spr(
+        45 + off.to_int(),
+        (*this).x.to_int() - 6,
+        (*this).y.to_int() - 2,
+        true,
+        false,
+    );
+    p8spr(
+        (*this).spr.to_int(),
+        (*this).x.to_int(),
+        (*this).y.to_int(),
+        false,
+        false,
+    );
+    p8spr(
+        45 + off.to_int(),
+        (*this).x.to_int() + 6,
+        (*this).y.to_int() - 2,
+        false,
+        false,
+    );
 }
 
 // ---- lifeup ----
@@ -1165,12 +1286,22 @@ unsafe fn lifeup_update(this: *mut Obj) {
 }
 unsafe fn lifeup_draw(this: *mut Obj) {
     (*this).flash += fx(0.25);
-    p8print(b"1000", (*this).x.to_int() - 2, (*this).y.to_int(), 7 + (*this).flash.to_int() % 2);
+    p8print(
+        b"1000",
+        (*this).x.to_int() - 2,
+        (*this).y.to_int(),
+        7 + (*this).flash.to_int() % 2,
+    );
 }
 
 // ---- fake_wall ----
 unsafe fn fake_wall_update(this: *mut Obj) {
-    (*this).hitbox = Hitbox { x: -1, y: -1, w: 18, h: 18 };
+    (*this).hitbox = Hitbox {
+        x: -1,
+        y: -1,
+        w: 18,
+        h: 18,
+    };
     let hit = obj_collide(this, Player, fi(0), fi(0));
     if !hit.is_null() && (*hit).dash_effect_time > 0 {
         (*hit).spd.x = -sign((*hit).spd.x) * fx(1.5);
@@ -1186,7 +1317,12 @@ unsafe fn fake_wall_update(this: *mut Obj) {
         destroy_object(this);
         return;
     }
-    (*this).hitbox = Hitbox { x: 0, y: 0, w: 16, h: 16 };
+    (*this).hitbox = Hitbox {
+        x: 0,
+        y: 0,
+        w: 16,
+        h: 16,
+    };
 }
 unsafe fn fake_wall_draw(this: *mut Obj) {
     let x = (*this).x.to_int();
@@ -1256,7 +1392,13 @@ unsafe fn platform_update(this: *mut Obj) {
 }
 unsafe fn platform_draw(this: *mut Obj) {
     p8spr(11, (*this).x.to_int(), (*this).y.to_int() - 1, false, false);
-    p8spr(12, (*this).x.to_int() + 8, (*this).y.to_int() - 1, false, false);
+    p8spr(
+        12,
+        (*this).x.to_int() + 8,
+        (*this).y.to_int() - 1,
+        false,
+        false,
+    );
 }
 
 // ---- message ----
@@ -1277,7 +1419,13 @@ unsafe fn message_draw(this: *mut Obj) {
         while i < count && (i as usize) < TEXT.len() {
             let ch = TEXT[i as usize];
             if ch != b'#' {
-                p8rectfill((*this).off2.x - 2, (*this).off2.y - 2, (*this).off2.x + 7, (*this).off2.y + 6, 7);
+                p8rectfill(
+                    (*this).off2.x - 2,
+                    (*this).off2.y - 2,
+                    (*this).off2.x + 7,
+                    (*this).off2.y + 6,
+                    7,
+                );
                 p8print(&[ch], (*this).off2.x, (*this).off2.y, 0);
                 (*this).off2.x += 5;
             } else {
@@ -1344,13 +1492,27 @@ unsafe fn big_chest_draw(this: *mut Obj) {
                 ((*this).x + (*p).x).to_int(),
                 ((*this).y + fi(8) - (*p).y).to_int(),
                 ((*this).x + (*p).x).to_int(),
-                ((*this).y + fi(8) - (*p).y + (*p).h).min((*this).y + fi(8)).to_int(),
+                ((*this).y + fi(8) - (*p).y + (*p).h)
+                    .min((*this).y + fi(8))
+                    .to_int(),
                 7,
             );
         }
     }
-    p8spr(112, (*this).x.to_int(), (*this).y.to_int() + 8, false, false);
-    p8spr(113, (*this).x.to_int() + 8, (*this).y.to_int() + 8, false, false);
+    p8spr(
+        112,
+        (*this).x.to_int(),
+        (*this).y.to_int() + 8,
+        false,
+        false,
+    );
+    p8spr(
+        113,
+        (*this).x.to_int() + 8,
+        (*this).y.to_int() + 8,
+        false,
+        false,
+    );
 }
 
 // ---- orb ----
@@ -1402,7 +1564,13 @@ unsafe fn flag_init(this: *mut Obj) {
 }
 unsafe fn flag_draw(this: *mut Obj) {
     (*this).spr = fi(118) + (fi(FRAMES) / fi(10)).rem_floor(fi(3));
-    p8spr((*this).spr.to_int(), (*this).x.to_int(), (*this).y.to_int(), false, false);
+    p8spr(
+        (*this).spr.to_int(),
+        (*this).x.to_int(),
+        (*this).y.to_int(),
+        false,
+        false,
+    );
     if (*this).show {
         p8rectfill(32, 2, 96, 31, 0);
         p8spr(26, 55, 6, false, false);
@@ -1462,7 +1630,10 @@ unsafe fn kill_player(o: *mut Obj) {
             x: (*o).x + fi(4),
             y: (*o).y + fi(4),
             t: fi(20),
-            spd2: Vec2 { x: angle.sin() * fi(3), y: angle.cos() * fi(3) },
+            spd2: Vec2 {
+                x: angle.sin() * fi(3),
+                y: angle.cos() * fi(3),
+            },
             ..PARTICLE0
         };
         dpc += 1;
@@ -1474,7 +1645,13 @@ unsafe fn kill_player(o: *mut Obj) {
 
 unsafe fn draw_object(o: *mut Obj) {
     if !dispatch_draw(o) && (*o).spr > fi(0) {
-        p8spr((*o).spr.to_int(), (*o).x.to_int(), (*o).y.to_int(), (*o).flip_x, (*o).flip_y);
+        p8spr(
+            (*o).spr.to_int(),
+            (*o).x.to_int(),
+            (*o).y.to_int(),
+            (*o).flip_x,
+            (*o).flip_y,
+        );
     }
 }
 
@@ -1693,7 +1870,10 @@ pub fn update() {
             SHAKE -= 1;
             p8camera(0, 0);
             if SHAKE > 0 {
-                p8camera((fi(-2) + rng::rnd(fi(5))).to_int(), (fi(-2) + rng::rnd(fi(5))).to_int());
+                p8camera(
+                    (fi(-2) + rng::rnd(fi(5))).to_int(),
+                    (fi(-2) + rng::rnd(fi(5))).to_int(),
+                );
             }
         }
         if WILL_RESTART && DELAY_RESTART > 0 {
@@ -1869,7 +2049,7 @@ pub fn draw() {
                     ((*p).y - (*p).t / fi(10)).to_int(),
                     ((*p).x + (*p).t / fi(10)).to_int(),
                     ((*p).y + (*p).t / fi(10)).to_int(),
-                    (14 + (*p).t.rem_floor(fi(2)).to_int()),
+                    14 + (*p).t.rem_floor(fi(2)).to_int(),
                 );
             }
         }

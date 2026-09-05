@@ -27,7 +27,7 @@ use assets::tilemap::{MAP_W, TILEMAP_DATA, TILE_FLAGS};
 use pico8::backend::{self, Cart};
 use pico8::pause::{self, Exit, Pause};
 use pico8::sfx::{self, AudioData};
-use psx_gpu::{self as gpu, Resolution, VideoMode, framebuf::FrameBuffer};
+use psx_gpu::{self as gpu, framebuf::FrameBuffer, Resolution, VideoMode};
 use psx_pad::{button, poll_port1};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display, leaving almost no per-frame compute budget; the
@@ -185,12 +185,13 @@ fn run_pause(fb: &mut FrameBuffer) -> bool {
 /// capture it and compare to a PICO-8 recording of the same SFX. Not the game.
 pub fn run_sfx_test(id: i32) {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
+    psx_rt::interrupts::install_vblank_counter();
     sfx::init(AUDIO);
     loop {
         sfx::play(id);
         for _ in 0..240 {
             sfx::update();
-            gpu::vsync();
+            wait_vblank();
         }
     }
 }

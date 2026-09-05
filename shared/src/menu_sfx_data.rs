@@ -477,11 +477,7 @@ pub static MENU_SFX_ADPCM: MenuSfxBank = MenuSfxBank([
 ]);
 
 /// (byte offset into MENU_SFX_ADPCM, sample count) per sound.
-pub static MENU_SFX: [(u32, u32); 3] = [
-    (0, 965),
-    (560, 6301),
-    (4176, 5760),
-];
+pub static MENU_SFX: [(u32, u32); 3] = [(0, 965), (560, 6301), (4176, 5760)];
 
 pub const SFX_NAV: usize = 0;
 pub const SFX_CONFIRM: usize = 1;

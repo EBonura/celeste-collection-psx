@@ -103,7 +103,10 @@ fn show_intro() {
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
 
-    upload_16bpp(VramRect::new(BONNIE_TPAGE.x(), BONNIE_TPAGE.y(), 32, 128), &COVER_BONNIE);
+    upload_16bpp(
+        VramRect::new(BONNIE_TPAGE.x(), BONNIE_TPAGE.y(), 32, 128),
+        &COVER_BONNIE,
+    );
     upload_cover_clut();
     let font = FontAtlas::upload(&BASIC, FONT_TPAGE, FONT_CLUT);
 
@@ -235,7 +238,16 @@ fn show_credits() {
                     } else if *col == HEAD {
                         ol_gradient(&font, x, y, txt, (0x80, 0x80, 0x80), (0x3c, 0x60, 0x80));
                     } else if *col == PSOX {
-                        draw_sheen(&font, x, y, txt, (0x68, 0x80, 0x80), (0x38, 0x58, 0x80), tick as i32, 0x80);
+                        draw_sheen(
+                            &font,
+                            x,
+                            y,
+                            txt,
+                            (0x68, 0x80, 0x80),
+                            (0x38, 0x58, 0x80),
+                            tick as i32,
+                            0x80,
+                        );
                     } else {
                         ol_text(&font, x, y, txt, *col);
                     }
@@ -283,9 +295,13 @@ fn show_menu(first: bool) -> usize {
     let font = upload_menu_vram();
     sfx::init(celeste::AUDIO); // inits the SPU + the SFX-volume state
     menusfx::init(); // upload the dedicated CC0 menu sample bank
-    // intro -> menu uses the same confirm sound as launching a game; returning from
-    // a game/credits gets the softer reveal.
-    menusfx::play(if first { menusfx::SFX_CONFIRM } else { menusfx::SFX_TRANSITION });
+                     // intro -> menu uses the same confirm sound as launching a game; returning from
+                     // a game/credits gets the softer reveal.
+    menusfx::play(if first {
+        menusfx::SFX_CONFIRM
+    } else {
+        menusfx::SFX_TRANSITION
+    });
 
     let mut sel: usize = 0;
     let mut frame = 0i32; // animation clock (starfield drift, glow pulse)
@@ -380,11 +396,37 @@ fn draw_menu_scene(fb: &mut FrameBuffer, font: &FontAtlas, sel: usize, frame: i3
     let icy_bot = (0x3c, 0x60, 0x80);
     let dim = (0x44, 0x44, 0x4c);
     if sel == 0 {
-        ol_gradient(font, CENTER1 - text_half(font, "Celeste"), 166, "Celeste", icy_top, icy_bot);
-        ol_text(font, CENTER2 - text_half(font, "Celeste 2"), 166, "Celeste 2", dim);
+        ol_gradient(
+            font,
+            CENTER1 - text_half(font, "Celeste"),
+            166,
+            "Celeste",
+            icy_top,
+            icy_bot,
+        );
+        ol_text(
+            font,
+            CENTER2 - text_half(font, "Celeste 2"),
+            166,
+            "Celeste 2",
+            dim,
+        );
     } else {
-        ol_text(font, CENTER1 - text_half(font, "Celeste"), 166, "Celeste", dim);
-        ol_gradient(font, CENTER2 - text_half(font, "Celeste 2"), 166, "Celeste 2", icy_top, icy_bot);
+        ol_text(
+            font,
+            CENTER1 - text_half(font, "Celeste"),
+            166,
+            "Celeste",
+            dim,
+        );
+        ol_gradient(
+            font,
+            CENTER2 - text_half(font, "Celeste 2"),
+            166,
+            "Celeste 2",
+            icy_top,
+            icy_bot,
+        );
     }
 
     // hints, stacked: a PlayStation button icon + the action it opens.
@@ -489,7 +531,16 @@ fn show_settings() {
         atmos::draw(0, frame);
 
         let title = "Settings";
-        draw_sheen(&font, SCREEN_CX - text_half(&font, title), 24, title, (0x80, 0x78, 0x3c), (0x60, 0x2a, 0x0c), frame, 0x80);
+        draw_sheen(
+            &font,
+            SCREEN_CX - text_half(&font, title),
+            24,
+            title,
+            (0x80, 0x78, 0x3c),
+            (0x60, 0x2a, 0x0c),
+            frame,
+            0x80,
+        );
 
         const ROWS: [&str; N] = ["SFX", "Music", "Pixel", "Screen", "Borders", "Fly"];
         const Y0: i16 = 74;
@@ -499,7 +550,12 @@ fn show_settings() {
             let y = Y0 + i as i16 * RH;
             let lit = i == sel;
             if lit {
-                gpu::draw_quad_flat([(58, y - 3), (262, y - 3), (58, y + 11), (262, y + 11)], 0x12, 0x16, 0x32);
+                gpu::draw_quad_flat(
+                    [(58, y - 3), (262, y - 3), (58, y + 11), (262, y + 11)],
+                    0x12,
+                    0x16,
+                    0x32,
+                );
                 ol_text(&font, 64, y, ">", (0x80, 0x80, 0x80));
             }
             let dim = i == 3 && scale1x; // Screen greyed at 1x (no clipping)
@@ -528,10 +584,20 @@ fn show_settings() {
                     },
                     tint,
                 ),
-                4 => ol_text(&font, vx, y, backend::side_preset_name(backend::side_preset()), tint),
+                4 => ol_text(
+                    &font,
+                    vx,
+                    y,
+                    backend::side_preset_name(backend::side_preset()),
+                    tint,
+                ),
                 5 => {
                     // mark the Triangle button it maps to in-game, beside the label
-                    icons::draw(&icons::TRIANGLE, lx + font.text_width("Fly") as i16 + 5, y - 3);
+                    icons::draw(
+                        &icons::TRIANGLE,
+                        lx + font.text_width("Fly") as i16 + 5,
+                        y - 3,
+                    );
                     let on = debug::fly_enabled();
                     let t = if on { (0x30, 0x78, 0x40) } else { tint };
                     ol_text(&font, vx, y, if on { "On" } else { "Off" }, t);
@@ -557,11 +623,25 @@ fn show_settings() {
 /// A small volume slider (track + filled portion) at screen `(x, y)`.
 fn draw_vol_slider(x: i16, y: i16, vol: u16, lit: bool) {
     const TW: i16 = 64;
-    gpu::draw_quad_flat([(x, y + 2), (x + TW, y + 2), (x, y + 6), (x + TW, y + 6)], 0x30, 0x30, 0x3a);
+    gpu::draw_quad_flat(
+        [(x, y + 2), (x + TW, y + 2), (x, y + 6), (x + TW, y + 6)],
+        0x30,
+        0x30,
+        0x3a,
+    );
     let fw = vol as i16 * TW / 8;
     if fw > 0 {
-        let (r, g, b) = if lit { (0x30, 0xc0, 0x40) } else { (0x20, 0x70, 0x30) };
-        gpu::draw_quad_flat([(x, y + 2), (x + fw, y + 2), (x, y + 6), (x + fw, y + 6)], r, g, b);
+        let (r, g, b) = if lit {
+            (0x30, 0xc0, 0x40)
+        } else {
+            (0x20, 0x70, 0x30)
+        };
+        gpu::draw_quad_flat(
+            [(x, y + 2), (x + fw, y + 2), (x, y + 6), (x + fw, y + 6)],
+            r,
+            g,
+            b,
+        );
     }
 }
 
@@ -569,7 +649,13 @@ fn draw_vol_slider(x: i16, y: i16, vol: u16, lit: bool) {
 fn fade_quad(g: u8) {
     use psx_gpu::material::BlendMode;
     gpu::draw_tri_flat_blended([(0, 0), (320, 0), (0, 240)], g, g, g, BlendMode::Subtract);
-    gpu::draw_tri_flat_blended([(320, 0), (0, 240), (320, 240)], g, g, g, BlendMode::Subtract);
+    gpu::draw_tri_flat_blended(
+        [(320, 0), (0, 240), (320, 240)],
+        g,
+        g,
+        g,
+        BlendMode::Subtract,
+    );
 }
 
 /// Dissolve the menu to black over `FADE_FRAMES` (when leaving for a game).
@@ -589,8 +675,14 @@ fn fade_out(fb: &mut FrameBuffer, font: &FontAtlas, sel: usize, frame: &mut i32)
 /// game overwrites VRAM. Returns the freshly-uploaded font atlas.
 fn upload_menu_vram() -> FontAtlas {
     // 128x128 @ 4bpp == 32 halfwords/row.
-    upload_16bpp(VramRect::new(COVER1_TPAGE.x(), COVER1_TPAGE.y(), 32, 128), &COVER_CELESTE);
-    upload_16bpp(VramRect::new(COVER2_TPAGE.x(), COVER2_TPAGE.y(), 32, 128), &COVER_CELESTE2);
+    upload_16bpp(
+        VramRect::new(COVER1_TPAGE.x(), COVER1_TPAGE.y(), 32, 128),
+        &COVER_CELESTE,
+    );
+    upload_16bpp(
+        VramRect::new(COVER2_TPAGE.x(), COVER2_TPAGE.y(), 32, 128),
+        &COVER_CELESTE2,
+    );
 
     // The cart labels use PICO-8 colour 0 (black) for their borders; the opaque-black
     // CLUT keeps them solid instead of punching transparent holes.
@@ -602,9 +694,25 @@ fn upload_menu_vram() -> FontAtlas {
 
 /// Blit a 128x128 cover, scaled to COVER_W x COVER_H, at screen (x, y).
 fn draw_cover(tpage: Tpage, x: i16, y: i16, tint: (u8, u8, u8)) {
-    let verts = [(x, y), (x + COVER_W, y), (x, y + COVER_H), (x + COVER_W, y + COVER_H)];
-    let uvs = [(0, 0), (COVER_SRC, 0), (0, COVER_SRC), (COVER_SRC, COVER_SRC)];
-    gpu::draw_quad_textured(verts, uvs, COVER_CLUT.uv_clut_word(), tpage.uv_tpage_word(0), tint);
+    let verts = [
+        (x, y),
+        (x + COVER_W, y),
+        (x, y + COVER_H),
+        (x + COVER_W, y + COVER_H),
+    ];
+    let uvs = [
+        (0, 0),
+        (COVER_SRC, 0),
+        (0, COVER_SRC),
+        (COVER_SRC, COVER_SRC),
+    ];
+    gpu::draw_quad_textured(
+        verts,
+        uvs,
+        COVER_CLUT.uv_clut_word(),
+        tpage.uv_tpage_word(0),
+        tint,
+    );
 }
 
 /// Half the pixel width of `s` in the BASIC font, for horizontal centring.

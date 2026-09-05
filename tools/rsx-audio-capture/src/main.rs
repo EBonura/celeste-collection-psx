@@ -14,7 +14,8 @@ fn main() {
     let bios_path = env::var("RSX_BIOS").unwrap_or_else(|_| "SCPH1001.bin".into());
 
     let mut cpu = CPU::new(Some(fs::read(exe).expect("read exe")), String::new());
-    cpu.bus.load_bios(fs::read(&bios_path).expect("read BIOS ($RSX_BIOS or ./SCPH1001.bin)"));
+    cpu.bus
+        .load_bios(fs::read(&bios_path).expect("read BIOS ($RSX_BIOS or ./SCPH1001.bin)"));
 
     let target = (seconds * 44100.0 * 2.0) as usize; // stereo i16
     let mut samples: Vec<i16> = Vec::with_capacity(target);
@@ -25,9 +26,19 @@ fn main() {
         frames += 1;
     }
 
-    let spec = hound::WavSpec { channels: 2, sample_rate: 44100, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: 44100,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
     let mut w = hound::WavWriter::create(out, spec).unwrap();
-    for s in samples.iter().take(target) { w.write_sample(*s).unwrap(); }
+    for s in samples.iter().take(target) {
+        w.write_sample(*s).unwrap();
+    }
     w.finalize().unwrap();
-    eprintln!("[rsx-audio-capture] {frames} frames, {} samples -> {out}", samples.len());
+    eprintln!(
+        "[rsx-audio-capture] {frames} frames, {} samples -> {out}",
+        samples.len()
+    );
 }

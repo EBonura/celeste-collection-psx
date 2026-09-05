@@ -56,7 +56,10 @@ pub fn play(id: usize) {
         OneShot::new(sample, Volume(vol))
             // Instant attack, full sustain, fastest release the hardware
             // encodes.
-            .with_adsr(Adsr { lower: 0x000F, upper: 0x0000 })
+            .with_adsr(Adsr {
+                lower: 0x000F,
+                upper: 0x0000,
+            })
             .play(Voice::new(v));
     }
 }

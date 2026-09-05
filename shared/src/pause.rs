@@ -212,7 +212,7 @@ impl Pause {
         backend::set_pixel_scale(2); // also centres V_OFS at the 2x centre (-8)
         backend::camera(0, 0);
         backend::pal_reset(); // the frozen game may have left a pal() remap; the
-                              // overlay must draw with the canonical PICO-8 palette
+                              // Draw the overlay with the PICO-8 palette.
         let fly = self.fly;
         let scale1x = game_scale == 1; // 1x never clips -> the Screen row is greyed
 

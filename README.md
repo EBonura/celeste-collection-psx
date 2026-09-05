@@ -1,7 +1,11 @@
 # Celeste Classic Collection PSX
 
+Start with the [PSoXide Demo Disc](https://bonnie-studios.itch.io/psoxide-demo-disc): it includes Celeste Classic Collection PSX
+and the other Bonnie Studios PlayStation demos. Standalone downloads are available
+for testing just this collection.
+
 [PICO-8](https://www.lexaloffle.com/pico-8.php) games demade for the **PlayStation 1**,
-built on the [PSoXide](https://github.com/EBonura/PSoXide) Rust SDK. Real hardware, real discs.
+built on the [PSoXide](https://github.com/EBonura/PSoXide) Rust SDK.
 
 The **Celeste Classic Collection**: two full, playable ports, **Celeste** (the original) and
 **Celeste 2: Lani's Trek**, on a single bootable disc with a cover-art launcher (animated menu,
@@ -82,3 +86,8 @@ The port code in this repository is **GPL-2.0**, matching the PSoXide SDK it lin
 (see [`LICENSE`](LICENSE)). This is an unofficial, non-commercial fan port: Celeste, Celeste 2,
 and PICO-8 belong to their respective creators, and all rights to the original games remain
 theirs.
+
+## Recent changes
+
+Source snapshot **2026.09.05**: CI hydrates the pinned SDK before checking the host build.
+See the [changelog](CHANGELOG.md) for the remaining changes and published download versions.

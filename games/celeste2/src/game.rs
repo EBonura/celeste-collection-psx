@@ -145,7 +145,7 @@ fn psfx(id: i32, off: i32, len: i32) {
 fn psfx_lock(id: i32, off: i32, len: i32, lock: i32) {
     unsafe {
         if SFX_TIMER <= 0 || lock > 0 {
-            sfx::play_range(id, off, len);
+            sfx::play_ch(id, 3, off, len);
             if lock > 0 {
                 SFX_TIMER = lock;
             }

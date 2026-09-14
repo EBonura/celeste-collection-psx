@@ -18,10 +18,7 @@
 pub mod assets;
 mod game;
 
-use assets::audio_data::{
-    MUSIC_PATTERNS, SFX_META, SFX_NOTES, SPU_PITCH_TABLE, WAVEFORM_ADPCM, WAVEFORM_ADPCM_LONG,
-    WAVEFORM_OFFSET, WAVEFORM_OFFSET_LONG,
-};
+use assets::audio_data::{MUSIC_DATA, SFX_DATA};
 use assets::gfx::GFX_DATA;
 use assets::tilemap::{MAP_W, TILEMAP_DATA, TILE_FLAGS};
 use pico8::backend::{self, Cart};
@@ -42,17 +39,10 @@ pub const CART: Cart = Cart {
     map_w: MAP_W,
 };
 
-/// Celeste 2's PICO-8 sound data (42 music patterns).
+/// Celeste 2's PICO-8 sound data (raw cart sound RAM).
 pub const AUDIO: AudioData = AudioData {
-    waveform_adpcm: &WAVEFORM_ADPCM,
-    waveform_offset: &WAVEFORM_OFFSET,
-    waveform_adpcm_long: &WAVEFORM_ADPCM_LONG,
-    waveform_offset_long: &WAVEFORM_OFFSET_LONG,
-    sfx_meta: &SFX_META,
-    sfx_notes: &SFX_NOTES,
-    spu_pitch_table: &SPU_PITCH_TABLE,
-    music_patterns: &MUSIC_PATTERNS,
-    music_pattern_count: 42,
+    sfx: &SFX_DATA,
+    music: &MUSIC_DATA,
 };
 
 /// Boot Celeste 2 and run its 60fps frame loop until Select+Start is held.
@@ -70,7 +60,6 @@ pub fn run() {
     // Drive audio off real VBlanks so the music keeps tempo when rendering can't
     // hold 60fps (see celeste1).
     psx_rt::interrupts::install_vblank_counter();
-    let mut last_vb = psx_rt::interrupts::vblank_count();
     let mut prev_start = true; // require a fresh press before the first pause
 
     loop {
@@ -85,7 +74,6 @@ pub fn run() {
             if run_pause(&mut fb) {
                 return; // player chose "quit to menu"
             }
-            last_vb = psx_rt::interrupts::vblank_count(); // don't count paused vblanks
             prev_start = true; // wait for release before it can pause again
             continue;
         }
@@ -124,18 +112,7 @@ pub fn run() {
         wait_vblank();
         fb.swap();
 
-        // Advance the music/SFX by the VBlanks actually elapsed (real-time tempo).
-        let vb = psx_rt::interrupts::vblank_count();
-        let mut elapsed = vb.wrapping_sub(last_vb);
-        last_vb = vb;
-        if elapsed == 0 {
-            elapsed = 1;
-        } else if elapsed > 4 {
-            elapsed = 4;
-        }
-        for _ in 0..elapsed {
-            sfx::update();
-        }
+        sfx::update(); // stream the next slice of PICO-8 audio to the SPU
     }
 }
 

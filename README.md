@@ -46,9 +46,12 @@ These ports are tuned for actual PS1 silicon, not just an emulator. The interest
 showed up on a console, so each was first reproduced by making the emulator more faithful, then
 fixed against it:
 
-- **Audio**: ADPCM samples are uploaded to SPU RAM by DMA. The original PIO path never armed the
-  SPU transfer mode, so the writes were silently dropped on hardware (and on FIFO-accurate
-  emulators), and the music came out as a drone.
+- **Audio**: PICO-8's synthesiser runs in software (a fixed-point port of the zepto8
+  reverse-engineering, calibrated against PICO-8 recordings: median spectral similarity of 0.95 or
+  better per cart for both sound effects and music) and is streamed to
+  one SPU voice through an ADPCM ring in SPU RAM by DMA, with the play position fed back through
+  the SPU IRQ-address latch. The original PIO upload path never armed the SPU transfer mode, so
+  writes were silently dropped on hardware (and on FIFO-accurate emulators).
 - **Sprite recolour**: palette swaps (`pal()`, e.g. Madeline's hair on dash) ping-pong between two
   CLUT slots, because the GPU caches the CLUT and reloads it only when the CLUT word changes, not
   when VRAM is overwritten.
@@ -67,8 +70,10 @@ Each game is a standalone Cargo workspace exposing `run()`, shipped on its own o
 `celeste-collection` launcher (both games in one combined EXE, packed into a single `.bin`/`.cue`
 disc image). Shared runtime (rendering, SPU audio, fonts, pause menu) lives in `shared/`. The
 PSoXide SDK revision is recorded in `psoxide-pin/`; `tools/` holds the PICO-8 to Rust
-asset/audio converters. The optional `tools/psx-audio-capture` host tool also
-uses emulator libraries; those are not linked into the PS1 games. Combined-disc
+asset/audio converters and the fidelity benches (`synth_bench.py` scores the synth on the host,
+`sfx_bench.sh` scores the emulator's SPU output; both against PICO-8 recordings in `audio-ref/`).
+The optional `tools/psx-audio-capture` host tool also uses emulator libraries; those are not
+linked into the PS1 games. Combined-disc
 builds pass `PSOXIDE_FROM` explicitly to select the tested split components.
 
 ## Credits

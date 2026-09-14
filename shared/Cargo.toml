@@ -20,3 +20,4 @@ psx-sfx  = { path = "../.psoxide/sdk/crates/psx-sfx" }
 psx-font = { path = "../.psoxide/sdk/crates/psx-font" }
 psx-pad  = { path = "../.psoxide/sdk/crates/psx-pad" }
 psx-mc   = { path = "../.psoxide/sdk/crates/psx-mc" }
+psx-rt   = { path = "../.psoxide/sdk/crates/psx-rt" }

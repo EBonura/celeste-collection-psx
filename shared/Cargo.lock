@@ -18,6 +18,7 @@ dependencies = [
  "psx-io",
  "psx-mc",
  "psx-pad",
+ "psx-rt",
  "psx-sfx",
  "psx-spu",
  "psx-vram",
@@ -97,6 +98,14 @@ dependencies = [
  "psx-hw",
  "psx-io",
  "psx-math",
+]
+
+[[package]]
+name = "psx-rt"
+version = "0.1.0"
+dependencies = [
+ "psx-hw",
+ "psx-io",
 ]
 
 [[package]]

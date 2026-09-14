@@ -1,981 +1,221 @@
-//! PICO-8 audio on the PS1 SPU: synthesises PICO-8's sfx/music by keying SPU
-//! voices over the game's pre-rendered instrument waveforms. Voices 0-3 =
-//! music channels, 4-7 = SFX. Voice index == channel index throughout.
+//! PICO-8 audio on the PS1: a fixed-point port of the PICO-8 synthesiser
+//! (four channels of oscillators, the sfx/music sequencer, custom instruments
+//! and effects, as reverse-engineered by zepto8), mixed on the CPU at 22050 Hz
+//! and streamed to ONE SPU voice through a ring of ADPCM blocks in SPU RAM.
 //!
-//! The sound data (waveforms, sfx note tables, music patterns, pitch table) is
-//! game-specific and supplied via [`AudioData`] at [`init`]; the engine itself
-//! is universal PICO-8 behaviour.
+//! Why software: the SPU can only replay sampled wavetables through a 4-bit
+//! ADPCM decoder and a gaussian interpolator, which blurs PICO-8's raw
+//! oscillators (low notes lose harmonics, the LFSR noise is narrowband, the
+//! phaser can't beat, per-note re-triggers click). Rendering PICO-8's actual
+//! waveforms in software and streaming the mix keeps every detail of the
+//! original; the only loss left is the ADPCM quantisation of the final mix.
+//!
+//! Timing: the sequencer is clocked by the SPU's own sample consumption (the
+//! stream position is fed back through the SPU IRQ-address latch), so the
+//! tempo is exactly 183 samples per speed unit like PICO-8, independent of
+//! the frame rate. `update` must be called every frame; it polls the latch,
+//! renders as many 28-sample blocks as the play head has consumed, and DMAs
+//! them into the ring ahead of it.
+//!
+//! The sound data is the cart's own 0x3100/0x3200 RAM (tools/p8_audio.py);
+//! the synthesiser itself lives in [`crate::synth`], this module is the stream.
 
+#![allow(static_mut_refs)]
+
+use crate::synth::{self, BLOCK_BYTES, BLOCK_SAMPLES, SAMPLE_RATE};
+use psx_io::spu::{SPUCNT, SPUSTAT};
 use psx_spu as spu;
 use spu::{Adsr, Pitch, SpuAddr, Voice, Volume};
 
-/// A game's PICO-8 sound data, generated alongside its other assets.
-#[derive(Clone, Copy)]
-pub struct AudioData {
-    /// ADPCM-encoded instrument waveforms (the 8 PICO-8 waveforms), uploaded
-    /// to SPU RAM at [`SPU_WAVEFORM_BASE`].
-    pub waveform_adpcm: &'static [u8],
-    /// Byte offset of each of the 8 waveforms within `waveform_adpcm`.
-    pub waveform_offset: &'static [u16; 8],
-    /// LONG (448-sample, ADPCM-prediction) versions of the 7 tonal waveforms, used
-    /// for LOW notes to kill short-wavetable imaging: the 8x replay rate pushes the
-    /// SPU's interpolation images above the audible band, and prediction encoding
-    /// keeps the (replay-rate-scaled) 4-bit quantization noise ~30dB lower than the
-    /// short tables' filter-0. Played at `spu_pitch_table[key] << 3`.
-    pub waveform_adpcm_long: &'static [u8],
-    /// Byte offset of each waveform within `waveform_adpcm_long` (index 6 = noise
-    /// is a dummy; noise never uses the long path).
-    pub waveform_offset_long: &'static [u16; 8],
-    /// Per-SFX metadata: `[speed, loop_start, loop_end, _]`.
-    pub sfx_meta: &'static [[u8; 4]],
-    /// Per-SFX 32 note words (pitch|instr|vol|effect bit-packed).
-    pub sfx_notes: &'static [[u16; 32]],
-    /// PICO-8 key (0..63) -> SPU pitch.
-    pub spu_pitch_table: &'static [u16; 64],
-    /// Music patterns: `[flags, ch0, ch1, ch2, ch3, _, _, _]`.
-    pub music_patterns: &'static [[u8; 8]],
-    /// Number of valid music patterns (the rest of `music_patterns` is unused).
-    pub music_pattern_count: i32,
-}
-
-const EMPTY_AUDIO: AudioData = AudioData {
-    waveform_adpcm: &[],
-    waveform_offset: &[0; 8],
-    waveform_adpcm_long: &[],
-    waveform_offset_long: &[0; 8],
-    sfx_meta: &[],
-    sfx_notes: &[],
-    spu_pitch_table: &[0; 64],
-    music_patterns: &[],
-    music_pattern_count: 0,
+pub use crate::synth::{
+    music, music_volume, play, play_ch, set_music_mute, set_music_volume, set_sfx_volume,
+    sfx_volume, AudioData,
 };
 
-/// psx-spu keeps the first usable block of SPU RAM, 0x1000..0x1010, for the
-/// silence a finished one-shot parks on, and upload_adpcm rejects a bank laid
-/// over it. This used to start at 0x1000 exactly, which would have quietly
-/// eaten that block; the short tables use 352 of the 512 bytes to 0x1210, so
-/// the move costs nothing.
-const SPU_WAVEFORM_BASE: u32 = 0x1010;
-/// The long (448-sample) wavetables sit just past the 352-byte short tables.
-const SPU_WAVEFORM_LONG_BASE: u32 = 0x1210;
-/// Tonal notes with key below this use the LONG (8x) wavetable to suppress
-/// short-wavetable imaging; at/above it the short table is used (imaging is already
-/// out of band, and the long table's SPU pitch would pass the 0x3FFF ceiling).
-const LONG_WT_MAX_KEY: i32 = 30;
-const NUM_SFX_VOICES: usize = 4;
-const SFX_VOICE_BASE: usize = 4;
-// The phaser (instrument 7) is two triangles a hair apart that beat. We can't do
-// that with one static wavetable, so a phaser note also keys a "buddy" voice
-// (v + 8, i.e. voices 8..15, otherwise unused) playing a detuned triangle.
-const PHASER_BUDDY: usize = 8;
+// ---------------------------------------------------------------------------
+// Stream geometry
+// ---------------------------------------------------------------------------
 
-const TICK_INC: i32 = 256;
-const TICK_PER_SPEED: i32 = 128;
+/// Ring of ADPCM blocks the stream voice loops over: 128 blocks = 3584
+/// samples = 162 ms. Sits right after psx-spu's silence block; the menu one-shot
+/// bank starts at 0x4000.
+const RING_BLOCKS: u32 = 128;
+const RING_BASE: u32 = 0x1010;
+const STREAM_VOICE: u8 = 0;
+/// How far ahead of the play head the writer stays, in blocks (~51 ms). This is
+/// the SFX latency; PICO-8's own output buffer is of the same order. A dropped
+/// frame eats 13 blocks, so this survives a ~3-frame hitch before the play head
+/// catches the writer.
+const LEAD_BLOCKS: u32 = 40;
+/// Blocks the play head consumes per 60 Hz frame, Q16 (22050 / 60 / 28). The
+/// IRQ latch corrects the real ratio; this only extrapolates between polls.
+const BLOCKS_PER_FRAME_Q16: i64 = 860_160;
+/// IRQ marker distance ahead of the estimate: more than a frame's consumption
+/// so a lagging estimate is pulled forward by every latch.
+const MARK_AHEAD: u32 = 16;
+/// Most blocks rendered in one update (bounds the staging buffer + CPU spike).
+const MAX_BLOCKS_PER_UPDATE: u32 = 64;
+const SPU_IRQ_ADDR: u32 = 0x1F80_1DA4;
+const SPUCNT_IRQ_ENABLE: u16 = 1 << 6;
+const SPUSTAT_IRQ_FLAG: u16 = 1 << 6;
 
-const MUSIC_LOOP_START: u8 = 0x01;
-const MUSIC_LOOP_END: u8 = 0x02;
-const MUSIC_STOP: u8 = 0x04;
+// ---------------------------------------------------------------------------
+// Stream state
+// ---------------------------------------------------------------------------
+// Stream state (block units; monotonic counters, ring index = n % RING_BLOCKS).
+static mut STARTED: bool = false;
+static mut PLAY_Q16: i64 = 0; // estimated play head
+static mut WRITE: u32 = 0; // next block to render
+static mut MARK: u32 = 0; // block the SPU IRQ latch is armed on
+static mut LAST_VBLANK: u32 = 0;
 
-// Per-note volume (PICO-8 vol 0..7). Scaled so four music voices at max sum
-// to ~full-scale instead of clipping (which was adding harsh harmonics): vol 7
-// caps at 0x1000 (1/4 of the SPU's 0x4000 range).
-const VOL_TABLE: [u16; 8] = [
-    0x0000, 0x0250, 0x0490, 0x06D0, 0x0920, 0x0B60, 0x0DB0, 0x1000,
-];
+/// DMA source for the ring uploads (word-aligned, whole ring so init can fill
+/// it in one go).
+#[repr(C, align(4))]
+struct Stage([u8; (RING_BLOCKS as usize) * BLOCK_BYTES]);
+static mut STAGE: Stage = Stage([0; (RING_BLOCKS as usize) * BLOCK_BYTES]);
 
-// --- hardware noise (instrument 6) ------------------------------------------
-// PICO-8's noise is continuous LFSR hiss; a looped sample wavetable just buzzes
-// at a pitch, so percussion is lost. The PS1 SPU has a hardware noise generator:
-// route a voice's NON bit to it and it outputs LFSR noise instead of its sample,
-// clocked by SPUCNT's 6-bit noise rate. Driven through the SDK's
-// `Voice::set_noise_mask` / `spu::set_noise_clock`; the SDK setter writes the
-// whole mask, so a shadow tracks which voices are in noise mode (all our voices
-// are 0..7).
-static mut NOISE_MASK: u16 = 0;
+// ---------------------------------------------------------------------------
+// Stream
+// ---------------------------------------------------------------------------
 
-/// Put voice `v` into (or out of) hardware-noise mode.
-unsafe fn set_voice_noise(v: usize, on: bool) {
-    let bit = 1u16 << v;
-    let was = NOISE_MASK;
-    if on {
-        NOISE_MASK |= bit;
-    } else {
-        NOISE_MASK &= !bit;
-    }
-    if NOISE_MASK != was {
-        Voice::set_noise_mask(NOISE_MASK as u32);
-    }
-}
-
-/// Set the global SPU noise frequency from a noise note's pitch (0..63; last
-/// writer wins, and percussion is normally one voice).
-///
-/// On the SPU a higher NoiseShift = HIGHER (brighter) noise frequency, and
-/// PICO-8's noise gets brighter with pitch, so map pitch up to shift up. The
-/// SPU's LFSR noise is NARROWBAND (energy peaked near its centroid) while
-/// PICO-8's is BROADBAND, so we can't match both centroid AND the
-/// high-frequency hiss: matching the centroid (old shift = 1 + pitch/7) left
-/// the percussion ~5x short on 3-9kHz energy, reading as a dull thud with no
-/// snap. We bias brighter (shift = 1 + pitch/4, step 3) to restore the
-/// high-band hiss that makes a noise hit read as a drum, at the cost of a
-/// centroid ~1.5-2x high.
-unsafe fn set_noise_freq(pitch: i32) {
-    let shift = (1 + pitch / 4).clamp(1, 15) as u8;
-    spu::set_noise_clock(shift, 3);
-}
-
-/// Phaser buddy pitch for an SPU pitch + PICO-8 key. zepto8: the two oscillators
-/// are detuned less at higher pitch (denom ~97 at c0 .. ~127 at c5), so high notes
-/// beat slower instead of warbling. denom = 97 + key/2; buddy = pitch*(denom-1)/denom.
-fn phaser_buddy_pitch(spu_pitch: i32, key: i32) -> u16 {
-    let denom = 97 + key / 2;
-    (spu_pitch * (denom - 1) / denom) as u16
-}
-
-#[derive(Clone, Copy)]
-struct Channel {
-    sfx_id: i32, // -1 = inactive
-    note_pos: i32,
-    tick: i32,
-    vibrato_phase: i32,
-    keyed_on: bool,
-    stop_at: i32,  // note index to stop at (32 = whole sfx)
-    no_loop: bool, // sub-range playback ignores the sfx's loop points
-    // Custom (SFX-as-instrument) sub-sequencer: when the current note's custom
-    // flag is set, instrument K = one of SFX 0..7 is played as a macro (its own
-    // waveform + volume-envelope + pitch over its own ticks) under this note.
-    custom_k: i32,    // -1 = not a custom note, else the custom SFX 0..7
-    custom_pos: i32,  // position within the custom SFX
-    custom_tick: i32, // tick within the custom SFX
-    note_pitch: i32,  // the main note's pitch (custom pitch is relative to this)
-    note_vol: i32,    // the main note's volume 0..7 (scales the custom envelope)
-    long_wt: bool,    // this voice loaded the long (8x) wavetable -> pitches use << 3
-    playing_instr: i32, // plain-oscillator instrument currently sounding (-1 = none/
-                      // custom/noise) -- lets a continuing note avoid re-triggering.
-}
-const CH0: Channel = Channel {
-    sfx_id: -1,
-    note_pos: 0,
-    tick: 0,
-    vibrato_phase: 0,
-    keyed_on: false,
-    stop_at: 32,
-    no_loop: false,
-    custom_k: -1,
-    custom_pos: 0,
-    custom_tick: 0,
-    note_pitch: 0,
-    note_vol: 0,
-    long_wt: false,
-    playing_instr: -1,
-};
-
-static mut AUDIO: AudioData = EMPTY_AUDIO;
-static mut CHANNELS: [Channel; 8] = [CH0; 8];
-static mut MUSIC_PATTERN: i32 = -1;
-static mut MUSIC_LOOP: i32 = -1;
-// Pattern length is set by the leftmost length-defining channel (PICO-8 rule),
-// NOT by "any channel finished" -- looping channels never finish, so the old
-// logic got stuck forever on patterns whose channels all loop.
-static mut MUSIC_TICK: i32 = 0; // ticks elapsed in the current pattern
-static mut MUSIC_LEN: i32 = 0; // total ticks for the current pattern
-static mut SFX_NEXT_VOICE: usize = 0;
-/// Debug/test only: bit c set => music channel c (voices 0..4) is silenced each
-/// frame (it still sequences, so the others stay in time). Used by the
-/// per-instrument isolation harness to solo bass/lead/drums. 0 = normal playback.
-static mut MUSIC_MUTE: u8 = 0;
-static mut WAVEFORM_ADDR: [u32; 8] = [0; 8]; // byte addresses in SPU RAM
-static mut WAVEFORM_ADDR_LONG: [u32; 8] = [0; 8]; // long (8x) tonal wavetables
-
-// User-set master gains (pause-menu volume sliders), in eighths: 8 = unity, 0 =
-// silent. Music plays on voices 0..3 (+ phaser buddies 8..11); SFX on voices
-// 4..7 (+ buddies 12..15). Every per-voice volume write goes through `apply_vol`,
-// which scales by the gain for that voice's group, so the sliders affect the two
-// busses independently without touching the per-note mix.
-static mut MUSIC_GAIN: u16 = 8;
-static mut SFX_GAIN: u16 = 8;
-
-// Last pre-gain volume written per voice (0..15), so a gain change can be
-// re-applied to currently-playing voices immediately rather than only on their
-// next note (otherwise lowering a slider leaves sustaining/looping voices, e.g.
-// the music drums, audible until they re-key).
-static mut LAST_VOL: [i16; 16] = [0; 16];
-
-/// Write voice `v`'s SPU volume (same L/R), scaled by its group's master gain.
-/// `v` may be a phaser buddy (v+8); `v & 7` folds buddies back onto their owner,
-/// and voices 0..3 are music, 4..7 are SFX.
-unsafe fn apply_vol(v: usize, vol: i16) {
-    LAST_VOL[v & 0xF] = vol;
-    let gain = if (v & 7) < SFX_VOICE_BASE {
-        MUSIC_GAIN
-    } else {
-        SFX_GAIN
-    } as i32;
-    let scaled = (vol as i32 * gain / 8) as i16;
-    Voice::new(v as u8).set_volume(Volume(scaled), Volume(scaled));
-}
-
-/// Re-scale the four voices of a bus (+ their phaser buddies) by the current
-/// gain, using each voice's last pre-gain level -- so a slider change is instant.
-unsafe fn reapply_bus(sfx_bus: bool) {
-    let base = if sfx_bus { SFX_VOICE_BASE } else { 0 };
-    for i in 0..NUM_SFX_VOICES {
-        let v = base + i;
-        apply_vol(v, LAST_VOL[v]);
-        apply_vol(v + PHASER_BUDDY, LAST_VOL[v + PHASER_BUDDY]);
-    }
-}
-
-/// Set the master volume for the music bus (voices 0..3). `eighths` 0..=8.
-pub fn set_music_volume(eighths: u16) {
-    unsafe {
-        MUSIC_GAIN = eighths.min(8);
-        reapply_bus(false);
-    }
-}
-/// Set the master volume for the SFX bus (voices 4..7). `eighths` 0..=8.
-pub fn set_sfx_volume(eighths: u16) {
-    unsafe {
-        SFX_GAIN = eighths.min(8);
-        reapply_bus(true);
-    }
-}
-/// Current music master volume in eighths (0..=8), for the pause-menu display.
-pub fn music_volume() -> u16 {
-    unsafe { MUSIC_GAIN }
-}
-/// Current SFX master volume in eighths (0..=8), for the pause-menu display.
-pub fn sfx_volume() -> u16 {
-    unsafe { SFX_GAIN }
-}
-
-/// Should a tonal note at `key` use the long (8x) wavetable? Noise (instr 6) never
-/// does. Decided when a voice's start address is set, then cached in
-/// `Channel::long_wt` so pitch bends stay consistent with the loaded sample.
 #[inline]
-fn uses_long(key: i32, instr: i32) -> bool {
-    instr != 6 && key < LONG_WT_MAX_KEY
-}
-
-/// SPU pitch for a voice: the long table is 8x the short table (448 vs 56 samples)
-/// so for the same note it replays 8x faster -- its pitch is the short pitch << 3.
-/// 8x is needed to push the SPU's replay images above the audible band.
-#[inline]
-fn scaled_pitch(p: u16, long: bool) -> u16 {
-    if long {
-        (p << 3).min(0x3FFF)
-    } else {
-        p
-    }
-}
-
-/// Start address of waveform `instr`'s short or long table.
-#[inline]
-unsafe fn wt_addr(instr: i32, long: bool) -> u32 {
-    let i = (instr & 7) as usize;
-    if long {
-        WAVEFORM_ADDR_LONG[i]
-    } else {
-        WAVEFORM_ADDR[i]
-    }
-}
-
-// ---- note decode ----
-#[inline]
-fn sfx_pitch(n: u16) -> i32 {
-    (n & 0x3F) as i32
+fn reg_read(addr: u32) -> u16 {
+    unsafe { core::ptr::read_volatile(addr as *const u16) }
 }
 #[inline]
-fn sfx_instr(n: u16) -> i32 {
-    ((n >> 6) & 0x7) as i32
-}
-#[inline]
-fn sfx_vol(n: u16) -> i32 {
-    ((n >> 9) & 0x7) as i32
-}
-#[inline]
-fn sfx_effect(n: u16) -> i32 {
-    ((n >> 12) & 0x7) as i32
-}
-#[inline]
-fn sfx_is_custom(n: u16) -> bool {
-    (n >> 15) & 1 != 0 // bit 15: instrument field is a custom SFX (0..7), not an osc
+fn reg_write(addr: u32, v: u16) {
+    unsafe { core::ptr::write_volatile(addr as *mut u16, v) }
 }
 
 #[inline]
-fn get_pitch(key: i32, instr: i32) -> u16 {
-    let mut p = unsafe { AUDIO.spu_pitch_table }[(key & 63) as usize];
-    if instr == 6 {
-        p >>= 2; // noise: quarter the pitch
-    }
-    p
+fn ring_addr(block: u32) -> u32 {
+    RING_BASE + (block % RING_BLOCKS) * BLOCK_BYTES as u32
 }
 
-unsafe fn voice_key_off(v: usize) {
-    if CHANNELS[v].keyed_on {
-        // Also release the phaser buddy (harmless if this note wasn't a phaser).
-        Voice::key_off((1 << v) | (1 << (v + PHASER_BUDDY)));
-        CHANNELS[v].keyed_on = false;
-    }
-    set_voice_noise(v, false);
-}
-
-/// Program voice `v` from the current step of its custom-instrument SFX: the
-/// custom SFX supplies the oscillator, a volume envelope (scaling the main note's
-/// volume) and a pitch relative to its own first note (added to the main pitch).
-/// `keyon` re-triggers the sample (note start / waveform change); otherwise only
-/// volume + pitch are updated, so the envelope sustains without clicks.
-unsafe fn custom_set_voice(v: usize, keyon: bool) {
-    let ch = CHANNELS[v];
-    let k = ch.custom_k as usize;
-    let cnote = AUDIO.sfx_notes[k][(ch.custom_pos & 31) as usize];
-    let cvol = sfx_vol(cnote);
-    if cvol == 0 {
-        voice_key_off(v);
-        return;
-    }
-    let cwave = sfx_instr(cnote);
-    // PICO-8 custom instruments transpose around C2 (pitch 24), NOT the instrument
-    // SFX's own first note: played_freq = inner_freq * outer_freq/freq(24), i.e.
-    // played_key = inner_key + (outer_key - 24) (zepto8 sfx.cpp). Using note0 as the
-    // reference put any instrument whose note0 != 24 off by (note0-24) semitones --
-    // e.g. celeste2's tilt bass (sfx2, note0 0) played two octaves too high.
-    let played = (custom_outer_key(v) + sfx_pitch(cnote) - 24).clamp(0, 63);
-    let spu_vol = (VOL_TABLE[ch.note_vol as usize] as i32 * cvol / 7) as i16;
-    // Low custom notes (e.g. the tilt bass) use the long wavetable too; the decision
-    // tracks `played` and is cached so custom_modulate's bends stay consistent.
-    let long = uses_long(played, cwave);
-    CHANNELS[v].long_wt = long;
-    let spu_pitch = scaled_pitch(get_pitch(played, cwave), long);
-    let voice = Voice::new(v as u8);
-    if keyon {
-        set_voice_noise(v, cwave == 6);
-        if cwave == 6 {
-            set_noise_freq(played);
-        }
-        apply_vol(v, spu_vol);
-        voice.set_pitch(Pitch::raw(spu_pitch));
-        // The phaser (instr 7) wavetable is corrupt (phaser isn't periodic at the
-        // base period) -- the DIRECT phaser plays a triangle + detuned buddy instead.
-        // A custom instrument whose inner waveform is the phaser (celeste2 sfx1 = w9,
-        // the lead) was playing that corrupt wavetable, dumping a huge 80-320Hz
-        // rumble (~15x PICO-8) onto the lead. Play the triangle base here too.
-        let wav_idx = if cwave == 7 { 0 } else { cwave & 7 };
-        // Deliberately NOT through psx-sfx, unlike the menu one-shots: these
-        // are periodic wavetables that have to loop. Their blocks carry the
-        // loop-start flag, so silicon latches the repeat address off the table
-        // itself as it decodes, and pointing it at psx-spu's silence block
-        // instead would stop every note after one pass.
-        voice.set_start_addr(SpuAddr::new(wt_addr(wav_idx, long)));
-        Voice::key_on(1 << v);
-        CHANNELS[v].keyed_on = true;
-    } else {
-        if cwave == 6 {
-            set_noise_freq(played);
-        }
-        apply_vol(v, spu_vol);
-        voice.set_pitch(Pitch::raw(spu_pitch));
+/// Loop flags for the ring block at monotonic index `block`.
+#[inline]
+fn ring_flags(block: u32) -> u8 {
+    match block % RING_BLOCKS {
+        0 => 0x04,                         // loop start
+        b if b == RING_BLOCKS - 1 => 0x03, // end + repeat -> back to the start
+        _ => 0x00,
     }
 }
 
-/// Step a channel's custom-instrument macro one frame (independent of the main
-/// note's tick). The macro runs at the custom SFX's own speed and loops.
-unsafe fn advance_custom(v: usize) {
-    if CHANNELS[v].sfx_id < 0 {
-        CHANNELS[v].custom_k = -1;
-        return;
-    }
-    if CHANNELS[v].custom_k < 0 {
-        return;
-    }
-    let k = CHANNELS[v].custom_k as usize;
-    let meta = AUDIO.sfx_meta[k];
-    let speed = (meta[0] as i32).max(1);
-    let threshold = speed * TICK_PER_SPEED;
-    CHANNELS[v].custom_tick += TICK_INC;
-    let mut stepped = false;
-    while CHANNELS[v].custom_tick >= threshold {
-        CHANNELS[v].custom_tick -= threshold;
-        CHANNELS[v].custom_pos += 1;
-        let ls = meta[1] as i32;
-        let le = meta[2] as i32;
-        if le > 0 && CHANNELS[v].custom_pos >= le {
-            CHANNELS[v].custom_pos = ls; // loop the sustain region while held
-        } else if CHANNELS[v].custom_pos >= 32 {
-            CHANNELS[v].custom_pos = 31;
-        }
-        stepped = true;
-    }
-    if stepped {
-        custom_set_voice(v, false);
-    }
-    custom_modulate(v);
+/// Arm the SPU IRQ latch on ring block `MARK` (and clear a stale latch).
+unsafe fn arm_mark() {
+    reg_write(SPU_IRQ_ADDR, (ring_addr(MARK) >> 3) as u16);
+    let cnt = reg_read(SPUCNT);
+    reg_write(SPUCNT, cnt & !SPUCNT_IRQ_ENABLE); // clearing the enable acks the flag
+    reg_write(SPUCNT, cnt | SPUCNT_IRQ_ENABLE);
 }
 
-/// Per-frame modulation of a custom-instrument voice, combining the INNER custom
-/// note's own effect (the macro's vibrato/fades -- e.g. celeste2's pad sustains
-/// wobble) with the OUTER note's effect (arpeggio/slide/drop already folded into
-/// the played key via custom_outer_key; plus outer vibrato and fades). PICO-8
-/// applies the note's effect to a custom-instrument note on top of the
-/// instrument's own envelope. When neither layer has a vibrato/fade and the outer
-/// note has no pitch effect, this sets nothing -- so the 600+ plain custom notes
-/// in the music are byte-for-byte unchanged (custom_set_voice already programmed
-/// them on the step).
-unsafe fn custom_modulate(v: usize) {
-    let ch = CHANNELS[v];
-    let k = ch.custom_k as usize;
-    let cnote = AUDIO.sfx_notes[k][(ch.custom_pos & 31) as usize];
-    let cvol = sfx_vol(cnote);
-    if cvol == 0 {
-        return;
-    }
-    let s = ch.sfx_id as usize;
-    let in_eff = sfx_effect(cnote);
-    let out_eff = sfx_effect(AUDIO.sfx_notes[s][ch.note_pos as usize]);
-    let cwave = sfx_instr(cnote);
-    // PICO-8 custom instruments transpose around C2 (pitch 24), NOT the instrument
-    // SFX's own first note: played_freq = inner_freq * outer_freq/freq(24), i.e.
-    // played_key = inner_key + (outer_key - 24) (zepto8 sfx.cpp). Using note0 as the
-    // reference put any instrument whose note0 != 24 off by (note0-24) semitones --
-    // e.g. celeste2's tilt bass (sfx2, note0 0) played two octaves too high.
-    let played = (custom_outer_key(v) + sfx_pitch(cnote) - 24).clamp(0, 63);
-    let voice = Voice::new(v as u8);
-
-    // Pitch: arp/slide/drop are already in `played`; vibrato (inner or outer) is a
-    // Hz wobble on top. Only touch pitch when something actually modulates it.
-    if matches!(out_eff, 1 | 3 | 6 | 7) || in_eff == 2 || out_eff == 2 {
-        if cwave == 6 {
-            set_noise_freq(played);
-        } else {
-            // Scale to the table the voice loaded (custom_set_voice cached long_wt).
-            let base_pitch = scaled_pitch(get_pitch(played, cwave), ch.long_wt) as i32;
-            let mut m = 0;
-            if in_eff == 2 || out_eff == 2 {
-                CHANNELS[v].vibrato_phase += 16;
-                let phase = CHANNELS[v].vibrato_phase & 0xFF;
-                m = if phase < 64 {
-                    phase
-                } else if phase < 192 {
-                    128 - phase
-                } else {
-                    phase - 256
-                };
-            }
-            let p = (base_pitch + (m * base_pitch) / 2048).clamp(1, 0x3FFF);
-            voice.set_pitch(Pitch::raw(p as u16));
+/// Render blocks `WRITE..WRITE+n` into the stage buffer and DMA them into the
+/// ring (in one or two runs around the wrap).
+unsafe fn render_and_upload(n: u32) {
+    let mut done = 0u32;
+    while done < n {
+        let first = WRITE % RING_BLOCKS;
+        let run = (n - done).min(RING_BLOCKS - first);
+        for b in 0..run {
+            let mut pcm = [0i16; BLOCK_SAMPLES];
+            synth::render_block(&mut pcm);
+            let off = (b as usize) * BLOCK_BYTES;
+            synth::encode_block(
+                &pcm,
+                ring_flags(WRITE),
+                &mut STAGE.0[off..off + BLOCK_BYTES],
+            );
+            WRITE += 1;
         }
-    }
-
-    // Volume: the inner macro's fade times the outer note's fade. Either layer
-    // alone (or both) scales the step volume; with no fade we leave it untouched.
-    if matches!(in_eff, 4 | 5) || matches!(out_eff, 4 | 5) {
-        let mut vol = VOL_TABLE[ch.note_vol as usize] as i32 * cvol / 7;
-        let it = ch.custom_tick;
-        let itot = (AUDIO.sfx_meta[k][0] as i32 * TICK_PER_SPEED).max(1);
-        match in_eff {
-            4 => vol = vol * it / itot,
-            5 => vol = vol * (itot - it) / itot,
-            _ => {}
-        }
-        let ot = ch.tick;
-        let otot = (AUDIO.sfx_meta[s][0] as i32 * TICK_PER_SPEED).max(1);
-        match out_eff {
-            4 => vol = vol * ot / otot,
-            5 => vol = vol * (otot - ot) / otot,
-            _ => {}
-        }
-        apply_vol(v, vol as i16);
+        let bytes = (run as usize) * BLOCK_BYTES;
+        spu::upload_adpcm(SpuAddr::new(ring_addr(WRITE - run)), &STAGE.0[..bytes]);
+        done += run;
     }
 }
 
-/// Which note of the current arpeggio group (0..31) plays right now. PICO-8
-/// arpeggio runs at a FIXED real-time rate (not row-relative): per zepto8 the
-/// step index is `m * 7.5 * seconds`, m = (speed<=8?32:16)/(fast?4:8). Our clock
-/// is `speed*TICK_PER_SPEED` internal ticks per note and 60 updates/s
-/// (TICK_INC=256), i.e. 15360 ticks/s, and 15360/7.5 = 2048 -- so n = m*ticks/2048.
-unsafe fn arp_note_index(v: usize, effect: i32) -> i32 {
-    let ch = CHANNELS[v];
-    let speed = (AUDIO.sfx_meta[ch.sfx_id as usize][0] as i32).max(1);
-    let m = (if speed <= 8 { 32 } else { 16 }) / (if effect == 6 { 4 } else { 8 });
-    let g = ch.note_pos * speed * TICK_PER_SPEED + ch.tick; // internal ticks since sfx start
-    let n = (m * g) / 2048;
-    ((ch.note_pos & !3) + (n & 3)).clamp(0, 31)
+/// Key the stream voice on at block 0 (after the first blocks are in the ring).
+unsafe fn start_stream() {
+    let v = Voice::new(STREAM_VOICE);
+    v.set_volume(Volume::MAX, Volume::MAX);
+    v.set_pitch(Pitch::for_sample_rate(SAMPLE_RATE));
+    v.set_adsr(Adsr {
+        lower: 0x000F, // instant attack, full sustain
+        upper: 0x0000,
+    });
+    v.set_start_addr(SpuAddr::new(RING_BASE));
+    v.set_loop_addr(SpuAddr::new(RING_BASE));
+    Voice::key_on(1 << STREAM_VOICE);
+    PLAY_Q16 = 0;
+    MARK = MARK_AHEAD;
+    arm_mark();
+    LAST_VBLANK = psx_rt::interrupts::vblank_count();
+    STARTED = true;
 }
 
-/// The current note's effective pitch KEY (0..63) after its own pitch-changing
-/// effect (arpeggio / slide / drop). Used as the base key that feeds a custom
-/// instrument, so a note combining a custom instrument with an arpeggio (celeste2
-/// sfx59) still arpeggiates -- PICO-8 applies the note effect to the pitch driving
-/// the custom waveform. With no pitch effect this is just the note's own key, so
-/// plain custom notes are unchanged.
-unsafe fn custom_outer_key(v: usize) -> i32 {
-    let ch = CHANNELS[v];
-    let s = ch.sfx_id as usize;
-    let note = AUDIO.sfx_notes[s][ch.note_pos as usize];
-    let key = sfx_pitch(note);
-    let speed = (AUDIO.sfx_meta[s][0] as i32).max(1);
-    let total = (speed * TICK_PER_SPEED).max(1);
-    match sfx_effect(note) {
-        6 | 7 => sfx_pitch(AUDIO.sfx_notes[s][arp_note_index(v, sfx_effect(note)) as usize]),
-        1 => {
-            let from = if ch.note_pos > 0 {
-                sfx_pitch(AUDIO.sfx_notes[s][(ch.note_pos - 1) as usize])
-            } else {
-                key
-            };
-            from + ((key - from) * ch.tick) / total
-        }
-        3 => (key * (total - ch.tick) / total).max(0),
-        _ => key,
-    }
-}
-
-unsafe fn start_channel_note(v: usize) {
-    let ch = CHANNELS[v];
-    let note = AUDIO.sfx_notes[ch.sfx_id as usize][ch.note_pos as usize];
-    let vol = sfx_vol(note);
-    if vol == 0 {
-        voice_key_off(v);
-        CHANNELS[v].custom_k = -1;
-        CHANNELS[v].playing_instr = -1;
-        return;
-    }
-    let instr = sfx_instr(note);
-    if sfx_is_custom(note) {
-        // Custom instrument: play SFX `instr` as a macro under this note. A HELD note
-        // (same instrument + same pitch as the one playing -- e.g. the tilt bass at a
-        // constant outer pitch) keeps the macro running so it doesn't re-key-click
-        // every row; PICO-8 likewise sustains a held custom note and only re-attacks
-        // when the note changes.
-        let held = ch.keyed_on && ch.custom_k == instr && ch.note_pitch == sfx_pitch(note);
-        CHANNELS[v].custom_k = instr;
-        CHANNELS[v].note_pitch = sfx_pitch(note);
-        CHANNELS[v].note_vol = vol;
-        CHANNELS[v].playing_instr = -1;
-        if held {
-            custom_set_voice(v, false); // update vol/pitch only, no re-trigger
-        } else {
-            CHANNELS[v].custom_pos = 0;
-            CHANNELS[v].custom_tick = 0;
-            CHANNELS[v].vibrato_phase = 0;
-            voice_key_off(v);
-            custom_set_voice(v, true);
-        }
-        return;
-    }
-    CHANNELS[v].custom_k = -1;
-    // Hardware noise: a 0.70 base (it reads ~1.4x hotter than a sample voice),
-    // times a pitch-loudness factor -- PICO-8's noise gets ~2.6x louder from low
-    // to high pitch (measured), so a flat level made the drums all the same.
-    let spu_vol = if instr == 6 {
-        let base = VOL_TABLE[vol as usize] as i32 * 45 / 64;
-        let p = sfx_pitch(note);
-        let pfac = 54 + (p * p) / 37; // /64: ~0.85 (low) .. ~2.4 (pitch 60)
-        ((base * pfac) / 64) as i16
-    } else {
-        VOL_TABLE[vol as usize] as i16
-    };
-    let key = sfx_pitch(note);
-    let long = uses_long(key, instr);
-    let voice = Voice::new(v as u8);
-
-    // CONTINUE without re-triggering when this voice already sounds the SAME
-    // instrument on the SAME wavetable: just update pitch + volume so the sample
-    // keeps looping with continuous phase, like PICO-8's oscillator. Re-keying
-    // every note (voice_key_off cuts to silence, key_on restarts) was a per-note
-    // CLICK -- audible as cracking on repeated/looped notes (celeste2 sfx1/sfx2).
-    // Noise (instr 6) is excluded: each drum hit wants a fresh attack.
-    if ch.keyed_on && ch.playing_instr == instr && ch.long_wt == long && instr != 6 {
-        let spu_pitch = scaled_pitch(get_pitch(key, instr), long);
-        if instr == 7 {
-            let buddy = Voice::new((v + PHASER_BUDDY) as u8);
-            apply_vol(v, (spu_vol as i32 * 2 / 3) as i16);
-            voice.set_pitch(Pitch::raw(spu_pitch));
-            apply_vol(v + PHASER_BUDDY, (spu_vol as i32 / 3) as i16);
-            buddy.set_pitch(Pitch::raw(phaser_buddy_pitch(spu_pitch as i32, key)));
-        } else {
-            apply_vol(v, spu_vol);
-            voice.set_pitch(Pitch::raw(spu_pitch));
-        }
-        return;
-    }
-
-    CHANNELS[v].long_wt = long;
-    CHANNELS[v].playing_instr = if instr == 6 { -1 } else { instr };
-    let spu_pitch = scaled_pitch(get_pitch(key, instr), long);
-    let addr = wt_addr(instr, long);
-    voice_key_off(v);
-    // Instrument 6 = hardware LFSR noise (real hiss); all others = sample voice.
-    set_voice_noise(v, instr == 6);
-    if instr == 6 {
-        set_noise_freq(sfx_pitch(note));
-    }
-    if instr == 7 {
-        // Phaser = two triangles (instrument 0) a hair apart (109/110), summed 2:1.
-        // PICO-8's phaser is triangle-like (fundamental + odd harmonics) with the
-        // two oscillators beating; a single static wavetable can't sweep, so we
-        // key a detuned triangle buddy alongside the primary triangle.
-        let tri = wt_addr(0, long);
-        let va = (spu_vol as i32 * 2 / 3) as i16;
-        let vb = (spu_vol as i32 / 3) as i16;
-        apply_vol(v, va);
-        voice.set_pitch(Pitch::raw(spu_pitch));
-        voice.set_start_addr(SpuAddr::new(tri));
-        let buddy = v + PHASER_BUDDY;
-        let bv = Voice::new(buddy as u8);
-        apply_vol(buddy, vb);
-        bv.set_pitch(Pitch::raw(phaser_buddy_pitch(
-            spu_pitch as i32,
-            sfx_pitch(note),
-        )));
-        bv.set_start_addr(SpuAddr::new(tri));
-        Voice::key_on((1 << v) | (1 << buddy));
-        CHANNELS[v].keyed_on = true;
-        return;
-    }
-    apply_vol(v, spu_vol);
-    voice.set_pitch(Pitch::raw(spu_pitch));
-    voice.set_start_addr(SpuAddr::new(addr));
-    Voice::key_on(1 << v);
-    CHANNELS[v].keyed_on = true;
-}
-
-unsafe fn apply_effects(v: usize) {
-    let ch = CHANNELS[v];
-    if ch.sfx_id < 0 || ch.custom_k >= 0 {
-        return; // custom-instrument notes are driven by advance_custom instead
-    }
-    let note = AUDIO.sfx_notes[ch.sfx_id as usize][ch.note_pos as usize];
-    let effect = sfx_effect(note);
-    let pitch_key = sfx_pitch(note);
-    let instr = sfx_instr(note);
-    let vol = sfx_vol(note);
-    if vol == 0 || effect == 0 {
-        return;
-    }
-    let base_pitch = get_pitch(pitch_key, instr) as i32;
-    let speed = AUDIO.sfx_meta[ch.sfx_id as usize][0] as i32;
-    let mut total = speed * TICK_PER_SPEED;
-    if total < 1 {
-        total = 1;
-    }
-    let t = ch.tick;
-    let voice = Voice::new(v as u8);
-    let phaser = instr == 7;
-    // Effects set a new pitch OR volume; route both through the phaser's detuned
-    // buddy voice too, or e.g. a fade-out leaves the buddy ringing (muffles the
-    // percussion -- celeste1's kick is a phaser at pitch 1 with fade-out).
-    let mut set_pitch: Option<i32> = None;
-    let mut set_vol: Option<i32> = None;
-    match effect {
-        1 => {
-            // slide (portamento): glide from the PREVIOUS note's pitch to this one.
-            let from = if ch.note_pos > 0 {
-                let pn = AUDIO.sfx_notes[ch.sfx_id as usize][(ch.note_pos - 1) as usize];
-                get_pitch(sfx_pitch(pn), instr) as i32
-            } else {
-                base_pitch
-            };
-            set_pitch = Some(from + ((base_pitch - from) * t) / total);
-        }
-        2 => {
-            // vibrato
-            CHANNELS[v].vibrato_phase += 16;
-            let phase = CHANNELS[v].vibrato_phase & 0xFF;
-            let m = if phase < 64 {
-                phase
-            } else if phase < 192 {
-                128 - phase
-            } else {
-                phase - 256
-            };
-            set_pitch = Some(base_pitch + (m * base_pitch) / 2048);
-        }
-        3 => {
-            // drop
-            set_pitch = Some((base_pitch * (total - t) / total).max(0));
-        }
-        4 => {
-            // fade in
-            set_vol = Some(VOL_TABLE[vol as usize] as i32 * t / total);
-        }
-        5 => {
-            // fade out
-            set_vol = Some(VOL_TABLE[vol as usize] as i32 * (total - t) / total);
-        }
-        6 | 7 => {
-            // arpeggio: cycle the 4 notes of the current group at PICO-8's fixed
-            // real-time rate (see arp_note_index), keeping this note's instrument.
-            let g = arp_note_index(v, effect);
-            let an = AUDIO.sfx_notes[ch.sfx_id as usize][g as usize];
-            set_pitch = Some(get_pitch(sfx_pitch(an), instr) as i32);
-        }
-        _ => {}
-    }
-    if let Some(p) = set_pitch {
-        // set_pitch is in short-table units; scale to the table this voice loaded.
-        let p = scaled_pitch(p.clamp(1, 0x3FFF) as u16, ch.long_wt).min(0x3FFF) as i32;
-        voice.set_pitch(Pitch::raw(p as u16));
-        if phaser {
-            Voice::new((v + PHASER_BUDDY) as u8)
-                .set_pitch(Pitch::raw(phaser_buddy_pitch(p, pitch_key)));
-        }
-    }
-    if let Some(vv) = set_vol {
-        if phaser {
-            apply_vol(v, (vv * 2 / 3) as i16);
-            apply_vol(v + PHASER_BUDDY, (vv / 3) as i16);
-        } else {
-            apply_vol(v, vv as i16);
-        }
-    }
-}
-
-unsafe fn advance_channel(v: usize) {
-    if CHANNELS[v].sfx_id < 0 {
-        return;
-    }
-    let mut speed = AUDIO.sfx_meta[CHANNELS[v].sfx_id as usize][0] as i32;
-    if speed < 1 {
-        speed = 1;
-    }
-    let threshold = speed * TICK_PER_SPEED;
-    CHANNELS[v].tick += TICK_INC;
-    while CHANNELS[v].tick >= threshold {
-        CHANNELS[v].tick -= threshold;
-        CHANNELS[v].note_pos += 1;
-        CHANNELS[v].vibrato_phase = 0;
-        let meta = AUDIO.sfx_meta[CHANNELS[v].sfx_id as usize];
-        let loop_end = meta[2] as i32;
-        let loop_start = meta[1] as i32;
-        if !CHANNELS[v].no_loop && loop_end > 0 && CHANNELS[v].note_pos >= loop_end {
-            CHANNELS[v].note_pos = loop_start;
-        }
-        if CHANNELS[v].note_pos >= CHANNELS[v].stop_at {
-            CHANNELS[v].sfx_id = -1;
-            voice_key_off(v);
-            return;
-        }
-        start_channel_note(v);
-    }
-    apply_effects(v);
-    advance_custom(v);
-}
-
-/// Total ticks the current pattern lasts. PICO-8 rule: the leftmost active
-/// channel whose SFX is *length-defining* sets it -- that's a non-looping sfx
-/// (loop_end 0) or one whose loop spans the full 32 rows (loop_end >= 32).
-/// Genuine sub-loops (0 < loop_end < 32) repeat to fill the pattern and are
-/// skipped. Length = rows (32, or the LEN marker loop_start) * speed.
-unsafe fn music_pattern_len() -> i32 {
-    let pat = AUDIO.music_patterns[MUSIC_PATTERN as usize];
-    let mut fallback = 0;
-    for c in 0..4 {
-        let chan = pat[1 + c];
-        if chan & 0x80 != 0 {
-            continue; // disabled channel
-        }
-        let meta = AUDIO.sfx_meta[(chan & 0x3F) as usize];
-        let speed = (meta[0] as i32).max(1);
-        let loop_start = meta[1] as i32;
-        let loop_end = meta[2] as i32;
-        if fallback == 0 {
-            fallback = 32 * speed * TICK_PER_SPEED;
-        }
-        if loop_end > 0 && loop_end < 32 {
-            continue; // a sub-loop never defines length
-        }
-        let rows = if loop_end == 0 && loop_start > 0 {
-            loop_start
-        } else {
-            32
-        };
-        return rows * speed * TICK_PER_SPEED;
-    }
-    if fallback > 0 {
-        fallback
-    } else {
-        32 * TICK_PER_SPEED
-    }
-}
-
-unsafe fn music_advance_pattern() {
-    if MUSIC_PATTERN < 0 || MUSIC_PATTERN >= AUDIO.music_pattern_count {
-        MUSIC_PATTERN = -1;
-        return;
-    }
-    let pat = AUDIO.music_patterns[MUSIC_PATTERN as usize];
-    if pat[0] & MUSIC_LOOP_START != 0 {
-        MUSIC_LOOP = MUSIC_PATTERN;
-    }
-    for c in 0..4 {
-        let chan = pat[1 + c];
-        if chan & 0x80 != 0 {
-            if CHANNELS[c].sfx_id >= 0 {
-                CHANNELS[c].sfx_id = -1;
-                voice_key_off(c);
-            }
-            continue;
-        }
-        CHANNELS[c].sfx_id = (chan & 0x3F) as i32;
-        CHANNELS[c].note_pos = 0;
-        CHANNELS[c].tick = 0;
-        CHANNELS[c].vibrato_phase = 0;
-        CHANNELS[c].stop_at = 32;
-        CHANNELS[c].no_loop = false;
-        start_channel_note(c);
-    }
-    MUSIC_TICK = 0;
-    MUSIC_LEN = music_pattern_len();
-}
-
-// ---- public API ----
-
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 /// Initialise the SPU and load the game's [`AudioData`]. Call once after boot.
 pub fn init(audio: AudioData) {
+    synth::load(audio);
     unsafe {
-        AUDIO = audio;
+        STARTED = false;
+        WRITE = 0;
+
         spu::init();
-        // Full main volume; per-note levels (VOL_TABLE) keep a 4-voice mix
-        // from clipping. (The emulator's SPU output is pre-main-volume.)
-        spu::set_main_volume(Volume(0x3FFF), Volume(0x3FFF));
-        for v in 0..24u8 {
-            let voice = Voice::new(v);
-            voice.set_volume(Volume(0), Volume(0));
-            voice.set_pitch(Pitch::raw(0));
-            voice.set_start_addr(SpuAddr::new(0));
-            voice.set_adsr(Adsr {
-                lower: 0x000F,
-                upper: 0x0000,
-            });
-        }
-        spu::upload_adpcm(SpuAddr::new(SPU_WAVEFORM_BASE), audio.waveform_adpcm);
-        for w in 0..8 {
-            WAVEFORM_ADDR[w] = SPU_WAVEFORM_BASE + audio.waveform_offset[w] as u32;
-        }
-        if !audio.waveform_adpcm_long.is_empty() {
-            spu::upload_adpcm(
-                SpuAddr::new(SPU_WAVEFORM_LONG_BASE),
-                audio.waveform_adpcm_long,
-            );
-            for w in 0..8 {
-                WAVEFORM_ADDR_LONG[w] =
-                    SPU_WAVEFORM_LONG_BASE + audio.waveform_offset_long[w] as u32;
+        spu::set_main_volume(Volume::MAX, Volume::MAX);
+        // Silent ring, with its loop flags in place.
+        for b in 0..RING_BLOCKS {
+            let off = (b as usize) * BLOCK_BYTES;
+            STAGE.0[off] = 0;
+            STAGE.0[off + 1] = ring_flags(b);
+            for k in 2..BLOCK_BYTES {
+                STAGE.0[off + k] = 0;
             }
         }
-        CHANNELS = [CH0; 8];
-        MUSIC_PATTERN = -1;
-        MUSIC_LOOP = -1;
+        spu::upload_adpcm(SpuAddr::new(RING_BASE), &STAGE.0);
     }
 }
 
-/// Advance the sequencer one frame. Call every game frame.
+/// Advance the stream: call once per frame. Polls the SPU play-head latch,
+/// renders the blocks consumed since last time and uploads them ahead of it.
 pub fn update() {
     unsafe {
-        if MUSIC_PATTERN >= 0 {
-            for c in 0..4 {
-                advance_channel(c);
-            }
-            // Isolation harness: zero the volume of any muted channel (+ its phaser
-            // buddy) after it has sequenced, so soloing one instrument is exact.
-            if MUSIC_MUTE != 0 {
-                for c in 0..4 {
-                    if MUSIC_MUTE & (1 << c) != 0 {
-                        Voice::new(c as u8).set_volume(Volume(0), Volume(0));
-                        Voice::new((c + PHASER_BUDDY) as u8).set_volume(Volume(0), Volume(0));
-                    }
-                }
-            }
-            MUSIC_TICK += TICK_INC;
-            if MUSIC_TICK >= MUSIC_LEN {
-                let flags = AUDIO.music_patterns[MUSIC_PATTERN as usize][0];
-                if flags & MUSIC_STOP != 0 {
-                    MUSIC_PATTERN = -1;
-                    for c in 0..4 {
-                        CHANNELS[c].sfx_id = -1;
-                        voice_key_off(c);
-                    }
-                } else if flags & MUSIC_LOOP_END != 0 {
-                    MUSIC_PATTERN = if MUSIC_LOOP >= 0 { MUSIC_LOOP } else { 0 };
-                    music_advance_pattern();
-                } else {
-                    MUSIC_PATTERN += 1;
-                    if MUSIC_PATTERN >= AUDIO.music_pattern_count {
-                        MUSIC_PATTERN = -1;
-                    } else {
-                        music_advance_pattern();
-                    }
-                }
-            }
-        }
-        for s in 0..NUM_SFX_VOICES {
-            advance_channel(SFX_VOICE_BASE + s);
-        }
-    }
-}
-
-/// Debug/test: silence music channels whose bit is set in `mask` (bit c = channel
-/// c). They keep sequencing, so soloing one instrument leaves the rest in time.
-pub fn set_music_mute(mask: u8) {
-    unsafe {
-        MUSIC_MUTE = mask;
-    }
-}
-
-/// PICO-8 `sfx(id)` (id < 0 stops all SFX voices). Plays the whole sfx.
-pub fn play(id: i32) {
-    play_range(id, 0, 32);
-}
-
-/// PICO-8 `sfx(id, _, offset, length)`: play notes `[offset, offset+length)`
-/// of sfx `id` on a free SFX voice (looping disabled for sub-ranges).
-pub fn play_range(id: i32, offset: i32, length: i32) {
-    unsafe {
-        if id < 0 || id >= 64 {
-            for s in 0..NUM_SFX_VOICES {
-                CHANNELS[SFX_VOICE_BASE + s].sfx_id = -1;
-                voice_key_off(SFX_VOICE_BASE + s);
-            }
+        if !STARTED {
+            render_and_upload(LEAD_BLOCKS);
+            start_stream();
             return;
         }
-        let mut slot = usize::MAX;
-        for s in 0..NUM_SFX_VOICES {
-            if CHANNELS[SFX_VOICE_BASE + s].sfx_id < 0 {
-                slot = s;
-                break;
+        // Extrapolate the play head by the VBlanks elapsed (a dropped frame
+        // consumed two frames of audio), then correct it from the IRQ latch: the
+        // flag means the head is at or past MARK; no flag means it is not yet.
+        let vb = psx_rt::interrupts::vblank_count();
+        let elapsed = vb.wrapping_sub(LAST_VBLANK).clamp(1, 8) as i64;
+        LAST_VBLANK = vb;
+        PLAY_Q16 += BLOCKS_PER_FRAME_Q16 * elapsed;
+        let mark_q16 = (MARK as i64) << 16;
+        if reg_read(SPUSTAT) & SPUSTAT_IRQ_FLAG != 0 {
+            if PLAY_Q16 < mark_q16 {
+                PLAY_Q16 = mark_q16;
             }
+            MARK = (PLAY_Q16 >> 16) as u32 + MARK_AHEAD;
+            arm_mark();
+        } else if PLAY_Q16 >= mark_q16 {
+            PLAY_Q16 = mark_q16 - 32768;
         }
-        if slot == usize::MAX {
-            slot = SFX_NEXT_VOICE;
-            SFX_NEXT_VOICE = (SFX_NEXT_VOICE + 1) % NUM_SFX_VOICES;
-        }
-        let v = SFX_VOICE_BASE + slot;
-        CHANNELS[v].sfx_id = id;
-        CHANNELS[v].note_pos = offset.clamp(0, 31);
-        CHANNELS[v].tick = 0;
-        CHANNELS[v].vibrato_phase = 0;
-        CHANNELS[v].stop_at = (offset + length).clamp(1, 32);
-        CHANNELS[v].no_loop = length < 32; // sub-range plays once
-        start_channel_note(v);
-    }
-}
 
-/// PICO-8 `music(pattern, fade, mask)` (pattern < 0 stops).
-pub fn music(pattern: i32, _fade: i32, _mask: i32) {
-    unsafe {
-        if pattern < 0 {
-            MUSIC_PATTERN = -1;
-            for c in 0..4 {
-                CHANNELS[c].sfx_id = -1;
-                voice_key_off(c);
-            }
-            return;
+        let play = (PLAY_Q16 >> 16) as u32;
+        if WRITE < play + 2 {
+            // The head overran the writer (a long stall): skip ahead. The ring's
+            // stale lap plays for the gap; the decoder history is stale too.
+            WRITE = play + 4;
+            synth::reset_encoder();
         }
-        if pattern >= AUDIO.music_pattern_count {
-            return;
+        let target = play + LEAD_BLOCKS;
+        if target > WRITE {
+            render_and_upload((target - WRITE).min(MAX_BLOCKS_PER_UPDATE));
         }
-        MUSIC_PATTERN = pattern;
-        MUSIC_LOOP = -1;
-        music_advance_pattern();
     }
 }

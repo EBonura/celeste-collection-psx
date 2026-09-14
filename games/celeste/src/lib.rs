@@ -16,10 +16,7 @@
 pub mod assets;
 mod game;
 
-use assets::audio_data::{
-    MUSIC_PATTERNS, SFX_META, SFX_NOTES, SPU_PITCH_TABLE, WAVEFORM_ADPCM, WAVEFORM_ADPCM_LONG,
-    WAVEFORM_OFFSET, WAVEFORM_OFFSET_LONG,
-};
+use assets::audio_data::{MUSIC_DATA, SFX_DATA};
 use assets::gfx::GFX_DATA;
 use assets::tilemap::{MAP_W, TILEMAP_DATA, TILE_FLAGS};
 use pico8::backend::{self, Cart};
@@ -41,18 +38,11 @@ const CART: Cart = Cart {
     map_w: MAP_W,
 };
 
-/// Celeste's PICO-8 sound data (42 music patterns). Public so the collection launcher
+/// Celeste's PICO-8 sound data (raw cart sound RAM). Public so the collection launcher
 /// can reuse it as the menu's sound bank (cursor-move / select blips).
 pub const AUDIO: AudioData = AudioData {
-    waveform_adpcm: &WAVEFORM_ADPCM,
-    waveform_offset: &WAVEFORM_OFFSET,
-    waveform_adpcm_long: &WAVEFORM_ADPCM_LONG,
-    waveform_offset_long: &WAVEFORM_OFFSET_LONG,
-    sfx_meta: &SFX_META,
-    sfx_notes: &SFX_NOTES,
-    spu_pitch_table: &SPU_PITCH_TABLE,
-    music_patterns: &MUSIC_PATTERNS,
-    music_pattern_count: 42,
+    sfx: &SFX_DATA,
+    music: &MUSIC_DATA,
 };
 
 /// Poll the pad and map it to PICO-8's 6 buttons: arrows, Cross=jump (O),
@@ -105,7 +95,6 @@ pub fn run() {
     // Drive the audio sequencer off real VBlanks, not render frames, so the
     // music keeps PICO-8's hardware tempo even when rendering can't hold 60fps.
     psx_rt::interrupts::install_vblank_counter();
-    let mut last_vb = psx_rt::interrupts::vblank_count();
     let mut prev_start = true; // require a fresh press before the first pause
 
     loop {
@@ -121,7 +110,6 @@ pub fn run() {
             if run_pause(&mut fb) {
                 return; // player chose "quit to menu"
             }
-            last_vb = psx_rt::interrupts::vblank_count(); // don't count paused vblanks
             prev_start = true; // wait for release before it can pause again
             continue;
         }
@@ -143,19 +131,7 @@ pub fn run() {
             fb.swap();
         }
 
-        // Advance the music/SFX by however many VBlanks actually elapsed (one at
-        // 60fps; two if a frame was dropped) -- keeps audio real-time.
-        let vb = psx_rt::interrupts::vblank_count();
-        let mut elapsed = vb.wrapping_sub(last_vb);
-        last_vb = vb;
-        if elapsed == 0 {
-            elapsed = 1;
-        } else if elapsed > 4 {
-            elapsed = 4; // cap catch-up after a long hitch
-        }
-        for _ in 0..elapsed {
-            sfx::update();
-        }
+        sfx::update(); // stream the next slice of PICO-8 audio to the SPU
     }
 }
 
@@ -294,58 +270,6 @@ pub fn run_music_iso(pattern: i32) {
         i += 1;
         if i >= masks.len() {
             return;
-        }
-    }
-}
-
-/// Matched-test AudioData: the synthtest songs (tools/synthtest_gen.py) on
-/// Celeste's real waveforms + pitch table. Lets us replicate, on the PSX engine,
-/// the exact same isolated songs a PICO-8 cart plays, and diff them.
-const SYNTH_AUDIO: AudioData = AudioData {
-    waveform_adpcm: &WAVEFORM_ADPCM,
-    waveform_offset: &WAVEFORM_OFFSET,
-    waveform_adpcm_long: &WAVEFORM_ADPCM_LONG,
-    waveform_offset_long: &WAVEFORM_OFFSET_LONG,
-    sfx_meta: &assets::synthtest_data::TEST_SFX_META,
-    sfx_notes: &assets::synthtest_data::TEST_SFX_NOTES,
-    spu_pitch_table: &SPU_PITCH_TABLE,
-    music_patterns: &assets::synthtest_data::TEST_MUSIC,
-    music_pattern_count: assets::synthtest_data::NUM_SONGS as i32,
-};
-
-/// Play each synthtest song for SONG_FRAMES then GAP_FRAMES of silence, in order,
-/// looping -- the same sequence + timing the PICO-8 synthtest cart records, so the
-/// host capture splits on the gaps and each song is compared note-for-note.
-/// Play a single synthtest song (pattern) once and keep the sequencer running,
-/// for an isolated, easy-to-align capture of e.g. the instruments song.
-pub fn run_synth_song(idx: i32) {
-    gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    psx_rt::interrupts::install_vblank_counter();
-    sfx::init(SYNTH_AUDIO);
-    sfx::music(idx, 0, 0);
-    loop {
-        sfx::update();
-        wait_vblank();
-    }
-}
-
-pub fn run_synth_test() {
-    use assets::synthtest_data::{GAP_FRAMES, NUM_SONGS, SONG_FRAMES};
-    gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    psx_rt::interrupts::install_vblank_counter();
-    sfx::init(SYNTH_AUDIO);
-    loop {
-        for song in 0..NUM_SONGS {
-            sfx::music(song as i32, 0, 0);
-            for _ in 0..SONG_FRAMES {
-                sfx::update();
-                wait_vblank();
-            }
-            sfx::music(-1, 0, 0);
-            for _ in 0..GAP_FRAMES {
-                sfx::update();
-                wait_vblank();
-            }
         }
     }
 }

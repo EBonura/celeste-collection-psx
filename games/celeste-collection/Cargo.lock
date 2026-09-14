@@ -52,6 +52,7 @@ dependencies = [
  "psx-io",
  "psx-mc",
  "psx-pad",
+ "psx-rt",
  "psx-sfx",
  "psx-spu",
  "psx-vram",

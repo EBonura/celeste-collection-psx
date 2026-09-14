@@ -26,10 +26,6 @@ name = "soundtest"
 path = "src/bin/soundtest.rs"
 
 [[bin]]
-name = "synthtest"
-path = "src/bin/synthtest.rs"
-
-[[bin]]
 name = "musiso"
 path = "src/bin/musiso.rs"
 

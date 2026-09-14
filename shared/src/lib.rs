@@ -32,5 +32,6 @@ pub mod pause;
 pub mod rng;
 pub mod save;
 pub mod sfx;
+pub mod synth;
 mod sin_table;
 pub mod util;

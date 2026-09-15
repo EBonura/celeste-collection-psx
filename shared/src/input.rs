@@ -15,9 +15,40 @@
 //! the SDK's [`PadTracker`]; this module just keeps PICO-8's bit-indexed API
 //! and repeat cadence on top of it.
 
-use psx_pad::PadTracker;
+use psx_pad::{button, poll_port1, ButtonState, PadTracker};
 
 static mut TRACKER: PadTracker = PadTracker::new();
+
+/// Left-stick deflection (of 127) that counts as a d-pad press. Per axis, so
+/// a diagonal push sets both bits like a diagonal on the d-pad; generous
+/// enough that a worn stick still registers, wide enough that centre drift
+/// doesn't.
+const STICK_THRESHOLD: i16 = 48;
+
+/// Poll port 1 and return its buttons with the left analog stick folded into
+/// the d-pad bits. PICO-8 input is digital, so a DualShock in analog mode
+/// simply gets its stick read as a second d-pad; in digital mode the sticks
+/// are centred and nothing changes. Use this everywhere the games, launcher
+/// and pause menu read the pad.
+pub fn poll_buttons() -> ButtonState {
+    let pad = poll_port1();
+    if !pad.mode.has_sticks() {
+        return pad.buttons;
+    }
+    let (x, y) = pad.sticks.left_centered();
+    let mut bits = pad.buttons.bits();
+    if x <= -STICK_THRESHOLD {
+        bits |= button::LEFT;
+    } else if x >= STICK_THRESHOLD {
+        bits |= button::RIGHT;
+    }
+    if y <= -STICK_THRESHOLD {
+        bits |= button::UP;
+    } else if y >= STICK_THRESHOLD {
+        bits |= button::DOWN;
+    }
+    ButtonState::from_bits(bits)
+}
 
 // PICO-8 default auto-repeat (in the cart's frames).
 const REPEAT_DELAY: u8 = 15;

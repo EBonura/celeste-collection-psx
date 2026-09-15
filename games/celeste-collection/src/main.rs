@@ -32,7 +32,7 @@ use assets::palette::PICO8_CLUT;
 use pico8::{backend, debug, icons, menusfx, sfx};
 use psx_font::{fonts::BASIC, FontAtlas};
 use psx_gpu::{self as gpu, framebuf::FrameBuffer, Resolution, VideoMode};
-use psx_pad::{button, poll_port1, ButtonState};
+use psx_pad::{button, ButtonState};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display; the VBlank IRQ counter waits for the real blank.
 use psx_rt::interrupts::wait_vblank;
@@ -118,10 +118,10 @@ fn show_intro() {
     let any = |b: ButtonState| {
         b.is_held(button::CROSS) || b.is_held(button::CIRCLE) || b.is_held(button::START)
     };
-    let mut prev = poll_port1().buttons;
+    let mut prev = pico8::input::poll_buttons();
     let mut frame = 0i32;
     while frame < TOTAL {
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         if frame > 8 && any(b) && !any(prev) {
             break; // fresh press skips
         }
@@ -215,11 +215,11 @@ fn show_credits() {
     let any = |b: ButtonState| {
         b.is_held(button::CROSS) || b.is_held(button::CIRCLE) || b.is_held(button::START)
     };
-    let mut prev = poll_port1().buttons; // void a button still held from the menu
+    let mut prev = pico8::input::poll_buttons(); // void a button still held from the menu
     let mut scroll = 0i16;
     let mut tick = 0u32;
     loop {
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         if any(b) && !any(prev) {
             return; // fresh press exits
         }
@@ -318,10 +318,10 @@ fn show_menu(first: bool) -> usize {
 
     // Seed `prev` with whatever is held now so a button still down from the screen we
     // came from doesn't read as a fresh press (e.g. the held X from "quit to menu").
-    let mut prev = poll_port1().buttons;
+    let mut prev = pico8::input::poll_buttons();
 
     loop {
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         let pressed = |m: u16| b.is_held(m) && !prev.is_held(m);
 
         let old_sel = sel;
@@ -453,14 +453,14 @@ fn show_settings() {
 
     const N: usize = 6; // SFX, Music, Pixel, Screen, Borders, Fly
     let mut sel = 0usize;
-    let mut prev = poll_port1().buttons;
+    let mut prev = pico8::input::poll_buttons();
     let mut frame = 0i32;
     // A PERSISTED setting (volumes/pixel/borders; not Screen or Fly) was
     // touched; written to the memory card once, when the screen closes.
     let mut dirty = false;
 
     loop {
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         let pressed = |m: u16| b.is_held(m) && !prev.is_held(m);
         let scale1x = backend::pixel_scale() == 1;
 

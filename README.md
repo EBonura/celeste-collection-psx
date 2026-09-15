@@ -38,7 +38,7 @@ pinned by `rust-toolchain.toml`. `make` hydrates the historical SDK pin from
 required. Boot the `.cue` with its adjacent `.bin`
 in [PSoXide Emulator](https://github.com/EBonura/PSoXide-emulator) (or another PS1 emulator), or burn it to a CD-R
 for real hardware. In the launcher: D-pad to choose, X to play; hold Select+Start in-game to
-return.
+return. A DualShock in analog mode can use the left stick as the d-pad everywhere.
 
 ## Running on real hardware
 

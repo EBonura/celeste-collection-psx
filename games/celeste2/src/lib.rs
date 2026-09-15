@@ -25,7 +25,7 @@ use pico8::backend::{self, Cart};
 use pico8::pause::{self, Exit, Pause};
 use pico8::sfx::{self, AudioData};
 use psx_gpu::{self as gpu, framebuf::FrameBuffer, Resolution, VideoMode};
-use psx_pad::{button, poll_port1};
+use psx_pad::button;
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display, leaving almost no per-frame compute budget; the
 // VBlank IRQ counter gives the full ~16.6ms frame.
@@ -63,7 +63,7 @@ pub fn run() {
     let mut prev_start = true; // require a fresh press before the first pause
 
     loop {
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         if b.is_held(button::SELECT) && b.is_held(button::START) {
             return;
         }
@@ -123,7 +123,7 @@ pub fn run() {
 fn run_pause(fb: &mut FrameBuffer) -> bool {
     let mut menu = Pause::new(7, true); // show the debug FLY row
     loop {
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         let mut m = 0u8;
         if b.is_held(button::UP) {
             m |= pause::UP;

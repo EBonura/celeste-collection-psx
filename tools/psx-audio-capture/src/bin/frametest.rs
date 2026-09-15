@@ -10,6 +10,9 @@
 //! --hold MASK: hold that 16-bit pad mask the whole run (e.g. 0x4000 = Cross).
 //! --press-at N --press-mask M: nothing held until frame N, then hold M (a fresh
 //!   press, since M was not held before).
+//! --stick LX,LY: put the emulated DualShock in analog mode and hold the left
+//!   stick at those bytes (0..255, 0x80 centre) the whole run, or from frame
+//!   --stick-from N (centred before that, so the push is a fresh edge).
 
 use std::path::Path;
 
@@ -68,6 +71,16 @@ fn main() {
     );
     bus.cdrom.insert_disc(Some(disc));
     bus.attach_digital_pad_port1();
+    let stick: Option<(u8, u8)> = arg("--stick").and_then(|s| {
+        let (x, y) = s.split_once(',')?;
+        Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
+    });
+    let stick_from: u32 = arg("--stick-from")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    if stick.is_some() {
+        assert!(bus.force_port1_analog_mode(), "pad refused analog mode");
+    }
 
     // --fps: count actual framebuffer swaps (display-area Y flips between the two
     // stacked buffers) over the run to measure the game's real render rate.
@@ -134,6 +147,13 @@ fn main() {
             mask |= hold2_mask;
         }
         bus.set_port1_buttons(ButtonState::from_bits(mask));
+        if let Some((lx, ly)) = stick {
+            if frame as u32 >= stick_from {
+                bus.set_port1_sticks(0x80, 0x80, lx, ly);
+            } else {
+                bus.set_port1_sticks(0x80, 0x80, 0x80, 0x80);
+            }
+        }
 
         let profiling = profile && frame as i64 >= profile_from;
         let mut accum = 0u64;

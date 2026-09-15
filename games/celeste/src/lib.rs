@@ -23,7 +23,7 @@ use pico8::backend::{self, Cart};
 use pico8::pause::{self, Exit, Pause};
 use pico8::sfx::{self, AudioData};
 use psx_gpu::{self as gpu, framebuf::FrameBuffer, Resolution, VideoMode};
-use psx_pad::{button, poll_port1};
+use psx_pad::button;
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) from when
 // it's called instead of syncing to the display, which left only ~1.3ms of
 // per-frame compute before dropping below 60fps. The VBlank IRQ counter
@@ -48,7 +48,7 @@ pub const AUDIO: AudioData = AudioData {
 /// Poll the pad and map it to PICO-8's 6 buttons: arrows, Cross=jump (O),
 /// Circle=dash (X).
 fn pad_mask() -> u8 {
-    let b = poll_port1().buttons;
+    let b = pico8::input::poll_buttons();
     let mut mask = 0u8;
     if b.is_held(button::LEFT) {
         mask |= 1 << 0;
@@ -99,7 +99,7 @@ pub fn run() {
 
     loop {
         // Quit to the launcher: Select+Start held together.
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         if b.is_held(button::SELECT) && b.is_held(button::START) {
             return;
         }
@@ -141,7 +141,7 @@ pub fn run() {
 fn run_pause(fb: &mut FrameBuffer) -> bool {
     let mut menu = Pause::new(2, true); // show the debug FLY row
     loop {
-        let b = poll_port1().buttons;
+        let b = pico8::input::poll_buttons();
         let mut m = 0u8;
         if b.is_held(button::UP) {
             m |= pause::UP;

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Analog controller support: on a DualShock in analog mode the left stick
+  works as the d-pad in both games, the launcher and the pause menu (digital
+  mode is unchanged). frametest gained `--stick LX,LY [--stick-from N]` to
+  drive the emulated DualShock's stick.
+
 ## 0.2.0 | 2026-09-15
 
 Download published on itch.io.

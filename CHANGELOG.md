@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.3 | 2026-09-15
+
+Download published on itch.io.
+
+- Celeste 2's fog levels hold 60 fps. The cloud discs, about 84 a frame,
+  went through a generic loop that spilled to the stack on every rectangle
+  and zeroed a scratch table per disc; the listed path is now a lean
+  pointer walk of a per-radius run table with the cursor in registers. A
+  recorded 50 second session replays in 2125 VBlanks where 0.2.2 as first
+  published took 2891, every level at 60.
+
 ## 0.2.2 | 2026-09-15
 
 Download published on itch.io.

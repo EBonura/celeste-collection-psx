@@ -15,7 +15,6 @@
 
 use crate::font::FONT_DATA;
 use crate::palette::{PICO8_CLUT, PICO8_RGB, TEXT_CLUTS};
-use psx_gpu::material::{TextureMaterial, TextureWindow};
 use psx_gpu::{self as gpu};
 use psx_hw::gpu::{pack_color, pack_texcoord, pack_vertex, pack_xy};
 use psx_io::gpu::{wait_cmd_ready, write_gp0};
@@ -53,6 +52,9 @@ const FONT_TPAGE: Tpage = Tpage::new(704, 0, TexDepth::Bit4); // 256x170 4bpp
                                                               // stuck red). Both 16 entries, side by side on the free row below the framebuffers.
 const SPRITE_CLUT_A: Clut = Clut::new(0, 480);
 const SPRITE_CLUT_B: Clut = Clut::new(16, 480);
+/// Second sprite palette for `map()`: tiles carrying MAP_ALT_FLAG draw through
+/// it (a level-wide `pal()` swap without a second pass or a GPU flush).
+const MAP_ALT_CLUT: Clut = Clut::new(32, 480);
 const TEXT_CLUT: Clut = Clut::new(0, 481); // one row, re-uploaded per print colour
 const FILLP_TPAGE: Tpage = Tpage::new(768, 0, TexDepth::Bit4); // 8x8 dither patterns side-by-side
 const FILL_CLUT: Clut = Clut::new(0, 482); // 2 entries (0 = transparent, 1 = fill colour)
@@ -97,6 +99,7 @@ pub fn set_cart(cart: Cart) {
 /// sprite CLUT to VRAM. Call once after `gpu::init`.
 pub fn upload_assets(cart: Cart) {
     set_cart(cart);
+    unsafe { MAP_ALT_FLAG = -1 };
     upload_16bpp(
         VramRect::new(GFX_TPAGE.x(), GFX_TPAGE.y(), 64, 256),
         cart.gfx,
@@ -318,6 +321,8 @@ pub fn fget(t: i32, f: i32) -> bool {
 pub fn map(mx: i32, my: i32, tx: i16, ty: i16, mw: i32, mh: i32, mask: i32) {
     begin_sprite_pass();
     let clut_word = sprite_clut().uv_clut_word();
+    let alt_word = MAP_ALT_CLUT.uv_clut_word();
+    let alt_flag = unsafe { MAP_ALT_FLAG };
     let cart = unsafe { CART };
     for j in 0..mh {
         for i in 0..mw {
@@ -325,17 +330,17 @@ pub fn map(mx: i32, my: i32, tx: i16, ty: i16, mw: i32, mh: i32, mask: i32) {
             if t == 0 {
                 continue;
             }
-            if mask != 0 {
-                let flags = cart.tile_flags.get(t as usize).copied().unwrap_or(0) as i32;
-                let keep = if mask == 4 {
-                    flags == 4
-                } else {
-                    flags & (1 << (mask - 1)) != 0
-                };
-                if !keep {
-                    continue;
-                }
+            let flags = cart.tile_flags.get(t as usize).copied().unwrap_or(0) as i32;
+            // PICO-8 `map(..., layer)`: draw the tiles whose flags include every
+            // bit of `mask` (a bitfield of flag values, not a flag index).
+            if mask != 0 && flags & mask != mask {
+                continue;
             }
+            let clut_word = if alt_flag >= 0 && (flags >> alt_flag) & 1 != 0 {
+                alt_word
+            } else {
+                clut_word
+            };
             let u0 = ((t % 16) * 16) as u8;
             let v0 = ((t / 16) * 16) as u8;
             let px = sx(tx + (i as i16) * 8);
@@ -380,14 +385,14 @@ const FILLP_VALUES: [u16; 3] = [
 
 /// Build an 8x8 4bpp tile from a cart 4x4 fillp pattern: texel 1 where the bit is
 /// set (drawn), 0 elsewhere (transparent). 16 halfwords (2 wide x 8 tall).
-fn build_pattern(p: u16) -> [u16; 16] {
+fn build_pattern(p: u16, scale: usize) -> [u16; 16] {
     let mut out = [0u16; 16];
     let mut y = 0usize;
     while y < 8 {
         let mut hw = [0u16; 2];
         let mut x = 0usize;
         while x < 8 {
-            let bit = 15 - ((y % 4) * 4 + (x % 4));
+            let bit = 15 - (((y / scale) % 4) * 4 + ((x / scale) % 4));
             if (p >> bit) & 1 != 0 {
                 hw[x / 4] |= 1u16 << ((x % 4) * 4);
             }
@@ -400,15 +405,25 @@ fn build_pattern(p: u16) -> [u16; 16] {
     out
 }
 
-/// Upload the dither patterns side-by-side in FILLP_TPAGE (pattern i at U = i*8).
-/// Called from [`upload_assets`]; re-run per game boot since VRAM is shared.
+/// Upload the dither patterns side-by-side in FILLP_TPAGE as 8x8 tiles: pattern i
+/// doubled (one dither pixel = 2x2 texels, for the 2x pixel scale) at U = i*8,
+/// and tiled 1:1 (for the 1x scale) at U = 24 + i*8. Dithered fills are textured
+/// RECTANGLES that sample one texel per screen pixel, so the texel size has to
+/// match the pixel scale. Called from [`upload_assets`]; re-run per game boot
+/// since VRAM is shared.
 fn upload_fillp() {
+    unsafe { FILL_CLUT_COL = 0xFFFF };
     let mut i = 0;
     while i < FILLP_VALUES.len() {
-        let tile = build_pattern(FILLP_VALUES[i]);
+        let doubled = build_pattern(FILLP_VALUES[i], 2);
         upload_16bpp(
             VramRect::new(FILLP_TPAGE.x() + (i as u16) * 2, FILLP_TPAGE.y(), 2, 8),
-            &tile,
+            &doubled,
+        );
+        let native = build_pattern(FILLP_VALUES[i], 1);
+        upload_16bpp(
+            VramRect::new(FILLP_TPAGE.x() + 6 + (i as u16) * 2, FILLP_TPAGE.y(), 2, 8),
+            &native,
         );
         i += 1;
     }
@@ -427,25 +442,51 @@ unsafe fn set_tex_window(mask_x: u32, mask_y: u32, off_x: u32, off_y: u32) {
     );
 }
 
-/// Upload the fill CLUT (1 = colour, 0 = transparent), select the pattern's tpage
-/// as the draw mode (GP0 0x2C polys sample the draw-mode tpage), and return the
-/// material to draw dithered quads with. The window MUST travel in the material:
-/// draw_quad_textured_material re-emits it, overwriting a standalone GP0 0xE2.
-/// Callers must `set_tex_window(0,0,0,0)` after their draws to restore sprites/map.
-unsafe fn fillp_material(c: i32, pattern: usize) -> TextureMaterial {
+/// Colour currently in the fillp CLUT (so a run of same-colour dithered fills,
+/// e.g. a level's columns or fog clouds, uploads it once, not per primitive).
+static mut FILL_CLUT_COL: u16 = 0xFFFF;
+
+/// Set up dithered drawing in colour `c` with pattern `pattern`: upload the fill
+/// CLUT (1 = colour, 0 = transparent) if it changed, select the pattern tpage as
+/// the draw mode (rectangles sample the draw-mode tpage), and set an 8x8 texture
+/// window on the pattern tile for the current pixel scale. Draw with
+/// [`fillp_prim`], then [`fillp_end`] to restore the window for sprites/map.
+///
+/// Dithered fills are textured RECTANGLES (GP0 0x64), not polygons: on the GPU
+/// a textured polygon costs ~2.7x per pixel what a textured rectangle does, and
+/// the fog clouds + background columns of the column levels were enough to drop
+/// them from 60 to 30 fps as polygons.
+unsafe fn fillp_begin(c: i32, pattern: usize) {
     let col = PICO8_CLUT[(PAL[(c as usize) & 15] as usize) & 15];
-    upload_16bpp(
-        VramRect::new(FILL_CLUT.x(), FILL_CLUT.y(), 2, 1),
-        &[0u16, col],
-    );
+    if col != FILL_CLUT_COL {
+        FILL_CLUT_COL = col;
+        upload_16bpp(
+            VramRect::new(FILL_CLUT.x(), FILL_CLUT.y(), 2, 1),
+            &[0u16, col],
+        );
+    }
     FILLP_TPAGE.apply_as_draw_mode();
-    let win = TextureWindow::power_of_two_tile((pattern as u8) * 8, 0, 8, 8); // 8x8 tile @ pattern*8
-    TextureMaterial::opaque(
-        FILL_CLUT.uv_clut_word(),
-        FILLP_TPAGE.uv_tpage_word(0),
-        (0x80, 0x80, 0x80),
-    )
-    .with_texture_window(win)
+    let tile = pattern as u32 + if SCALE == 1 { 3 } else { 0 };
+    set_tex_window(31, 31, tile, 0); // 8x8 window at U = tile*8
+}
+
+/// One dithered rectangle in SCREEN pixels; `(u, v)` = the screen-locked pattern
+/// phase (128-space position * scale; the window keeps the low 3 bits).
+#[inline]
+unsafe fn fillp_prim(x: i16, y: i16, w: u16, h: u16, u: u8, v: u8) {
+    if w == 0 || h == 0 {
+        return;
+    }
+    wait_cmd_ready();
+    write_gp0(0x6400_0000 | pack_color(0x80, 0x80, 0x80));
+    write_gp0(pack_vertex(x, y));
+    write_gp0(pack_texcoord(u, v, FILL_CLUT.uv_clut_word()));
+    write_gp0(pack_xy(w, h));
+}
+
+#[inline]
+unsafe fn fillp_end() {
+    set_tex_window(0, 0, 0, 0);
 }
 
 /// PICO-8 `fillp(pattern) rectfill(x0,y0,x1,y1,c)`: a dithered rectangle. The
@@ -463,18 +504,17 @@ pub fn fillp_rect(x0: i16, y0: i16, x1: i16, y1: i16, c: i32, pattern: usize) {
         if rx <= lx || by <= ty {
             return;
         }
-        let mat = fillp_material(c, pattern);
-        let (u0, v0) = ((lx - CAM_X) as u8, (ty - CAM_Y) as u8);
-        let (u1, v1) = ((rx - CAM_X) as u8, (by - CAM_Y) as u8);
-        let verts = [
-            (sx(lx), sy(ty)),
-            (sx(rx), sy(ty)),
-            (sx(lx), sy(by)),
-            (sx(rx), sy(by)),
-        ];
-        let uvs = [(u0, v0), (u1, v0), (u0, v1), (u1, v1)];
-        gpu::draw_quad_textured_material(verts, uvs, mat);
-        set_tex_window(0, 0, 0, 0); // reset the window so sprites/map sample fully
+        fillp_begin(c, pattern);
+        let (u, v) = (((lx - CAM_X) * SCALE) as u8, ((ty - CAM_Y) * SCALE) as u8);
+        fillp_prim(
+            sx(lx),
+            sy(ty),
+            (sx(rx) - sx(lx)) as u16,
+            (sy(by) - sy(ty)) as u16,
+            u,
+            v,
+        );
+        fillp_end();
     }
 }
 
@@ -482,35 +522,40 @@ pub fn fillp_rect(x0: i16, y0: i16, x1: i16, y1: i16, c: i32, pattern: usize) {
 /// dithered 1px scanlines (same midpoint span walk as [`circfill`]). Used for the
 /// fog clouds. Screen-fixed dither, clamped to the camera window per scanline.
 pub fn fillp_circfill(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize) {
+    fillp_circfill_clip(cx, cy, radius, c, pattern, NO_CLIP);
+}
+
+/// A `clip()` rectangle in 128-space: `(x0, y0, x1, y1)`, exclusive far edges.
+pub type ClipRect = (i16, i16, i16, i16);
+/// No clipping (the whole 128-space).
+pub const NO_CLIP: ClipRect = (i16::MIN, i16::MIN, i16::MAX, i16::MAX);
+
+/// [`fillp_circfill`] under a PICO-8 `clip()` rectangle.
+pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize, clip: ClipRect) {
     if radius < 0 {
         return;
     }
     unsafe {
-        let mat = fillp_material(c, pattern);
+        fillp_begin(c, pattern);
         let (camx, camy) = (CAM_X, CAM_Y);
         let span = |dx: i32, yy: i16| {
-            if yy < camy || yy >= camy + 128 {
+            if yy < camy || yy >= camy + 128 || yy < clip.1 || yy >= clip.3 {
                 return;
             }
-            let lx = (cx - dx as i16).max(camx);
-            let rx = (cx + dx as i16 + 1).min(camx + 128);
+            let lx = (cx - dx as i16).max(camx).max(clip.0);
+            let rx = (cx + dx as i16 + 1).min(camx + 128).min(clip.2);
             if rx <= lx {
                 return;
             }
-            let (u0, u1, v) = ((lx - camx) as u8, (rx - camx) as u8, (yy - camy) as u8);
-            let verts = [
-                (sx(lx), sy(yy)),
-                (sx(rx), sy(yy)),
-                (sx(lx), sy(yy + 1)),
-                (sx(rx), sy(yy + 1)),
-            ];
-            let uvs = [
-                (u0, v),
-                (u1, v),
-                (u0, v.wrapping_add(1)),
-                (u1, v.wrapping_add(1)),
-            ];
-            gpu::draw_quad_textured_material(verts, uvs, mat);
+            let (u, v) = (((lx - camx) * SCALE) as u8, ((yy - camy) * SCALE) as u8);
+            fillp_prim(
+                sx(lx),
+                sy(yy),
+                (sx(rx) - sx(lx)) as u16,
+                (sy(yy + 1) - sy(yy)) as u16,
+                u,
+                v,
+            );
         };
         let r2 = radius as i32 * radius as i32;
         let mut dx = radius as i32;
@@ -525,7 +570,7 @@ pub fn fillp_circfill(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize) {
             }
             dy += 1;
         }
-        set_tex_window(0, 0, 0, 0);
+        fillp_end();
     }
 }
 
@@ -634,16 +679,26 @@ fn side_strip_v(x0: i16, x1: i16, y0: i16, y1: i16, c0: (u8, u8, u8), c1: (u8, u
 /// (clouds/hair/particles issue dozens per frame) but with the real VBlank sync
 /// there's ample budget, so spans stay 1px for exact circles.
 pub fn circfill(cx: i16, cy: i16, radius: i16, c: i32) {
+    circfill_clip(cx, cy, radius, c, NO_CLIP);
+}
+
+/// [`circfill`] under a PICO-8 `clip()` rectangle (e.g. the flat-bottomed clouds).
+pub fn circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, clip: ClipRect) {
     if radius < 0 {
         return;
     }
     let (r, g, b) = rgb(c);
     let r2 = radius as i32 * radius as i32;
     let row = |dx: i32, yy: i16| {
-        let x0 = sx(cx - dx as i16);
-        let x1 = sx(cx + dx as i16 + 1);
-        let y0 = sy(yy);
-        let y1 = sy(yy + 1);
+        if yy < clip.1 || yy >= clip.3 {
+            return;
+        }
+        let lx = (cx - dx as i16).max(clip.0);
+        let rx = (cx + dx as i16 + 1).min(clip.2);
+        if rx <= lx {
+            return;
+        }
+        let (x0, x1, y0, y1) = (sx(lx), sx(rx), sy(yy), sy(yy + 1));
         gpu::draw_quad_flat([(x0, y0), (x1, y0), (x0, y1), (x1, y1)], r, g, b);
     };
     let mut dx = radius as i32;
@@ -746,11 +801,49 @@ static mut SPRITE_CLUT_SLOT: bool = false;
 
 /// The sprite CLUT's active slot. spr()/map() build their clut word from this,
 /// and it flips on every `pal()` change so the GPU reloads its CLUT cache.
+/// The sprite CLUT slot the next textured draw uses, uploading the current
+/// `pal()` remap first if it changed. Lazy on purpose: see [`sync_sprite_clut`].
 fn sprite_clut() -> Clut {
-    if unsafe { SPRITE_CLUT_SLOT } {
-        SPRITE_CLUT_B
-    } else {
-        SPRITE_CLUT_A
+    unsafe {
+        if CLUT_DIRTY {
+            sync_sprite_clut();
+        }
+        if SPRITE_CLUT_SLOT {
+            SPRITE_CLUT_B
+        } else {
+            SPRITE_CLUT_A
+        }
+    }
+}
+
+/// Deferred-upload flag: `pal()` only records the remap; the CLUT is rebuilt
+/// once, by the next sprite/map draw that needs it.
+static mut CLUT_DIRTY: bool = false;
+
+/// `map()` draws tiles with this flag bit through [`MAP_ALT_CLUT`]; -1 = off.
+static mut MAP_ALT_FLAG: i32 = -1;
+
+/// Give `map()` a second palette: tiles whose flag `flag_bit` is set draw with
+/// `pairs` (PICO-8 `pal(a, b)` remaps) applied, the rest with the normal CLUT.
+/// This is how a cart's per-level `pal()` inside its tile loop is honoured: the
+/// swapped tiles just reference a different CLUT slot, so there is no second
+/// tile pass and no GPU flush around a CLUT rewrite. `flag_bit` < 0 turns it off.
+pub fn set_map_alt_pal(pairs: &[(i32, i32)], flag_bit: i32) {
+    unsafe {
+        MAP_ALT_FLAG = flag_bit;
+        if flag_bit < 0 {
+            return;
+        }
+        let mut c = [0u16; 16];
+        let mut i = 0usize;
+        while i < 16 {
+            c[i] = PICO8_CLUT[i];
+            i += 1;
+        }
+        for &(a, b) in pairs {
+            c[(a as usize) & 15] = PICO8_CLUT[(b as usize) & 15];
+        }
+        upload_16bpp(VramRect::new(MAP_ALT_CLUT.x(), MAP_ALT_CLUT.y(), 16, 1), &c);
     }
 }
 
@@ -758,21 +851,28 @@ fn sprite_clut() -> Clut {
 /// `pal()` remap -- entry i = the palette colour PAL[i] points at. circfill/
 /// rectfill already remap via PAL directly; sprites read this CLUT.
 ///
-/// Crucially this ping-pongs to the OTHER slot first: the PS1 GPU caches the
-/// CLUT keyed on the clut word and does NOT reload it when the same slot's VRAM
-/// is overwritten, so re-uploading in place leaves the sprite on the stale
-/// palette on real hardware (Madeline's hair stuck red). Moving slots changes
-/// the clut word, forcing the GPU to reload.
-fn sync_sprite_clut() {
+/// Crucially this ping-pongs to the OTHER slot: the PS1 GPU caches the CLUT
+/// keyed on the clut word and does NOT reload it when the same slot's VRAM is
+/// overwritten, so re-uploading in place leaves the sprite on the stale palette
+/// on real hardware (Madeline's hair stuck red). Moving slots changes the clut
+/// word, forcing the GPU to reload. And it must happen ONCE per change, at the
+/// next draw, not per `pal()` call: a level swap is two calls (`pal(2,12)
+/// pal(5,2)`), and toggling twice landed back on the slot the base tiles had
+/// just been drawn with -- same clut word, stale cache, no recolour (Celeste 2's
+/// glacial caves / golden valley palettes never showed).
+unsafe fn sync_sprite_clut() {
     let mut c = [0u16; 16];
     let mut i = 0usize;
     while i < 16 {
-        c[i] = PICO8_CLUT[(unsafe { PAL[i] } as usize) & 15];
+        c[i] = PICO8_CLUT[(PAL[i] as usize) & 15];
         i += 1;
     }
-    let clut = unsafe {
-        SPRITE_CLUT_SLOT = !SPRITE_CLUT_SLOT;
-        sprite_clut()
+    SPRITE_CLUT_SLOT = !SPRITE_CLUT_SLOT;
+    CLUT_DIRTY = false;
+    let clut = if SPRITE_CLUT_SLOT {
+        SPRITE_CLUT_B
+    } else {
+        SPRITE_CLUT_A
     };
     upload_16bpp(VramRect::new(clut.x(), clut.y(), 16, 1), &c);
 }
@@ -788,8 +888,8 @@ pub fn flush() {
 pub fn pal(a: i32, b: i32) {
     unsafe {
         PAL[(a as usize) & 15] = (b & 15) as u8;
+        CLUT_DIRTY = true;
     }
-    sync_sprite_clut();
 }
 
 /// PICO-8 `pal()` -- reset the colour remap.
@@ -800,6 +900,6 @@ pub fn pal_reset() {
             PAL[i as usize] = i;
             i += 1;
         }
+        CLUT_DIRTY = true;
     }
-    sync_sprite_clut();
 }

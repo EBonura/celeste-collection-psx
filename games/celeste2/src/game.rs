@@ -314,7 +314,11 @@ const OBJ0: Obj = Obj {
     flash: 0,
 };
 
-const MAX_OBJ: usize = 48;
+/// Object slots. PICO-8 has no cap; the cart's levels spawn up to 188 static
+/// objects (level 4: 109 vertical spikes alone) plus snowballs in flight. The old
+/// cap of 48 silently dropped every object past it in scan order, so the later
+/// parts of levels 3-7 lost their spikes, grapplers, checkpoints and crumbles.
+const MAX_OBJ: usize = 224;
 static mut OBJ: [Obj; MAX_OBJ] = [OBJ0; MAX_OBJ];
 static mut PLAYER: usize = NONE;
 static mut HAVE_GRAPPLE: bool = false;
@@ -383,60 +387,49 @@ unsafe fn init_particles() {
 
 /// Parallax clouds. Background pass: draw_clouds(1, 0, 1, level.clouds, 26).
 /// Foreground fog pass: draw_clouds(1.25, height*8+1, 0, 7, 16) -- pinned to the
-/// level's bottom (sy=0). (The PICO-8 clip that flattens each cloud's bottom and
-/// the fillp fog dither aren't available on the PSX backend; clouds are full
-/// circles and the fog is solid.)
-/// `dither` < 0 draws solid clouds; otherwise the FILLP_* pattern (the fog pass on
-/// fogmode-1 levels dithers its clouds with the 50% checker, like the cart's fillp).
+/// level's bottom (sy=0). Each cloud is drawn under the cart's
+/// `clip(x-s/2, y-s/2, s, s/2)`: only the top half of the discs shows, so every
+/// cloud has a flat bottom at its centre row. `dither` < 0 draws solid clouds;
+/// otherwise the FILLP_* pattern (the fog pass on fogmode-1 levels dithers its
+/// clouds with the 50% checker, like the cart's fillp).
 unsafe fn draw_clouds(scale: Fix32, oy: Fix32, sy: Fix32, color: i32, count: usize, dither: i32) {
-    let fill = |cx: i16, cy: i16, r: i16| {
+    let fill = |cx: i16, cy: i16, r: i16, clip: backend::ClipRect| {
         if dither < 0 {
-            backend::circfill(cx, cy, r, color);
+            backend::circfill_clip(cx, cy, r, color, clip);
         } else {
-            backend::fillp_circfill(cx, cy, r, color, dither as usize);
+            backend::fillp_circfill_clip(cx, cy, r, color, dither as usize, clip);
         }
     };
+    let fl = |v: Fix32| v.floor_int() as i16; // PICO-8 flr()s draw coordinates
     for i in 0..count {
         let mut c = CLOUDS[i];
         let s = c.s * scale;
         let x = fi(CAM_X) + (c.x - fi(CAM_X) * fx(0.9)).rem_floor(fi(128) + s) - s / fi(2);
         let y = oy + (fi(CAM_Y) + (c.y - fi(CAM_Y) * fx(0.9)).rem_floor(fi(128) + s / fi(2))) * sy;
-        let (xi, yi) = (x.to_int() as i16, y.to_int() as i16);
-        fill(xi, yi, (s / fi(3)).to_int() as i16);
+        // clip(x - s/2 - camera_x, y - s/2 - camera_y, s, s/2), back in 128-space
+        let (cx0, cy0) = (fl(x - s / fi(2)), fl(y - s / fi(2)));
+        let clip = (cx0, cy0, cx0 + fl(s), cy0 + fl(s / fi(2)));
+        fill(fl(x), fl(y), fl(s / fi(3)), clip);
         if i % 2 == 0 {
-            fill(
-                (x - s / fi(3)).to_int() as i16,
-                yi,
-                (s / fi(5)).to_int() as i16,
-            );
-            fill(
-                (x + s / fi(3)).to_int() as i16,
-                yi,
-                (s / fi(6)).to_int() as i16,
-            );
+            fill(fl(x - s / fi(3)), fl(y), fl(s / fi(5)), clip);
+            fill(fl(x + s / fi(3)), fl(y), fl(s / fi(6)), clip);
         }
         c.x += fi(4 - (i as i32) % 4) * fx(0.25) * HALF;
         CLOUDS[i] = c;
     }
 }
 
-/// Apply a level's palette swap (matches the `pal` closures in the level table).
+/// Install a level's palette swap (the `pal` closures in the level table) as the
+/// map's second CLUT for flag-7 tiles -- the cart applies `level.pal()` to
+/// exactly those tiles in its tile loop.
 unsafe fn apply_level_pal(pal_id: i32) {
-    match pal_id {
-        1 => {
-            backend::pal(2, 12);
-            backend::pal(5, 2);
-        }
-        2 => {
-            backend::pal(2, 14);
-            backend::pal(5, 2);
-        }
-        3 => {
-            backend::pal(2, 1);
-            backend::pal(7, 11);
-        }
-        _ => {}
-    }
+    let pairs: &[(i32, i32)] = match pal_id {
+        1 => &[(2, 12), (5, 2)],
+        2 => &[(2, 14), (5, 2)],
+        3 => &[(2, 1), (7, 11)],
+        _ => &[],
+    };
+    backend::set_map_alt_pal(pairs, if pairs.is_empty() { -1 } else { 7 });
 }
 
 #[inline]
@@ -2059,6 +2052,7 @@ unsafe fn goto_level(index: i32) {
         tile_flags: &TILE_FLAGS,
         map_w: m.width as usize,
     });
+    apply_level_pal(m.pal_id); // per-level pal() as the map's flag-7 palette
     if CUR_MUSIC != m.music {
         CUR_MUSIC = m.music;
         music(m.music);
@@ -2130,6 +2124,29 @@ unsafe fn restart_level() {
         }
     }
     snap_camera();
+}
+
+/// Test/debug entry: start directly in level `n` with no intro card (scene
+/// captures for the cart-vs-port comparison, tools/scene_cmp.py).
+pub fn start_at_level(n: i32) {
+    unsafe {
+        init();
+        goto_level(n);
+        LEVEL_INTRO = 0;
+    }
+}
+
+/// The current level's `cls()` colour, for the frame loop's screen clear.
+pub fn bg_rgb() -> (u8, u8, u8) {
+    unsafe {
+        let c = if LVL_INDEX == 0 || LEVEL_INTRO > 0 {
+            0
+        } else {
+            level().bg
+        };
+        let rgb = pico8::palette::PICO8_RGB[(c as usize) & 15];
+        (rgb[0], rgb[1], rgb[2])
+    }
 }
 
 pub fn init() {
@@ -2287,14 +2304,8 @@ pub fn draw() {
         };
         backend::camera((CAM_X + jx) as i16, (CAM_Y + jy) as i16);
 
-        // cls(level.bg): fill the playfield (plus a margin) with the bg colour
-        backend::rectfill(
-            (CAM_X - 20) as i16,
-            (CAM_Y - 20) as i16,
-            (CAM_X + 148) as i16,
-            (CAM_Y + 148) as i16,
-            lv.bg,
-        );
+        // cls(level.bg) is the frame loop's clear (see bg_rgb): the whole screen
+        // is filled by the GPU's fast fill and the side bars repaint the margins.
 
         // background clouds in the level's colour (solid)
         draw_clouds(fi(1), Fix32::ZERO, fi(1), lv.clouds, 26, -1);
@@ -2322,21 +2333,6 @@ pub fn draw() {
             rows,
             1,
         );
-        // per-level palette swap: overdraw the flag-7 tiles with the swap applied
-        if lv.pal_id != 0 {
-            backend::flush(); // let the base tiles finish with the unswapped CLUT
-            apply_level_pal(lv.pal_id);
-            for y in cam_row..(cam_row + rows) {
-                for x in cam_col..(cam_col + cols) {
-                    let tile = tile_at(x, y);
-                    if tile != 0 && backend::fget(tile, 0) && backend::fget(tile, 7) {
-                        backend::spr(tile, (x * 8) as i16, (y * 8) as i16, false, false);
-                    }
-                }
-            }
-            backend::flush(); // finish the swapped tiles before resetting the CLUT
-            backend::pal_reset();
-        }
 
         // score panel
         if SHOW_SCORE > 210 {

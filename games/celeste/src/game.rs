@@ -1836,6 +1836,16 @@ unsafe fn load_room(x: i32, y: i32) {
 }
 
 // ---- public lifecycle ----
+/// Test/debug entry: start the game directly in room (`x`, `y`) (scene captures
+/// for the cart-vs-port comparison, tools/scene_cmp.py).
+pub fn start_at_room(x: i32, y: i32) {
+    unsafe {
+        init();
+        begin_game();
+        load_room(x, y);
+    }
+}
+
 pub fn init() {
     unsafe {
         prelude_init_clouds();

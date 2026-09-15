@@ -273,3 +273,33 @@ pub fn run_music_iso(pattern: i32) {
         }
     }
 }
+
+/// Offline scene capture: boot straight into room (`x`, `y`) with no input and
+/// the follow-pan off (fixed 8px crop top and bottom at 2x). Driven by the
+/// `scene` binary + frametest; compared with a PICO-8 frame by tools/scene_cmp.py.
+pub fn run_scene(x: i32, y: i32) {
+    gpu::init(VideoMode::Ntsc, Resolution::R320X240);
+    let mut fb = FrameBuffer::new(320, 240);
+    gpu::set_draw_area(0, 0, 319, 239);
+    gpu::set_draw_offset(0, 0);
+    backend::upload_assets(CART);
+    sfx::init(AUDIO);
+    backend::set_screen_follow(false);
+    pico8::rng::srand(42);
+    game::start_at_room(x, y);
+    psx_rt::interrupts::install_vblank_counter();
+    loop {
+        game::set_input(0);
+        game::update();
+        if game::freeze() > 0 {
+            wait_vblank();
+        } else {
+            fb.clear(0, 0, 0);
+            game::draw();
+            gpu::draw_sync();
+            wait_vblank();
+            fb.swap();
+        }
+        sfx::update();
+    }
+}

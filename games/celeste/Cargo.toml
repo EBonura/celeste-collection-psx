@@ -22,6 +22,10 @@ name = "musictest"
 path = "src/bin/musictest.rs"
 
 [[bin]]
+name = "scene"
+path = "src/bin/scene.rs"
+
+[[bin]]
 name = "soundtest"
 path = "src/bin/soundtest.rs"
 

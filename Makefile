@@ -20,7 +20,7 @@ DIST     := $(ROOT)/dist
 PSOXIDE_LIB     ?= $(HOME)/Downloads/ps1 games
 COLLECTION_NAME := Celeste Classic Collection
 
-.PHONY: help psoxide clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
+.PHONY: help psoxide emulator capture-tools clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
 
 help:
 	@echo "pico8-psx targets:"
@@ -31,7 +31,7 @@ help:
 	@echo "  make celeste-disc       - build celeste + pack a burnable .bin/.cue into dist/"
 	@echo "  make celeste2           - build the standalone Celeste 2 PSX-EXE"
 	@echo "  make celeste2-disc      - build celeste2 + pack a burnable .bin/.cue into dist/"
-	@echo "  make submodule          - init/update the pinned PSoXide submodule"
+	@echo "  make capture-tools      - build the host emulator tools (frametest, psx-audio-capture) for the benches"
 	@echo "  make clean              - remove build output"
 
 # Which PSoXide this is built against. Cargo owns the pin (psoxide-pin/), and
@@ -46,6 +46,23 @@ psoxide:
 	else \
 		cargo run -q --manifest-path $(ROOT)/psoxide-pin/Cargo.toml -- $(PSOXIDE); \
 	fi
+
+# The emulator lives in its own repository since the SDK split. Only the host
+# benches need it (tools/psx-audio-capture path-deps into this tree), so it is
+# cloned on demand at a pinned revision and bootstrapped the way its own
+# Makefile does (materialising the SDK crates it builds against).
+EMULATOR_REV := 38af605ac5a6961f3798d432bcfb7cceacece239
+EMULATOR     := $(ROOT)/.psoxide-emulator
+emulator:
+	@if [ ! -d "$(EMULATOR)/.git" ]; then \
+		git clone -q https://github.com/EBonura/PSoXide-emulator.git "$(EMULATOR)"; \
+	fi
+	@cd "$(EMULATOR)" && git fetch -q origin $(EMULATOR_REV) && git checkout -q $(EMULATOR_REV) \
+		&& python3 tools/bootstrap-components.py
+
+capture-tools: emulator
+	cd tools/psx-audio-capture && cargo build --release
+	@echo "TOOLS -> tools/psx-audio-capture/target/release/{frametest,psx-audio-capture}"
 
 clean:
 	rm -rf $(DIST)

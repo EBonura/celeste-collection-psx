@@ -16,6 +16,16 @@ Download published on itch.io.
   specialised per waveform, and PICO-8 circle fills (the Celeste 2 clouds)
   merge rows of equal width into flat rectangles, the cheapest GPU
   primitive, instead of one two-triangle quad per row.
+- The GPU no longer stalls the CPU. Each frame is built as a GPU display
+  list and handed to DMA in chunks as it fills, and the game runs its next
+  update (and the audio) while the GPU draws the previous frame. Writing
+  primitives straight to GP0 cost a fifth of every frame in Celeste 2's
+  tiled and foggy levels, which ran at 30 fps; a recorded 50 second play
+  session now replays in 25% fewer VBlanks, all at 60 fps except the
+  heaviest fog level, which holds 55-60 instead of 30.
+- The synth's state and buffers live in the PS1's scratchpad (the machine
+  has no data cache; every main-RAM access stalls), and disc fills read a
+  small table of merged rows instead of recomputing them per circle.
 
 ## 0.2.1 | 2026-09-15
 

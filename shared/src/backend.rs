@@ -136,7 +136,204 @@ pub fn upload_font() {
 /// tpage word, so this must precede sprite/map draws each frame.
 #[inline]
 pub fn begin_sprite_pass() {
-    GFX_TPAGE.apply_as_draw_mode();
+    emit([draw_mode_word(GFX_TPAGE)]);
+}
+
+// --------------------------------------------------------------------
+// Display list
+// --------------------------------------------------------------------
+// In deferred mode (the games' frame loops) every primitive, CLUT upload and
+// draw-mode change is appended to a GPU linked list instead of written to GP0,
+// and `submit` hands the whole frame to DMA channel 2 in one go. The CPU no
+// longer blocks on the 16-word GP0 FIFO while the GPU rasterises (that stall
+// was a fifth of every frame in Celeste 2's tiled levels): it renders the
+// next frame's audio in the VBlank wait while the GPU draws. Immediate mode
+// (the launcher, the pause overlay, boot-time uploads) writes GP0 directly as
+// before, so text drawn through the SDK's font keeps its order.
+
+/// Words of list storage: a frame is ~450 primitives (~2k words) plus CLUT
+/// uploads; a full list is submitted and waited on, then refilled.
+const LIST_WORDS: usize = 8192;
+/// Most data words the DMA walker takes from one node.
+const NODE_MAX: usize = 255;
+#[repr(C, align(16))]
+struct List([u32; LIST_WORDS]);
+static mut LIST: List = List([0; LIST_WORDS]);
+static mut LIST_LEN: usize = 0; // words used, including node headers
+static mut NODE_HEAD: usize = 0; // index of the open node's header word
+static mut DEFERRED: bool = false;
+static mut SUBMITTED: bool = false;
+static mut SENT_UPTO: usize = 0; // header index of the first node not yet handed to DMA
+
+/// Route the backend's GPU output through the display list (`true`) or straight
+/// to GP0 (`false`, the default). Switching to immediate mode submits and waits
+/// for anything already listed.
+pub fn set_deferred(on: bool) {
+    unsafe {
+        if DEFERRED && !on {
+            draw_sync();
+        }
+        DEFERRED = on;
+        if on && LIST_LEN == 0 {
+            open_node();
+        }
+    }
+}
+
+#[inline]
+unsafe fn open_node() {
+    NODE_HEAD = LIST_LEN;
+    LIST.0[NODE_HEAD] = 0x00FF_FFFF; // terminator until the next node links it
+    LIST_LEN += 1;
+}
+
+/// Close the open node: its header gets the data-word count and the address of
+/// the node that follows (`next` = the list index, or the terminator). Then, if
+/// the DMA channel is idle, hand it every closed node not yet sent: the GPU
+/// starts on the frame while the CPU is still listing the rest of it, the
+/// overlap the GP0 FIFO used to give immediate-mode drawing.
+#[inline]
+unsafe fn close_node(next_index: Option<usize>) {
+    let words = (LIST_LEN - NODE_HEAD - 1) as u32;
+    let link = match next_index {
+        Some(i) => (core::ptr::addr_of!(LIST.0[i]) as u32) & 0x00FF_FFFF,
+        None => 0x00FF_FFFF,
+    };
+    LIST.0[NODE_HEAD] = (words << 24) | link;
+    if !psx_io::dma::is_busy(psx_io::dma::Channel::Gpu) {
+        kick_pending();
+    }
+}
+
+/// DMA the closed nodes `SENT_UPTO..=NODE_HEAD` as one chain (the last one's
+/// link becomes the terminator; a node closed later starts the next chain).
+/// The caller has checked that the channel is idle, or waited for it.
+unsafe fn kick_pending() {
+    if SENT_UPTO > NODE_HEAD {
+        return;
+    }
+    LIST.0[NODE_HEAD] = (LIST.0[NODE_HEAD] & 0xFF00_0000) | 0x00FF_FFFF;
+    gpu::submit_linked_list_async(core::ptr::addr_of!(LIST.0[SENT_UPTO]));
+    SENT_UPTO = LIST_LEN;
+    SUBMITTED = true;
+}
+
+/// Reserve room for a packet of `n` words in the open node, starting a new node
+/// (or submitting a full list) when it would not fit.
+#[inline(always)]
+unsafe fn packet(n: usize) {
+    if LIST_LEN - NODE_HEAD - 1 + n > NODE_MAX {
+        if LIST_LEN + 1 + n > LIST_WORDS {
+            // Out of storage: draw what we have, then start over.
+            draw_sync();
+        } else {
+            close_node(Some(LIST_LEN));
+            open_node();
+        }
+    }
+}
+
+/// Append one GP0 word to the open packet.
+#[inline(always)]
+unsafe fn put(w: u32) {
+    LIST.0[LIST_LEN] = w;
+    LIST_LEN += 1;
+}
+
+/// Emit a complete GP0 packet: listed in deferred mode, written otherwise.
+/// Generic over the packet size and by value, so the words stay in registers
+/// (a slice of a stack array turned into a `memcpy` call per primitive).
+#[inline(always)]
+fn emit<const N: usize>(words: [u32; N]) {
+    unsafe {
+        if DEFERRED {
+            packet(N);
+            let mut len = LIST_LEN;
+            for w in words {
+                *LIST.0.get_unchecked_mut(len) = w;
+                len += 1;
+            }
+            LIST_LEN = len;
+        } else {
+            wait_cmd_ready();
+            for w in words {
+                write_gp0(w);
+            }
+        }
+    }
+}
+
+/// A CPU-to-VRAM upload of 16-bit pixels (GP0 0xA0): listed in deferred mode
+/// so it lands between the draws that precede and follow it.
+#[inline(never)]
+fn emit_upload(rect: VramRect, pixels: &[u16]) {
+    unsafe {
+        if !DEFERRED {
+            upload_16bpp(rect, pixels);
+            return;
+        }
+        let words = pixels.len().div_ceil(2);
+        packet(3 + words);
+        put(0xA000_0000);
+        put((rect.y as u32) << 16 | rect.x as u32);
+        put((rect.h as u32) << 16 | rect.w as u32);
+        let mut i = 0;
+        while i + 1 < pixels.len() {
+            put(pixels[i] as u32 | (pixels[i + 1] as u32) << 16);
+            i += 2;
+        }
+        if i < pixels.len() {
+            put(pixels[i] as u32);
+        }
+    }
+}
+
+/// Hand the frame's list to the GPU (DMA channel 2, linked-list mode) and
+/// return at once; the CPU is free until [`draw_sync`]. No-op outside deferred
+/// mode or when nothing was listed.
+pub fn submit() {
+    unsafe {
+        if !DEFERRED || LIST_LEN <= NODE_HEAD + 1 {
+            return; // nothing listed since the last kick
+        }
+        close_node(None);
+        if SENT_UPTO <= NODE_HEAD {
+            // The channel was busy when the node closed: queue behind it.
+            gpu::submit_linked_list_wait();
+            kick_pending();
+        }
+        open_node();
+    }
+}
+
+/// Wait for the GPU to finish everything drawn so far: the listed frame (after
+/// [`submit`], which this issues if needed) and the GPU's own queue. Call before
+/// the display flip and before any immediate-mode drawing.
+pub fn draw_sync() {
+    unsafe {
+        if DEFERRED {
+            submit();
+            if SUBMITTED {
+                gpu::submit_linked_list_wait();
+                SUBMITTED = false;
+            }
+            LIST_LEN = 0;
+            SENT_UPTO = 0;
+            open_node();
+        }
+    }
+    gpu::draw_sync();
+}
+
+/// The GP0(E1h) draw-mode word for a texture page (what
+/// `Tpage::apply_as_draw_mode` writes).
+#[inline]
+fn draw_mode_word(tpage: Tpage) -> u32 {
+    0xE100_0000
+        | (tpage.x() as u32 / 64)
+        | (if tpage.y() == 256 { 1 } else { 0 }) << 4
+        | (tpage.depth() as u32) << 7
+        | 1 << 10
 }
 
 #[inline]
@@ -253,11 +450,12 @@ fn draw_cell(
         return;
     }
     if sc == 2 && !flip_x && !flip_y {
-        wait_cmd_ready();
-        write_gp0(0x6400_0000 | pack_color(0x80, 0x80, 0x80));
-        write_gp0(pack_vertex(x, y));
-        write_gp0(pack_texcoord(u0, v0, clut_word));
-        write_gp0(pack_xy(16, 16));
+        emit([
+            0x6400_0000 | pack_color(0x80, 0x80, 0x80),
+            pack_vertex(x, y),
+            pack_texcoord(u0, v0, clut_word),
+            pack_xy(16, 16),
+        ]);
         return;
     }
     // Clamp the far UV edge to 255 so a last-column cell (u0=240) doesn't wrap.
@@ -265,15 +463,18 @@ fn draw_cell(
     let v_hi = (v0 as u16 + 16).min(255) as u8;
     let (ul, ur) = if flip_x { (u_hi, u0) } else { (u0, u_hi) };
     let (vt, vb) = if flip_y { (v_hi, v0) } else { (v0, v_hi) };
-    let verts = [(x, y), (x + sz, y), (x, y + sz), (x + sz, y + sz)];
-    let uvs = [(ul, vt), (ur, vt), (ul, vb), (ur, vb)];
-    gpu::draw_quad_textured(
-        verts,
-        uvs,
-        clut_word,
-        tpage.uv_tpage_word(0),
-        (0x80, 0x80, 0x80),
-    );
+    let tp = tpage.uv_tpage_word(0);
+    emit([
+        0x2C00_0000 | pack_color(0x80, 0x80, 0x80),
+        pack_vertex(x, y),
+        pack_texcoord(ul, vt, clut_word),
+        pack_vertex(x + sz, y),
+        pack_texcoord(ur, vt, tp),
+        pack_vertex(x, y + sz),
+        pack_texcoord(ul, vb, 0),
+        pack_vertex(x + sz, y + sz),
+        pack_texcoord(ur, vb, 0),
+    ]);
 }
 
 /// PICO-8 `spr()`. Draws 8x8 PICO-8 sprite `n` at PICO-8 `(x,y)`.
@@ -368,7 +569,11 @@ pub fn rectfill(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
     let x1 = sx(rx + 1); // inclusive -> +1 px (then *2 in transform)
     let y1 = sy(by + 1);
     let (r, g, b) = rgb(c);
-    gpu::draw_quad_flat([(x0, y0), (x1, y0), (x0, y1), (x1, y1)], r, g, b);
+    emit([
+        0x6000_0000 | pack_color(r, g, b),
+        pack_vertex(x0, y0),
+        pack_xy((x1 - x0) as u16, (y1 - y0) as u16),
+    ]);
 }
 
 // ---- fillp (PICO-8 fill patterns / dither) -------------------------------
@@ -440,14 +645,11 @@ fn upload_fillp() {
 /// Set the GPU texture window (GP0 0xE2). Masks/offsets are in 8-pixel units.
 #[inline]
 unsafe fn set_tex_window(mask_x: u32, mask_y: u32, off_x: u32, off_y: u32) {
-    wait_cmd_ready();
-    write_gp0(
-        0xE200_0000
-            | (mask_x & 0x1F)
-            | ((mask_y & 0x1F) << 5)
-            | ((off_x & 0x1F) << 10)
-            | ((off_y & 0x1F) << 15),
-    );
+    emit([0xE200_0000
+        | (mask_x & 0x1F)
+        | ((mask_y & 0x1F) << 5)
+        | ((off_x & 0x1F) << 10)
+        | ((off_y & 0x1F) << 15)]);
 }
 
 /// Colour currently in the active fillp CLUT slot (so a run of same-colour
@@ -481,9 +683,9 @@ unsafe fn fillp_begin(c: i32, pattern: usize) {
         FILL_CLUT_COL = col;
         FILL_CLUT_SLOT = !FILL_CLUT_SLOT; // new clut word -> the GPU reloads it
         let clut = fill_clut();
-        upload_16bpp(VramRect::new(clut.x(), clut.y(), 2, 1), &[0u16, col]);
+        emit_upload(VramRect::new(clut.x(), clut.y(), 2, 1), &[0u16, col]);
     }
-    FILLP_TPAGE.apply_as_draw_mode();
+    emit([draw_mode_word(FILLP_TPAGE)]);
     let tile = pattern as u32 + if SCALE == 1 { 3 } else { 0 };
     set_tex_window(31, 31, tile, 0); // 8x8 window at U = tile*8
 }
@@ -495,11 +697,12 @@ unsafe fn fillp_prim(x: i16, y: i16, w: u16, h: u16, u: u8, v: u8) {
     if w == 0 || h == 0 {
         return;
     }
-    wait_cmd_ready();
-    write_gp0(0x6400_0000 | pack_color(0x80, 0x80, 0x80));
-    write_gp0(pack_vertex(x, y));
-    write_gp0(pack_texcoord(u, v, fill_clut().uv_clut_word()));
-    write_gp0(pack_xy(w, h));
+    emit([
+        0x6400_0000 | pack_color(0x80, 0x80, 0x80),
+        pack_vertex(x, y),
+        pack_texcoord(u, v, fill_clut().uv_clut_word()),
+        pack_xy(w, h),
+    ]);
 }
 
 #[inline]
@@ -552,25 +755,22 @@ pub const NO_CLIP: ClipRect = (i16::MIN, i16::MIN, i16::MAX, i16::MAX);
 pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize, clip: ClipRect) {
     unsafe {
         fillp_begin(c, pattern);
-        let (camx, camy) = (CAM_X, CAM_Y);
-        circle_spans(radius, |dx, y0, y1| {
-            let lx = (cx - dx as i16).max(camx).max(clip.0);
-            let rx = (cx + dx as i16 + 1).min(camx + 128).min(clip.2);
-            let ty = (cy + y0).max(camy).max(clip.1);
-            let by = (cy + y1 + 1).min(camy + 128).min(clip.3);
-            if rx <= lx || by <= ty {
-                return;
-            }
-            let (u, v) = (((lx - camx) * SCALE) as u8, ((ty - camy) * SCALE) as u8);
-            fillp_prim(
-                sx(lx),
-                sy(ty),
-                (sx(rx) - sx(lx)) as u16,
-                (sy(by) - sy(ty)) as u16,
-                u,
-                v,
-            );
-        });
+        let (cam_x, cam_y) = (CAM_X, CAM_Y);
+        let clip = (
+            clip.0.max(cam_x),
+            clip.1.max(cam_y),
+            clip.2.min(cam_x + 128),
+            clip.3.min(cam_y + 128),
+        );
+        let tex = pack_texcoord(0, 0, fill_clut().uv_clut_word()) & 0xFFFF_0000;
+        disc_fill(
+            cx,
+            cy,
+            radius,
+            clip,
+            0x6400_0000 | pack_color(0x80, 0x80, 0x80),
+            Some(tex),
+        );
         fillp_end();
     }
 }
@@ -578,7 +778,11 @@ pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize
 /// PICO-8 `line(x,y,x2,y2,c)`.
 pub fn line(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
     let (r, g, b) = rgb(c);
-    gpu::draw_line_mono(sx(x), sy(y), sx(x2), sy(y2), r, g, b);
+    emit([
+        0x4000_0000 | pack_color(r, g, b),
+        pack_vertex(sx(x), sy(y)),
+        pack_vertex(sx(x2), sy(y2)),
+    ]);
 }
 
 /// Flat-filled quad with arbitrary corners, in PICO-8 128-space. Corner order is a
@@ -587,17 +791,13 @@ pub fn line(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
 /// rays drawn as thin quads).
 pub fn quad(p: [(i16, i16); 4], c: i32) {
     let (r, g, b) = rgb(c);
-    gpu::draw_quad_flat(
-        [
-            (sx(p[0].0), sy(p[0].1)),
-            (sx(p[1].0), sy(p[1].1)),
-            (sx(p[2].0), sy(p[2].1)),
-            (sx(p[3].0), sy(p[3].1)),
-        ],
-        r,
-        g,
-        b,
-    );
+    emit([
+        0x2800_0000 | pack_color(r, g, b),
+        pack_vertex(sx(p[0].0), sy(p[0].1)),
+        pack_vertex(sx(p[1].0), sy(p[1].1)),
+        pack_vertex(sx(p[2].0), sy(p[2].1)),
+        pack_vertex(sx(p[3].0), sy(p[3].1)),
+    ]);
 }
 
 // ---- Side-margin gradient (the 32px bars beside the 256-wide field) ----
@@ -657,21 +857,33 @@ pub fn side_bars() {
         side_strip_v(px0, px1, py1, 240, inner, edge); // bottom (1x): bright at y=240
     }
 }
+/// Gouraud triangle (GP0 0x30).
+fn gouraud_tri(v: [(i16, i16); 3], c: [(u8, u8, u8); 3]) {
+    emit([
+        0x3000_0000 | pack_color(c[0].0, c[0].1, c[0].2),
+        pack_vertex(v[0].0, v[0].1),
+        pack_color(c[1].0, c[1].1, c[1].2),
+        pack_vertex(v[1].0, v[1].1),
+        pack_color(c[2].0, c[2].1, c[2].2),
+        pack_vertex(v[2].0, v[2].1),
+    ]);
+}
+
 /// Strip with a HORIZONTAL gradient: `c0` at the left edge `x0`, `c1` at `x1`.
 fn side_strip_h(x0: i16, x1: i16, y0: i16, y1: i16, c0: (u8, u8, u8), c1: (u8, u8, u8)) {
     if x1 <= x0 || y1 <= y0 {
         return;
     }
-    gpu::draw_tri_gouraud([(x0, y0), (x1, y0), (x0, y1)], [c0, c1, c0]);
-    gpu::draw_tri_gouraud([(x1, y0), (x0, y1), (x1, y1)], [c1, c0, c1]);
+    gouraud_tri([(x0, y0), (x1, y0), (x0, y1)], [c0, c1, c0]);
+    gouraud_tri([(x1, y0), (x0, y1), (x1, y1)], [c1, c0, c1]);
 }
 /// Strip with a VERTICAL gradient: `c0` at the top edge `y0`, `c1` at `y1`.
 fn side_strip_v(x0: i16, x1: i16, y0: i16, y1: i16, c0: (u8, u8, u8), c1: (u8, u8, u8)) {
     if x1 <= x0 || y1 <= y0 {
         return;
     }
-    gpu::draw_tri_gouraud([(x0, y0), (x1, y0), (x0, y1)], [c0, c0, c1]);
-    gpu::draw_tri_gouraud([(x1, y0), (x0, y1), (x1, y1)], [c0, c1, c1]);
+    gouraud_tri([(x0, y0), (x1, y0), (x0, y1)], [c0, c0, c1]);
+    gouraud_tri([(x1, y0), (x0, y1), (x1, y1)], [c0, c1, c1]);
 }
 
 /// PICO-8 `circfill(x,y,r,c)`: the rows of the disc, drawn symmetrically about
@@ -686,64 +898,243 @@ pub fn circfill(cx: i16, cy: i16, radius: i16, c: i32) {
 /// [`circfill`] under a PICO-8 `clip()` rectangle (e.g. the flat-bottomed clouds).
 pub fn circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, clip: ClipRect) {
     let (r, g, b) = rgb(c);
-    circle_spans(radius, |dx, y0, y1| {
-        let lx = (cx - dx as i16).max(clip.0);
-        let rx = (cx + dx as i16 + 1).min(clip.2);
-        let ty = (cy + y0).max(clip.1);
-        let by = (cy + y1 + 1).min(clip.3);
-        if rx > lx && by > ty {
-            flat_rect(sx(lx), sy(ty), (sx(rx) - sx(lx)) as u16, (sy(by) - sy(ty)) as u16, r, g, b);
-        }
-    });
+    disc_fill(
+        cx,
+        cy,
+        radius,
+        clip,
+        0x6000_0000 | pack_color(r, g, b),
+        None,
+    );
 }
 
-/// The rows of a PICO-8 disc as `(dx, dy0, dy1)`: rows `dy0..=dy1` (relative to
-/// the centre, both halves included) span `cx-dx..=cx+dx`. Rows with the same
-/// `dx` are merged.
-fn circle_spans(radius: i16, mut emit: impl FnMut(i32, i16, i16)) {
+/// Draw a clipped disc as flat rectangles (`tex` = None) or as dithered
+/// textured rectangles (`tex` = the texcoord word's CLUT half; the pattern
+/// phase is derived from the screen position). Closure-free and, in deferred
+/// mode, with the list cursor in a register: closures captured the clip by
+/// reference and per-rectangle `emit` calls spent more on the list's static
+/// loads and stores than on the rectangle itself (each one a RAM stall).
+#[inline(always)]
+fn disc_fill(cx: i16, cy: i16, radius: i16, clip: ClipRect, cmd: u32, tex: Option<u32>) {
     if radius < 0 {
         return;
     }
-    let r = radius as i32;
-    let r2 = r * r;
-    let mut dx = r;
-    let mut dy = 0i32;
-    // The rows of one half at a time: dy = run_start..dy share `dx`.
-    let mut run_dx = r;
-    let mut run_start = 0i32;
-    while dy <= r {
-        while dx * dx + dy * dy > r2 {
-            dx -= 1;
+    let scale = unsafe { SCALE as i32 };
+    // Screen x = px * scale + sx_off (camera and centring folded in).
+    let sx_off = ofs_x() as i32 - unsafe { CAM_X as i32 } * scale;
+    let sy_off = unsafe { V_OFS as i32 - CAM_Y as i32 * scale };
+    let (cx, cy) = (cx as i32, cy as i32);
+    let (clx, cty, crx, cby) = (clip.0 as i32, clip.1 as i32, clip.2 as i32, clip.3 as i32);
+    let words = if tex.is_some() { 4 } else { 3 };
+    unsafe {
+        let deferred = DEFERRED;
+        let (mut len, mut head) = (LIST_LEN, NODE_HEAD);
+        let mut runs = DiscRuns::new(radius as i32);
+        while let Some((dx, dy0, dy1)) = runs.next() {
+            let lx = (cx - dx).max(clx);
+            let rx = (cx + dx + 1).min(crx);
+            if rx <= lx {
+                continue;
+            }
+            let x = (lx * scale + sx_off) as i16;
+            let w = ((rx - lx) * scale) as u16;
+            // The run below the centre, then its mirror above (one rectangle
+            // when the run straddles the centre row).
+            let mut half = 0;
+            while half < 2 {
+                let (y0, y1) = if dy0 == 0 {
+                    half = 2;
+                    (-dy1, dy1)
+                } else if half == 0 {
+                    half = 1;
+                    (dy0, dy1)
+                } else {
+                    half = 2;
+                    (-dy1, -dy0)
+                };
+                let ty = (cy + y0).max(cty);
+                let by = (cy + y1 + 1).min(cby);
+                if by <= ty {
+                    continue;
+                }
+                let y = (ty * scale + sy_off) as i16;
+                let h = ((by - ty) * scale) as u16;
+                let v = pack_vertex(x, y);
+                let xy = pack_xy(w, h);
+                if deferred {
+                    if len - head - 1 + words > NODE_MAX {
+                        LIST_LEN = len;
+                        packet(words);
+                        len = LIST_LEN;
+                        head = NODE_HEAD;
+                    }
+                    *LIST.0.get_unchecked_mut(len) = cmd;
+                    *LIST.0.get_unchecked_mut(len + 1) = v;
+                    if let Some(t) = tex {
+                        *LIST.0.get_unchecked_mut(len + 2) = uv_word(t, x, y);
+                        *LIST.0.get_unchecked_mut(len + 3) = xy;
+                    } else {
+                        *LIST.0.get_unchecked_mut(len + 2) = xy;
+                    }
+                    len += words;
+                } else {
+                    wait_cmd_ready();
+                    write_gp0(cmd);
+                    write_gp0(v);
+                    if let Some(t) = tex {
+                        write_gp0(uv_word(t, x, y));
+                    }
+                    write_gp0(xy);
+                }
+            }
         }
-        if dx != run_dx {
-            emit_run(&mut emit, run_dx, run_start, dy - 1);
-            run_dx = dx;
-            run_start = dy;
+        if deferred {
+            LIST_LEN = len;
         }
-        dy += 1;
     }
-    emit_run(&mut emit, run_dx, run_start, r);
 }
 
-/// One run of rows `dy0..=dy1` below the centre and its mirror above it (the
-/// centre row belongs to the lower half only).
-fn emit_run(emit: &mut impl FnMut(i32, i16, i16), dx: i32, dy0: i32, dy1: i32) {
-    if dy0 == 0 {
-        // Straddles the centre: one rectangle from -dy1 to dy1.
-        emit(dx, -dy1 as i16, dy1 as i16);
-    } else {
-        emit(dx, dy0 as i16, dy1 as i16);
-        emit(dx, -dy1 as i16, -dy0 as i16);
+/// Texcoord word for a dithered rectangle at screen `(x, y)`: the pattern
+/// phase is the 128-space position times the scale, which the texture window
+/// reduces to its low 3 bits, recovered from the screen position.
+#[inline(always)]
+fn uv_word(tex: u32, x: i16, y: i16) -> u32 {
+    let (u, v) = (
+        (x - ofs_x()) as u32 & 0xFF,
+        (y - unsafe { V_OFS }) as u32 & 0xFF,
+    );
+    tex | (v << 8) | u
+}
+
+/// The rows of a PICO-8 disc of radius `r`, lower half, as `(dx, dy0, dy1)`:
+/// rows `dy0..=dy1` below the centre (`dy0 == 0`: the run straddles the
+/// centre and its mirror is included) span `cx-dx..=cx+dx`, by PICO-8's rule
+/// (the largest `dx` with `dx*dx + dy*dy <= r*r`). Rows with the same `dx` are
+/// merged. Radii up to `DISC_LUT_RADIUS` read a table built on first use (one
+/// packed word per run); larger ones are computed, squares tracked
+/// incrementally.
+enum DiscRuns {
+    Table {
+        next: *const u32,
+        end: *const u32,
+    },
+    Computed {
+        r: i32,
+        r2: i32,
+        dx: i32,
+        dx2: i32,
+        dy: i32,
+        dy2: i32,
+        run_dx: i32,
+        run_start: i32,
+        done: bool,
+    },
+}
+const DISC_LUT_RADIUS: usize = 31;
+/// Per radius: run count, then runs packed as `dx | dy0 << 8 | dy1 << 16`.
+static mut DISC_LUT: [(u32, [u32; DISC_LUT_RADIUS + 1]); DISC_LUT_RADIUS + 1] =
+    [(0, [0; DISC_LUT_RADIUS + 1]); DISC_LUT_RADIUS + 1];
+static mut DISC_LUT_BUILT: bool = false;
+
+impl DiscRuns {
+    #[inline(always)]
+    fn new(r: i32) -> Self {
+        if r as usize <= DISC_LUT_RADIUS {
+            unsafe {
+                if !DISC_LUT_BUILT {
+                    build_disc_lut();
+                }
+                let (n, runs) = &DISC_LUT[r as usize];
+                let next = runs.as_ptr();
+                return DiscRuns::Table {
+                    next,
+                    end: next.add(*n as usize),
+                };
+            }
+        }
+        DiscRuns::computed(r)
+    }
+    fn computed(r: i32) -> Self {
+        DiscRuns::Computed {
+            r,
+            r2: r * r,
+            dx: r,
+            dx2: r * r,
+            dy: 0,
+            dy2: 0,
+            run_dx: r,
+            run_start: 0,
+            done: false,
+        }
+    }
+    #[inline(always)]
+    fn next(&mut self) -> Option<(i32, i32, i32)> {
+        match self {
+            DiscRuns::Table { next, end } => {
+                if *next == *end {
+                    return None;
+                }
+                let w = unsafe { **next };
+                *next = unsafe { next.add(1) };
+                Some((
+                    (w & 0xFF) as i32,
+                    ((w >> 8) & 0xFF) as i32,
+                    (w >> 16) as i32,
+                ))
+            }
+            DiscRuns::Computed {
+                r,
+                r2,
+                dx,
+                dx2,
+                dy,
+                dy2,
+                run_dx,
+                run_start,
+                done,
+            } => {
+                if *done {
+                    return None;
+                }
+                loop {
+                    if *dy > *r {
+                        *done = true;
+                        return Some((*run_dx, *run_start, *r));
+                    }
+                    while *dx2 + *dy2 > *r2 {
+                        *dx2 -= 2 * *dx - 1;
+                        *dx -= 1;
+                    }
+                    let out = if *dx != *run_dx {
+                        let o = (*run_dx, *run_start, *dy - 1);
+                        *run_dx = *dx;
+                        *run_start = *dy;
+                        Some(o)
+                    } else {
+                        None
+                    };
+                    *dy2 += 2 * *dy + 1;
+                    *dy += 1;
+                    if out.is_some() {
+                        return out;
+                    }
+                }
+            }
+        }
     }
 }
 
-/// Flat rectangle (GP0 0x60): the cheapest primitive the GPU has, where the
-/// SDK's `draw_rect_flat` is two triangles.
-fn flat_rect(x: i16, y: i16, w: u16, h: u16, r: u8, g: u8, b: u8) {
-    wait_cmd_ready();
-    write_gp0(0x6000_0000 | pack_color(r, g, b));
-    write_gp0(pack_vertex(x, y));
-    write_gp0(pack_xy(w, h));
+unsafe fn build_disc_lut() {
+    for r in 0..=DISC_LUT_RADIUS {
+        let mut runs = DiscRuns::computed(r as i32);
+        let mut n = 0usize;
+        while let Some((dx, dy0, dy1)) = runs.next() {
+            DISC_LUT[r].1[n] = dx as u32 | (dy0 as u32) << 8 | (dy1 as u32) << 16;
+            n += 1;
+        }
+        DISC_LUT[r].0 = n as u32;
+    }
+    DISC_LUT_BUILT = true;
 }
 
 /// PICO-8 `circ(x,y,r,c)` -- 1px outline (midpoint circle), each point a 2x2
@@ -756,12 +1147,11 @@ pub fn circ(cx: i16, cy: i16, radius: i16, c: i32) {
     let dot = |x: i16, y: i16| {
         let x0 = sx(x);
         let y0 = sy(y);
-        gpu::draw_quad_flat(
-            [(x0, y0), (x0 + 2, y0), (x0, y0 + 2), (x0 + 2, y0 + 2)],
-            r,
-            g,
-            b,
-        );
+        emit([
+            0x6000_0000 | pack_color(r, g, b),
+            pack_vertex(x0, y0),
+            pack_xy(2, 2),
+        ]);
     };
     let mut x = radius as i32;
     let mut y = 0i32;
@@ -798,12 +1188,12 @@ pub fn circ(cx: i16, cy: i16, radius: i16, c: i32) {
 /// with a per-colour CLUT.
 pub fn print(s: &[u8], x: i16, y: i16, c: i32) {
     let clut_idx = (unsafe { PAL[(c as usize) & 15] }) as usize;
-    upload_16bpp(
+    emit_upload(
         VramRect::new(TEXT_CLUT.x(), TEXT_CLUT.y(), 16, 1),
         &TEXT_CLUTS[clut_idx & 15],
     );
     let clut_word = TEXT_CLUT.uv_clut_word();
-    FONT_TPAGE.apply_as_draw_mode();
+    emit([draw_mode_word(FONT_TPAGE)]);
 
     let mut cx = x;
     for &ch in s {
@@ -874,7 +1264,7 @@ pub fn set_map_alt_pal(pairs: &[(i32, i32)], flag_bit: i32) {
         for &(a, b) in pairs {
             c[(a as usize) & 15] = PICO8_CLUT[(b as usize) & 15];
         }
-        upload_16bpp(VramRect::new(MAP_ALT_CLUT.x(), MAP_ALT_CLUT.y(), 16, 1), &c);
+        emit_upload(VramRect::new(MAP_ALT_CLUT.x(), MAP_ALT_CLUT.y(), 16, 1), &c);
     }
 }
 
@@ -905,13 +1295,16 @@ unsafe fn sync_sprite_clut() {
     } else {
         SPRITE_CLUT_A
     };
-    upload_16bpp(VramRect::new(clut.x(), clut.y(), 16, 1), &c);
+    emit_upload(VramRect::new(clut.x(), clut.y(), 16, 1), &c);
 }
 
 /// Wait for the GPU to finish the queued draws. Call before a palette change
 /// that must not retro-actively affect already-issued sprite draws (the sprite
 /// CLUT is shared VRAM, so an unset/reset would otherwise recolour them).
 pub fn flush() {
+    if unsafe { DEFERRED } {
+        return; // the list draws in order; CLUT slots ping-pong
+    }
     gpu::draw_sync();
 }
 

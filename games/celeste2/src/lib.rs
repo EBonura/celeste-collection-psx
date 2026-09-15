@@ -104,13 +104,16 @@ pub fn run() {
         }
         game::set_input(mask);
 
-        game::update();
-
+        // Draw the current state as a GPU list, then run the next update and
+        // the audio while the GPU draws it (the fog levels are GPU-bound).
         let (r, g, b) = game::bg_rgb();
         fb.clear(r, g, b); // cls(level.bg); the side bars repaint the margins
+        backend::set_deferred(true);
         game::draw();
-        gpu::draw_sync();
-        wait_vblank();
+        backend::submit();
+        game::update();
+        wait_vblank(); // renders audio while it waits
+        backend::set_deferred(false); // waits for the GPU
         fb.swap();
 
         sfx::update(); // stream the next slice of PICO-8 audio to the SPU
@@ -275,9 +278,11 @@ pub fn run_scene(level: i32) {
         game::update();
         let (r, g, b) = game::bg_rgb();
         fb.clear(r, g, b);
+        backend::set_deferred(true); // list the frame, draw it by DMA
         game::draw();
-        gpu::draw_sync();
+        backend::submit(); // the GPU draws while the VBlank wait renders audio
         wait_vblank();
+        backend::set_deferred(false); // waits for the GPU
         fb.swap();
         sfx::update();
     }

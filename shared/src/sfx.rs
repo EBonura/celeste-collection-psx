@@ -131,10 +131,26 @@ unsafe fn arm_mark() {
 
 /// Render block `WRITE` into its ring slot of the stage buffer.
 unsafe fn render_one() {
-    let mut pcm = [0i16; BLOCK_SAMPLES];
-    synth::render_block(&mut pcm);
-    synth::encode_block(&pcm, ring_flags(WRITE), &mut STAGE.0[(WRITE % RING_BLOCKS) as usize]);
+    let pcm = pcm_buf();
+    synth::render_block(pcm);
+    synth::encode_block(
+        pcm,
+        ring_flags(WRITE),
+        &mut STAGE.0[(WRITE % RING_BLOCKS) as usize],
+    );
     WRITE += 1;
+}
+
+/// The block's PCM, read three times by the encoder: in the scratchpad on the
+/// console (after the synth's mix accumulator), a static on the host.
+#[cfg(target_arch = "mips")]
+unsafe fn pcm_buf() -> &'static mut [i16; BLOCK_SAMPLES] {
+    &mut *(0x1F80_0080 as *mut [i16; BLOCK_SAMPLES])
+}
+#[cfg(not(target_arch = "mips"))]
+unsafe fn pcm_buf() -> &'static mut [i16; BLOCK_SAMPLES] {
+    static mut PCM: [i16; BLOCK_SAMPLES] = [0; BLOCK_SAMPLES];
+    &mut *core::ptr::addr_of_mut!(PCM)
 }
 
 /// DMA the staged blocks `UPLOADED..WRITE` into the ring (one or two runs
@@ -152,11 +168,13 @@ unsafe fn flush() {
 }
 
 /// Render one block ahead if the stream has room for it: `true` when it did.
-/// The idle time in [`wait_vblank`] is spent here, so a frame's audio costs
-/// the frame nothing unless the CPU is genuinely saturated. Without this the
+/// The idle time in [`wait_vblank`] is spent here, and the backend calls it
+/// between bursts of GPU primitives (`backend::drew_prim`) so the GPU drains
+/// its FIFO while the CPU renders instead of stalling the next write: a
+/// frame's audio then costs the frame nothing unless the CPU is saturated. Without this the
 /// loop was bistable: one late frame doubled the next update's rendering,
 /// which kept the frame late (a steady 30 fps on PSoXide).
-unsafe fn fill_one() -> bool {
+pub(crate) unsafe fn fill_one() -> bool {
     if !STARTED || WRITE >= TARGET + FILL_AHEAD_BLOCKS {
         return false;
     }

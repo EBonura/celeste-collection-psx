@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 | 2026-09-15
+
+Download published on itch.io.
 
 - Analog controller support: on a DualShock in analog mode the left stick
   works as the d-pad in both games, the launcher and the pause menu (digital

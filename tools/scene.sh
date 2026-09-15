@@ -3,12 +3,11 @@
 # capture the PSX frame after PSXFRAMES frames, grab the PICO-8 frame at the same
 # game time (PSXFRAMES/2, 30fps), and write the side-by-side to OUT.
 #   tools/scene.sh <celeste|celeste2> <scene> <psxframes> <cart.p8> <out.png>
-# Needs `make capture-tools` once (the emulator tree) and PSX_BIOS.
+# Needs `make capture-tools` once (the emulator tree).
 # scene: celeste2 = level number; celeste = "x,y" room.
 set -euo pipefail
 GAME=$1; SCENE=$2; PSXFRAMES=$3; CART=$4; OUT=$5
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
-export PSX_BIOS="${PSX_BIOS:-/Users/ebonura/Downloads/ps1 bios/SCPH1001.BIN}"
 ( cd games/$GAME && SCENE="$SCENE" cargo build --release --bin scene >/dev/null 2>&1 )
 ( cd .psoxide/tools/mkisopsx && cargo run -q --release -- --exe "$ROOT/games/$GAME/target/mipsel-sony-psx/release/scene.exe" --out "$ROOT/dist/${GAME}_scene.bin" --volume PICO8PSX >/dev/null 2>&1 )
 # +27: frames the PSX spends booting before the game loop draws (measured)

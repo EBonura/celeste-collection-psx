@@ -1,4 +1,5 @@
-//! Boot a disc (fast-boot HLE, so unlicensed homebrew discs run), drive the
+//! Boot a disc through the emulator's built-in runtime (no firmware image, so
+//! unlicensed homebrew discs run), drive the
 //! pad, step a number of video frames, then dump the display to a PPM. Used to
 //! verify input behaviour (e.g. the title screen waiting for a fresh press).
 //!
@@ -12,10 +13,7 @@
 
 use std::path::Path;
 
-use emulator_core::{
-    fast_boot_disc_with_hle, warm_bios_for_disc_fast_boot, Bus, ButtonState, Cpu,
-    DISC_FAST_BOOT_WARMUP_STEPS,
-};
+use emulator_core::{fast_boot_disc, Bus, ButtonState, Cpu};
 
 const CYCLES_PER_FRAME: u64 = 564_480; // ~33.8688 MHz / 60
 const STEP_CAP: u64 = 6_000_000_000;
@@ -60,16 +58,14 @@ fn main() {
     let hold = mask_arg("--hold").unwrap_or(0);
     let press_at: i64 = arg("--press-at").and_then(|s| s.parse().ok()).unwrap_or(-1);
     let press_mask = mask_arg("--press-mask").unwrap_or(0x4000);
-    let bios_path = arg("--bios")
-        .or_else(|| std::env::var("PSX_BIOS").ok())
-        .expect("--bios <path> or PSX_BIOS env var required");
-
-    let bios = std::fs::read(&bios_path).expect("BIOS readable");
     let disc = load_disc(Path::new(&disc_path)).expect("disc readable");
-    let mut bus = Bus::new(bios).expect("bus");
+    let mut bus = Bus::new_without_bios();
     let mut cpu = Cpu::new();
-    warm_bios_for_disc_fast_boot(&mut bus, &mut cpu, DISC_FAST_BOOT_WARMUP_STEPS).expect("warmup");
-    fast_boot_disc_with_hle(&mut bus, &mut cpu, &disc, false).expect("fast boot");
+    let info = fast_boot_disc(&mut bus, &mut cpu, &disc).expect("fast boot");
+    eprintln!(
+        "[frametest] fast-boot entry=0x{:08x} payload={}B",
+        info.initial_pc, info.payload_len
+    );
     bus.cdrom.insert_disc(Some(disc));
     bus.attach_digital_pad_port1();
 

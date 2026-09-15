@@ -1,23 +1,20 @@
 //! Capture the PSoXide SPU output of a booting PS1 disc to a WAV, so the
 //! PSX synthesis can be diffed against the PICO-8 reference recordings.
 //!
-//! Fast-boots the disc (HLE warmup, skipping the BIOS intro), then steps the
-//! CPU while draining the SPU's 44.1 kHz stereo output until `--seconds` of
-//! audio is captured.
+//! Fast-boots the disc through the emulator's built-in runtime (no firmware
+//! image involved), then steps the CPU while draining the SPU's 44.1 kHz
+//! stereo output until `--seconds` of audio is captured.
 //!
 //! Usage:
 //!   psx-audio-capture --disc dist/celeste.cue --out /tmp/psx_celeste.wav \
-//!       --seconds 20 [--skip 2] [--bios /path/SCPH1001.BIN]
+//!       --seconds 20 [--skip 2]
 //!
 //! --skip discards that many seconds of audio up front (e.g. boot blip), so
 //! the WAV starts at steady state.
 
 use std::path::Path;
 
-use emulator_core::{
-    fast_boot_disc_with_hle, spu, warm_bios_for_disc_fast_boot, Bus, Cpu,
-    DISC_FAST_BOOT_WARMUP_STEPS,
-};
+use emulator_core::{fast_boot_disc, spu, Bus, Cpu};
 
 const SAMPLE_RATE: u32 = 44_100;
 const STEP_CAP: u64 = 6_000_000_000; // backstop so a stuck cart can't run forever
@@ -52,18 +49,10 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(20.0);
     let skip: f32 = arg("--skip").and_then(|s| s.parse().ok()).unwrap_or(0.0);
-    let bios_path = arg("--bios")
-        .or_else(|| std::env::var("PSX_BIOS").ok())
-        .expect("--bios <path> or PSX_BIOS env var required");
-
-    let bios = std::fs::read(&bios_path).expect("BIOS readable");
     let disc = load_disc(Path::new(&disc_path)).expect("disc readable");
-    let mut bus = Bus::new(bios).expect("bus");
+    let mut bus = Bus::new_without_bios();
     let mut cpu = Cpu::new();
-
-    warm_bios_for_disc_fast_boot(&mut bus, &mut cpu, DISC_FAST_BOOT_WARMUP_STEPS)
-        .expect("BIOS warmup");
-    let info = fast_boot_disc_with_hle(&mut bus, &mut cpu, &disc, false).expect("fast boot");
+    let info = fast_boot_disc(&mut bus, &mut cpu, &disc).expect("fast boot");
     eprintln!(
         "[capture] fast-boot entry=0x{:08x} payload={}B",
         info.initial_pc, info.payload_len

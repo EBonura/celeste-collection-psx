@@ -104,15 +104,14 @@ pub fn run() {
         }
         game::set_input(mask);
 
-        // Draw the current state as a GPU list, then run the next update and
-        // the audio while the GPU draws it (the fog levels are GPU-bound).
+        game::update();
+
         let (r, g, b) = game::bg_rgb();
         fb.clear(r, g, b); // cls(level.bg); the side bars repaint the margins
-        backend::set_deferred(true);
+        backend::set_deferred(true); // list the frame, draw it by DMA
         game::draw();
-        backend::submit();
-        game::update();
-        wait_vblank(); // renders audio while it waits
+        backend::submit(); // the GPU draws while the VBlank wait renders audio
+        wait_vblank();
         backend::set_deferred(false); // waits for the GPU
         fb.swap();
 

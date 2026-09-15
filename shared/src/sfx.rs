@@ -103,6 +103,17 @@ fn ring_flags(block: u32) -> u8 {
     }
 }
 
+/// The runtime's VBlank counter; the SDK only builds it for the console, and
+/// the host-side `cargo check` of this crate gets a stub.
+#[cfg(target_arch = "mips")]
+fn vblank_count() -> u32 {
+    psx_rt::interrupts::vblank_count()
+}
+#[cfg(not(target_arch = "mips"))]
+fn vblank_count() -> u32 {
+    0
+}
+
 /// Arm the SPU IRQ latch on ring block `MARK` (and clear a stale latch).
 unsafe fn arm_mark() {
     reg_write(SPU_IRQ_ADDR, (ring_addr(MARK) >> 3) as u16);
@@ -150,7 +161,7 @@ unsafe fn start_stream() {
     PLAY_Q16 = 0;
     MARK = MARK_AHEAD;
     arm_mark();
-    LAST_VBLANK = psx_rt::interrupts::vblank_count();
+    LAST_VBLANK = vblank_count();
     STARTED = true;
 }
 
@@ -191,7 +202,7 @@ pub fn update() {
         // Extrapolate the play head by the VBlanks elapsed (a dropped frame
         // consumed two frames of audio), then correct it from the IRQ latch: the
         // flag means the head is at or past MARK; no flag means it is not yet.
-        let vb = psx_rt::interrupts::vblank_count();
+        let vb = vblank_count();
         let elapsed = vb.wrapping_sub(LAST_VBLANK).clamp(1, 8) as i64;
         LAST_VBLANK = vb;
         PLAY_Q16 += BLOCKS_PER_FRAME_Q16 * elapsed;

@@ -198,6 +198,8 @@ static mut MUSIC_MUTE: u8 = 0;
 static mut RNG: u32 = 0x9E37_79B9;
 
 static mut ENC_S1: i32 = 0;
+static mut ENC_FILTER: usize = 0; // last predictor picked by the search
+static mut ENC_BLOCK: u32 = 0; // blocks encoded (the search runs every fourth)
 static mut ENC_S2: i32 = 0;
 
 // ---------------------------------------------------------------------------
@@ -639,7 +641,7 @@ fn noise_coefs(freq: i32, key: u8) -> (i32, i32) {
 
 /// One oscillator sample in Q15 (32768 = 1.0). PICO-8's waveforms are the raw
 /// functions of phase, unfiltered, aliasing included -- that IS the sound.
-#[inline]
+#[inline(always)]
 fn wave(
     instr: u8,
     phase: u32,
@@ -691,11 +693,12 @@ fn wave(
         }
         6 => {
             // brown-ish noise: one-pole lowpass of white noise, cutoff tracks pitch
+            // Q16 state and coefficients, folded to Q14 x Q14 so the products
+            // stay in 32 bits (the PS1 has no 64-bit multiply).
             let r = rand_q16();
-            let nl = ((*noise_last as i64 * (65536 - noise_a) as i64 + r as i64 * noise_a as i64)
-                >> 16) as i32;
+            let nl = ((*noise_last >> 2) * ((65536 - noise_a) >> 2) + (r >> 2) * (noise_a >> 2)) >> 12;
             *noise_last = nl;
-            ((nl as i64 * noise_gain as i64) >> 17) as i32
+            ((nl >> 2) * (noise_gain >> 2)) >> 13
         }
         _ => {
             // phaser: a triangle plus a second one at 109/110 the pitch, / 6
@@ -820,16 +823,70 @@ unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
         }
         ch.fade = fade.max(0);
     } else {
-        for m in mix.iter_mut() {
-            inc = inc.wrapping_add_signed(dinc);
-            inc2 = inc2.wrapping_add_signed(dinc2);
-            g += dg;
-            s.phase = s.phase.wrapping_add(inc);
-            s.phase2 = s.phase2.wrapping_add(inc2);
-            *m += (wave(instr, s.phase, s.phase2, &mut s.noise_last, na, ng) * g >> GAIN_SHIFT)
-                .clamp(-32767, 32767);
+        let osc = Osc {
+            inc,
+            dinc,
+            inc2,
+            dinc2,
+            g,
+            dg,
+            na,
+            ng,
+        };
+        // One loop per waveform so the dispatch is hoisted out of the samples.
+        match instr {
+            0 => render_osc::<0>(s, mix, osc),
+            1 => render_osc::<1>(s, mix, osc),
+            2 => render_osc::<2>(s, mix, osc),
+            3 => render_osc::<3>(s, mix, osc),
+            4 => render_osc::<4>(s, mix, osc),
+            5 => render_osc::<5>(s, mix, osc),
+            6 => render_osc::<6>(s, mix, osc),
+            _ => render_osc::<7>(s, mix, osc),
         }
     }
+}
+
+/// Per-block oscillator ramp: phase increments and gain, each stepped per sample.
+#[derive(Clone, Copy)]
+struct Osc {
+    inc: u32,
+    dinc: i32,
+    inc2: u32,
+    dinc2: i32,
+    g: i32,
+    dg: i32,
+    na: i32,
+    ng: i32,
+}
+
+/// Add one block of waveform `W` to `mix`. A channel's level is at most
+/// 8192 (|wave| <= 16384 at gain 4096 >> 13), so it needs no clamp of its own:
+/// the mix is clamped once at the end.
+#[inline(never)]
+fn render_osc<const W: u8>(s: &mut Synth, mix: &mut [i32; BLOCK_SAMPLES], o: Osc) {
+    let Osc {
+        mut inc,
+        dinc,
+        mut inc2,
+        dinc2,
+        mut g,
+        dg,
+        na,
+        ng,
+    } = o;
+    let (mut phase, mut phase2, mut noise) = (s.phase, s.phase2, s.noise_last);
+    for m in mix.iter_mut() {
+        inc = inc.wrapping_add_signed(dinc);
+        inc2 = inc2.wrapping_add_signed(dinc2);
+        g += dg;
+        phase = phase.wrapping_add(inc);
+        phase2 = phase2.wrapping_add(inc2);
+        *m += wave(W, phase, phase2, &mut noise, na, ng) * g >> GAIN_SHIFT;
+    }
+    s.phase = phase;
+    s.phase2 = phase2;
+    s.noise_last = noise;
 }
 
 // ---------------------------------------------------------------------------
@@ -841,24 +898,55 @@ const ADPCM_FILTERS: [(i32, i32); 5] = [(0, 0), (60, 0), (115, -52), (98, -55), 
 /// Encode 28 PCM samples into one SPU ADPCM block, carrying the decoder history
 /// (`ENC_S1/S2`) across blocks so the stream decodes continuously. Picks the
 /// predictor by open-loop residual peak, then quantises closed-loop.
-pub(crate) fn encode_block(pcm: &[i16; BLOCK_SAMPLES], flags: u8, out: &mut [u8]) {
+pub(crate) fn encode_block(pcm: &[i16; BLOCK_SAMPLES], flags: u8, out: &mut [u8; BLOCK_BYTES]) {
     let (s1, s2) = unsafe { (ENC_S1, ENC_S2) };
-    let mut best_f = 0usize;
-    let mut best_max = i32::MAX;
-    for (f, &(k0, k1)) in ADPCM_FILTERS.iter().enumerate() {
-        let (mut p1, mut p2) = (s1, s2);
-        let mut rmax = 0;
+    // ponytail: the predictor is re-picked every fourth block (a note is
+    // stationary for far longer than 5 ms; the SNR cost measured 1 dB on the
+    // host bench); the other blocks keep the last winner and only measure its
+    // residual peak for the shift. The search pass shares each filter's
+    // products across all five candidates.
+    let search = unsafe { ENC_BLOCK & 3 == 0 };
+    let mut best_f = unsafe { ENC_FILTER };
+    let mut best_max = 0i32;
+    let (mut p1, mut p2) = (s1, s2);
+    if search {
+        let mut rmax = [0i32; 5];
         for &x in pcm.iter() {
             let x = x as i32;
-            let r = x - ((p1 * k0) >> 6) - ((p2 * k1) >> 6);
-            rmax = rmax.max(r.abs());
+            let r = [
+                x,
+                x - ((p1 * 60) >> 6),
+                x - ((p1 * 115) >> 6) - ((p2 * -52) >> 6),
+                x - ((p1 * 98) >> 6) - ((p2 * -55) >> 6),
+                x - ((p1 * 122) >> 6) - ((p2 * -60) >> 6),
+            ];
+            for f in 0..5 {
+                rmax[f] = rmax[f].max(r[f].abs());
+            }
             p2 = p1;
             p1 = x;
         }
-        if rmax < best_max {
-            best_max = rmax;
-            best_f = f;
+        best_f = 0;
+        best_max = rmax[0];
+        for f in 1..5 {
+            if rmax[f] < best_max {
+                best_max = rmax[f];
+                best_f = f;
+            }
         }
+    } else {
+        let (k0, k1) = ADPCM_FILTERS[best_f];
+        for &x in pcm.iter() {
+            let x = x as i32;
+            let r = x - ((p1 * k0) >> 6) - ((p2 * k1) >> 6);
+            best_max = best_max.max(r.abs());
+            p2 = p1;
+            p1 = x;
+        }
+    }
+    unsafe {
+        ENC_FILTER = best_f;
+        ENC_BLOCK = ENC_BLOCK.wrapping_add(1);
     }
     // Smallest shift whose 4-bit range covers the residual peak.
     let mut shift = 12u32;
@@ -901,6 +989,7 @@ pub(crate) fn reset_encoder() {
     unsafe {
         ENC_S1 = 0;
         ENC_S2 = 0;
+        ENC_BLOCK = 0;
     }
 }
 
@@ -930,6 +1019,8 @@ pub fn load(audio: AudioData) {
         MUSIC.mask = 0;
         ENC_S1 = 0;
         ENC_S2 = 0;
+        ENC_FILTER = 0;
+        ENC_BLOCK = 0;
     }
 }
 

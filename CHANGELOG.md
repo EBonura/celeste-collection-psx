@@ -10,6 +10,12 @@ Download published on itch.io.
   The audio blocks are now rendered while the game is already waiting for
   VBlank, so they no longer count against the frame; the synth also steps
   its pitch ramps without per-sample 64-bit arithmetic.
+- Less CPU per frame all round: the ADPCM encoder re-picks its predictor
+  every fourth block and shares the filter products in its search (about a
+  third of what it cost, for 1 dB of encoder SNR), the oscillator loops are
+  specialised per waveform, and PICO-8 circle fills (the Celeste 2 clouds)
+  merge rows of equal width into flat rectangles, the cheapest GPU
+  primitive, instead of one two-triangle quad per row.
 
 ## 0.2.1 | 2026-09-15
 

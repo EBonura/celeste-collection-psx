@@ -550,44 +550,27 @@ pub const NO_CLIP: ClipRect = (i16::MIN, i16::MIN, i16::MAX, i16::MAX);
 
 /// [`fillp_circfill`] under a PICO-8 `clip()` rectangle.
 pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize, clip: ClipRect) {
-    if radius < 0 {
-        return;
-    }
     unsafe {
         fillp_begin(c, pattern);
         let (camx, camy) = (CAM_X, CAM_Y);
-        let span = |dx: i32, yy: i16| {
-            if yy < camy || yy >= camy + 128 || yy < clip.1 || yy >= clip.3 {
-                return;
-            }
+        circle_spans(radius, |dx, y0, y1| {
             let lx = (cx - dx as i16).max(camx).max(clip.0);
             let rx = (cx + dx as i16 + 1).min(camx + 128).min(clip.2);
-            if rx <= lx {
+            let ty = (cy + y0).max(camy).max(clip.1);
+            let by = (cy + y1 + 1).min(camy + 128).min(clip.3);
+            if rx <= lx || by <= ty {
                 return;
             }
-            let (u, v) = (((lx - camx) * SCALE) as u8, ((yy - camy) * SCALE) as u8);
+            let (u, v) = (((lx - camx) * SCALE) as u8, ((ty - camy) * SCALE) as u8);
             fillp_prim(
                 sx(lx),
-                sy(yy),
+                sy(ty),
                 (sx(rx) - sx(lx)) as u16,
-                (sy(yy + 1) - sy(yy)) as u16,
+                (sy(by) - sy(ty)) as u16,
                 u,
                 v,
             );
-        };
-        let r2 = radius as i32 * radius as i32;
-        let mut dx = radius as i32;
-        let mut dy = 0i32;
-        while dy <= radius as i32 {
-            while dx * dx + dy * dy > r2 {
-                dx -= 1;
-            }
-            span(dx, cy + dy as i16);
-            if dy != 0 {
-                span(dx, cy - dy as i16);
-            }
-            dy += 1;
-        }
+        });
         fillp_end();
     }
 }
@@ -691,46 +674,76 @@ fn side_strip_v(x0: i16, x1: i16, y0: i16, y1: i16, c0: (u8, u8, u8), c1: (u8, u
     gpu::draw_tri_gouraud([(x1, y0), (x0, y1), (x1, y1)], [c0, c1, c1]);
 }
 
-/// PICO-8 `circfill(x,y,r,c)` -- one 1px span per row, drawn symmetrically about
-/// the centre. `dx` is tracked monotonically downward as `dy` grows (it only ever
-/// decreases), so the total span work is O(r), not the naive O(r^2). This is hot
-/// (clouds/hair/particles issue dozens per frame) but with the real VBlank sync
-/// there's ample budget, so spans stay 1px for exact circles.
+/// PICO-8 `circfill(x,y,r,c)`: the rows of the disc, drawn symmetrically about
+/// the centre, with runs of rows that share a half-width merged into one flat
+/// rectangle (GP0 0x60, three words). The row half-width only ever shrinks as
+/// `dy` grows, so the span work is O(r). Clouds issue dozens of these per frame
+/// and the one-quad-per-row version was the biggest GPU FIFO stall in the game.
 pub fn circfill(cx: i16, cy: i16, radius: i16, c: i32) {
     circfill_clip(cx, cy, radius, c, NO_CLIP);
 }
 
 /// [`circfill`] under a PICO-8 `clip()` rectangle (e.g. the flat-bottomed clouds).
 pub fn circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, clip: ClipRect) {
+    let (r, g, b) = rgb(c);
+    circle_spans(radius, |dx, y0, y1| {
+        let lx = (cx - dx as i16).max(clip.0);
+        let rx = (cx + dx as i16 + 1).min(clip.2);
+        let ty = (cy + y0).max(clip.1);
+        let by = (cy + y1 + 1).min(clip.3);
+        if rx > lx && by > ty {
+            flat_rect(sx(lx), sy(ty), (sx(rx) - sx(lx)) as u16, (sy(by) - sy(ty)) as u16, r, g, b);
+        }
+    });
+}
+
+/// The rows of a PICO-8 disc as `(dx, dy0, dy1)`: rows `dy0..=dy1` (relative to
+/// the centre, both halves included) span `cx-dx..=cx+dx`. Rows with the same
+/// `dx` are merged.
+fn circle_spans(radius: i16, mut emit: impl FnMut(i32, i16, i16)) {
     if radius < 0 {
         return;
     }
-    let (r, g, b) = rgb(c);
-    let r2 = radius as i32 * radius as i32;
-    let row = |dx: i32, yy: i16| {
-        if yy < clip.1 || yy >= clip.3 {
-            return;
-        }
-        let lx = (cx - dx as i16).max(clip.0);
-        let rx = (cx + dx as i16 + 1).min(clip.2);
-        if rx <= lx {
-            return;
-        }
-        let (x0, x1, y0, y1) = (sx(lx), sx(rx), sy(yy), sy(yy + 1));
-        gpu::draw_quad_flat([(x0, y0), (x1, y0), (x0, y1), (x1, y1)], r, g, b);
-    };
-    let mut dx = radius as i32;
+    let r = radius as i32;
+    let r2 = r * r;
+    let mut dx = r;
     let mut dy = 0i32;
-    while dy <= radius as i32 {
+    // The rows of one half at a time: dy = run_start..dy share `dx`.
+    let mut run_dx = r;
+    let mut run_start = 0i32;
+    while dy <= r {
         while dx * dx + dy * dy > r2 {
             dx -= 1;
         }
-        row(dx, cy + dy as i16);
-        if dy != 0 {
-            row(dx, cy - dy as i16);
+        if dx != run_dx {
+            emit_run(&mut emit, run_dx, run_start, dy - 1);
+            run_dx = dx;
+            run_start = dy;
         }
         dy += 1;
     }
+    emit_run(&mut emit, run_dx, run_start, r);
+}
+
+/// One run of rows `dy0..=dy1` below the centre and its mirror above it (the
+/// centre row belongs to the lower half only).
+fn emit_run(emit: &mut impl FnMut(i32, i16, i16), dx: i32, dy0: i32, dy1: i32) {
+    if dy0 == 0 {
+        // Straddles the centre: one rectangle from -dy1 to dy1.
+        emit(dx, -dy1 as i16, dy1 as i16);
+    } else {
+        emit(dx, dy0 as i16, dy1 as i16);
+        emit(dx, -dy1 as i16, -dy0 as i16);
+    }
+}
+
+/// Flat rectangle (GP0 0x60): the cheapest primitive the GPU has, where the
+/// SDK's `draw_rect_flat` is two triangles.
+fn flat_rect(x: i16, y: i16, w: u16, h: u16, r: u8, g: u8, b: u8) {
+    wait_cmd_ready();
+    write_gp0(0x6000_0000 | pack_color(r, g, b));
+    write_gp0(pack_vertex(x, y));
+    write_gp0(pack_xy(w, h));
 }
 
 /// PICO-8 `circ(x,y,r,c)` -- 1px outline (midpoint circle), each point a 2x2

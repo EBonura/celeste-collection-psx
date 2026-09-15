@@ -79,8 +79,8 @@ static mut LAST_VBLANK: u32 = 0;
 /// DMA source for the ring uploads (word-aligned, whole ring so init can fill
 /// it in one go).
 #[repr(C, align(4))]
-struct Stage([u8; (RING_BLOCKS as usize) * BLOCK_BYTES]);
-static mut STAGE: Stage = Stage([0; (RING_BLOCKS as usize) * BLOCK_BYTES]);
+struct Stage([[u8; BLOCK_BYTES]; RING_BLOCKS as usize]);
+static mut STAGE: Stage = Stage([[0; BLOCK_BYTES]; RING_BLOCKS as usize]);
 
 // ---------------------------------------------------------------------------
 // Stream
@@ -133,8 +133,7 @@ unsafe fn arm_mark() {
 unsafe fn render_one() {
     let mut pcm = [0i16; BLOCK_SAMPLES];
     synth::render_block(&mut pcm);
-    let off = (WRITE % RING_BLOCKS) as usize * BLOCK_BYTES;
-    synth::encode_block(&pcm, ring_flags(WRITE), &mut STAGE.0[off..off + BLOCK_BYTES]);
+    synth::encode_block(&pcm, ring_flags(WRITE), &mut STAGE.0[(WRITE % RING_BLOCKS) as usize]);
     WRITE += 1;
 }
 
@@ -144,10 +143,9 @@ unsafe fn flush() {
     while UPLOADED < WRITE {
         let first = UPLOADED % RING_BLOCKS;
         let run = (WRITE - UPLOADED).min(RING_BLOCKS - first);
-        let off = first as usize * BLOCK_BYTES;
         spu::upload_adpcm(
             SpuAddr::new(ring_addr(UPLOADED)),
-            &STAGE.0[off..off + run as usize * BLOCK_BYTES],
+            STAGE.0[first as usize..(first + run) as usize].as_flattened(),
         );
         UPLOADED += run;
     }
@@ -217,15 +215,11 @@ pub fn init(audio: AudioData) {
         spu::init();
         spu::set_main_volume(Volume::MAX, Volume::MAX);
         // Silent ring, with its loop flags in place.
-        for b in 0..RING_BLOCKS {
-            let off = (b as usize) * BLOCK_BYTES;
-            STAGE.0[off] = 0;
-            STAGE.0[off + 1] = ring_flags(b);
-            for k in 2..BLOCK_BYTES {
-                STAGE.0[off + k] = 0;
-            }
+        for (b, blk) in STAGE.0.iter_mut().enumerate() {
+            *blk = [0; BLOCK_BYTES];
+            blk[1] = ring_flags(b as u32);
         }
-        spu::upload_adpcm(SpuAddr::new(RING_BASE), &STAGE.0);
+        spu::upload_adpcm(SpuAddr::new(RING_BASE), STAGE.0.as_flattened());
     }
 }
 

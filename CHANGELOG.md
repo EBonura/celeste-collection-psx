@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 | 2026-09-15
+
+Download published on itch.io.
+
+- Gameplay held at 60 fps again. The streamed audio is rendered per real
+  second, so one late frame doubled the next frame's rendering and kept it
+  late: in PSoXide both games settled into a steady 30 fps once in a level.
+  The audio blocks are now rendered while the game is already waiting for
+  VBlank, so they no longer count against the frame; the synth also steps
+  its pitch ramps without per-sample 64-bit arithmetic.
+
 ## 0.2.1 | 2026-09-15
 
 Download published on itch.io.

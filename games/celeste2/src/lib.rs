@@ -106,7 +106,8 @@ pub fn run() {
 
         game::update();
 
-        fb.clear(0, 0, 16); // PICO-8 dark-blue backdrop
+        let (r, g, b) = game::bg_rgb();
+        fb.clear(r, g, b); // cls(level.bg); the side bars repaint the margins
         game::draw();
         gpu::draw_sync();
         wait_vblank();
@@ -251,5 +252,33 @@ pub fn run_music_iso(pattern: i32) {
         if i >= masks.len() {
             return;
         }
+    }
+}
+
+/// Offline scene capture: boot straight into level `level` with no input, the
+/// follow-pan off (so the 2x playfield is a fixed 8px crop top and bottom), and
+/// run the game loop. Driven by the `scene` binary + tools/psx-audio-capture's
+/// frametest; compared with a PICO-8 frame by tools/scene_cmp.py.
+pub fn run_scene(level: i32) {
+    gpu::init(VideoMode::Ntsc, Resolution::R320X240);
+    let mut fb = FrameBuffer::new(320, 240);
+    gpu::set_draw_area(0, 0, 319, 239);
+    gpu::set_draw_offset(0, 0);
+    backend::upload_assets(CART);
+    sfx::init(AUDIO);
+    backend::set_screen_follow(false);
+    pico8::rng::srand(42);
+    game::start_at_level(level);
+    psx_rt::interrupts::install_vblank_counter();
+    loop {
+        game::set_input(0);
+        game::update();
+        let (r, g, b) = game::bg_rgb();
+        fb.clear(r, g, b);
+        game::draw();
+        gpu::draw_sync();
+        wait_vblank();
+        fb.swap();
+        sfx::update();
     }
 }

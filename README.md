@@ -71,7 +71,8 @@ Each game is a standalone Cargo workspace exposing `run()`, shipped on its own o
 disc image). Shared runtime (rendering, SPU audio, fonts, pause menu) lives in `shared/`. The
 PSoXide SDK revision is recorded in `psoxide-pin/`; `tools/` holds the PICO-8 to Rust
 asset/audio converters and the fidelity benches (`synth_bench.py` scores the synth on the host,
-`sfx_bench.sh` scores the emulator's SPU output; both against PICO-8 recordings in `audio-ref/`).
+`sfx_bench.sh` scores the emulator's SPU output, both against PICO-8 recordings in `audio-ref/`;
+`scene.sh` puts a PICO-8 frame of a level or room next to the PSX frame, pixel for pixel).
 The optional `tools/psx-audio-capture` host tool also uses emulator libraries; those are not
 linked into the PS1 games. Combined-disc
 builds pass `PSOXIDE_FROM` explicitly to select the tested split components.

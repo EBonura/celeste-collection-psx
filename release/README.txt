@@ -1,4 +1,4 @@
-Celeste Classic Collection (PSX)  -  v0.2.0
+Celeste Classic Collection (PSX)  -  v0.2.1
 ===========================================
 
 Two PICO-8 Celeste Classic games, the original Celeste and Celeste 2: Lani's
@@ -9,8 +9,11 @@ To run:
     PCSX-Redux), or
   - burn it to a CD-R and run on a modchipped console.
 
-In the launcher: D-pad to choose, Cross to play, Select for credits.
+In the launcher: D-pad to choose, Cross to play, Select for credits. On a
+DualShock in analog mode the left stick works as the d-pad everywhere.
 
+v0.2.1: analog controller support -- the left stick of a DualShock in
+        analog mode works as the d-pad in both games and the menus.
 v0.2.0: sound rebuilt -- the PICO-8 synthesiser now runs on the PS1 itself
         and streams to the sound chip, tuned against recordings of the real
         carts, so every effect and tune sounds like the original. Celeste 2

@@ -73,8 +73,10 @@ PSoXide SDK revision is recorded in `psoxide-pin/`; `tools/` holds the PICO-8 to
 asset/audio converters and the fidelity benches (`synth_bench.py` scores the synth on the host,
 `sfx_bench.sh` scores the emulator's SPU output, both against PICO-8 recordings in `audio-ref/`;
 `scene.sh` puts a PICO-8 frame of a level or room next to the PSX frame, pixel for pixel).
-The optional `tools/psx-audio-capture` host tool also uses emulator libraries; those are not
-linked into the PS1 games. Combined-disc
+The benches drive the optional `tools/psx-audio-capture` host tools, which build against the
+[emulator](https://github.com/EBonura/PSoXide-emulator) (`make capture-tools` clones and
+bootstraps it into `.psoxide-emulator/` at a pinned revision); nothing of it is linked into
+the PS1 games. Combined-disc
 builds pass `PSOXIDE_FROM` explicitly to select the tested split components.
 
 ## Credits

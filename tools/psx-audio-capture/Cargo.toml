@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 # Standalone host tool (builds for the host, NOT the mipsel PSX target).
-# Path-deps the PSoXide emulator crates from the submodule; cargo resolves
-# their workspace-inherited deps from the submodule's own workspace root,
-# so the submodule itself stays untouched.
+# Path-deps the emulator crates from the tree `make emulator` clones and
+# bootstraps (.psoxide-emulator, pinned in the Makefile); cargo resolves their
+# workspace-inherited deps from that tree's own workspace root. psx-iso comes
+# from the same tree so its `Disc` type is the one emulator-core takes.
 [workspace]
 
 [[bin]]
@@ -18,6 +19,6 @@ name = "frametest"
 path = "src/bin/frametest.rs"
 
 [dependencies]
-emulator-core    = { path = "../../.psoxide/emu/crates/emulator-core" }
-psx-iso          = { path = "../../.psoxide/crates/psx-iso" }
-psoxide-settings = { path = "../../.psoxide/emu/crates/psoxide-settings" }
+emulator-core    = { path = "../../.psoxide-emulator/emu/crates/emulator-core" }
+psoxide-settings = { path = "../../.psoxide-emulator/emu/crates/psoxide-settings" }
+psx-iso          = { path = "../../.psoxide-emulator/crates/psx-iso" }

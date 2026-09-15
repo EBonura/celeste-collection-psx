@@ -117,19 +117,18 @@ pub fn run() {
 
         game::set_input(pad_mask());
 
+        // Draw the current state as a GPU list, then run the next update and
+        // the audio while the GPU draws it. Freeze frames (dash/orb) skip the
+        // update inside `game::update`, and drawing them again is what the
+        // cart does too (its `_draw` keeps running).
+        fb.clear(0, 0, 0);
+        backend::set_deferred(true);
+        game::draw();
+        backend::submit();
         game::update();
-
-        // Freeze frames (dash/orb): hold the last drawn frame on screen by not
-        // redrawing or swapping -- exactly the PICO-8 freeze effect.
-        if game::freeze() > 0 {
-            wait_vblank();
-        } else {
-            fb.clear(0, 0, 0);
-            game::draw();
-            gpu::draw_sync();
-            wait_vblank();
-            fb.swap();
-        }
+        wait_vblank(); // renders audio while it waits
+        backend::set_deferred(false); // waits for the GPU
+        fb.swap();
 
         sfx::update(); // stream the next slice of PICO-8 audio to the SPU
     }
@@ -295,9 +294,11 @@ pub fn run_scene(x: i32, y: i32) {
             wait_vblank();
         } else {
             fb.clear(0, 0, 0);
+            backend::set_deferred(true); // list the frame, draw it by DMA
             game::draw();
-            gpu::draw_sync();
+            backend::submit(); // the GPU draws while the VBlank wait renders audio
             wait_vblank();
+            backend::set_deferred(false); // waits for the GPU
             fb.swap();
         }
         sfx::update();

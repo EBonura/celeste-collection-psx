@@ -176,15 +176,49 @@ struct Music {
 }
 
 static mut AUDIO: AudioData = EMPTY_AUDIO;
-static mut CHANNELS: [Channel; 4] = [CH0; 4];
-static mut MUSIC: Music = Music {
-    pattern: -1,
-    offset: 0,
-    length: 0,
-    fade_vol: 65536,
-    fade_step: 0,
-    mask: 0,
+
+/// The sequencer and oscillator state. The synth reads and writes it on every
+/// block, so on the console it lives in the 1 KiB scratchpad behind the mix
+/// and PCM buffers (main RAM stalls every load); the host keeps a static.
+#[repr(C)]
+struct State {
+    channels: [Channel; 4],
+    music: Music,
+}
+const STATE0: State = State {
+    channels: [CH0; 4],
+    music: Music {
+        pattern: -1,
+        offset: 0,
+        length: 0,
+        fade_vol: 65536,
+        fade_step: 0,
+        mask: 0,
+    },
 };
+#[cfg(target_arch = "mips")]
+unsafe fn state() -> &'static mut State {
+    const _: () = assert!(
+        0xC0 + core::mem::size_of::<State>() <= 1024,
+        "synth state overflows the scratchpad"
+    );
+    &mut *(0x1F80_00C0 as *mut State)
+}
+#[cfg(not(target_arch = "mips"))]
+unsafe fn state() -> &'static mut State {
+    static mut STATE: State = STATE0;
+    &mut *core::ptr::addr_of_mut!(STATE)
+}
+#[allow(non_snake_case)]
+#[inline(always)]
+unsafe fn CHANNELS() -> &'static mut [Channel; 4] {
+    &mut state().channels
+}
+#[allow(non_snake_case)]
+#[inline(always)]
+unsafe fn MUSIC() -> &'static mut Music {
+    &mut state().music
+}
 /// Index just past the last audible note of each sfx (0 = all silent).
 static mut LAST_NOTE: [u8; 64] = [0; 64];
 /// Rows (Q32) one block advances at each SFX speed: 28 * ROW / (183 * speed).
@@ -400,7 +434,7 @@ unsafe fn pattern_duration(pattern: usize) -> i64 {
 }
 
 unsafe fn launch_sfx(sfx: i32, chan: usize, offset: i64, length: i64, is_music: bool) {
-    let ch = &mut CHANNELS[chan];
+    let ch = &mut CHANNELS()[chan];
     ch.main.sfx = sfx;
     ch.main.offset = offset.max(0);
     ch.main.time = 0;
@@ -415,57 +449,57 @@ unsafe fn launch_sfx(sfx: i32, chan: usize, offset: i64, length: i64, is_music: 
 }
 
 unsafe fn set_music_pattern(pattern: i32) {
-    for ch in CHANNELS.iter_mut() {
+    for ch in CHANNELS().iter_mut() {
         if ch.is_music {
             ch.main.sfx = -1;
             ch.sfx_music = -1;
         }
     }
     if !(0..64).contains(&pattern) {
-        MUSIC.pattern = -1;
-        MUSIC.offset = 0;
-        MUSIC.mask = 0;
-        MUSIC.length = 0;
+        MUSIC().pattern = -1;
+        MUSIC().offset = 0;
+        MUSIC().mask = 0;
+        MUSIC().length = 0;
         return;
     }
     let duration = pattern_duration(pattern as usize);
     if duration <= 0 {
-        MUSIC.pattern = -1;
-        MUSIC.offset = 0;
-        MUSIC.mask = 0;
-        MUSIC.length = 0;
+        MUSIC().pattern = -1;
+        MUSIC().offset = 0;
+        MUSIC().mask = 0;
+        MUSIC().length = 0;
         return;
     }
-    MUSIC.pattern = pattern;
-    MUSIC.offset = 0;
-    MUSIC.length = duration * ROW;
+    MUSIC().pattern = pattern;
+    MUSIC().offset = 0;
+    MUSIC().length = duration * ROW;
     for c in 0..4 {
         let b = AUDIO.music[pattern as usize][c];
         if b & 0x40 != 0 {
             continue;
         }
         let n = (b & 0x3F) as i32;
-        if CHANNELS[c].main.sfx == -1 {
+        if CHANNELS()[c].main.sfx == -1 {
             launch_sfx(n, c, 0, 0, true);
         } else {
             // An sfx() is borrowing the channel: the music resumes when it ends.
-            CHANNELS[c].sfx_music = n;
+            CHANNELS()[c].sfx_music = n;
         }
     }
 }
 
 /// Advance the music clock by one block (called before the channels).
 unsafe fn advance_music() {
-    if MUSIC.pattern < 0 {
+    if MUSIC().pattern < 0 {
         return;
     }
-    MUSIC.offset += ROWS_PER_BLOCK_Q32;
-    MUSIC.fade_vol = (MUSIC.fade_vol + MUSIC.fade_step).clamp(0, 65536);
-    if MUSIC.fade_step < 0 && MUSIC.fade_vol <= 0 {
+    MUSIC().offset += ROWS_PER_BLOCK_Q32;
+    MUSIC().fade_vol = (MUSIC().fade_vol + MUSIC().fade_step).clamp(0, 65536);
+    if MUSIC().fade_step < 0 && MUSIC().fade_vol <= 0 {
         set_music_pattern(-1);
-    } else if MUSIC.offset >= MUSIC.length {
-        let pat = MUSIC.pattern as usize;
-        let mut next = MUSIC.pattern + 1;
+    } else if MUSIC().offset >= MUSIC().length {
+        let pat = MUSIC().pattern as usize;
+        let mut next = MUSIC().pattern + 1;
         if AUDIO.music[pat][2] & 0x80 != 0 {
             next = -1; // stop flag
         } else if AUDIO.music[pat][1] & 0x80 != 0 {
@@ -481,13 +515,13 @@ unsafe fn advance_music() {
 
 /// Resume a parked music sfx on an idle channel, at where the music clock is now.
 unsafe fn resume_music_sfx(c: usize) {
-    let ch = &mut CHANNELS[c];
+    let ch = &mut CHANNELS()[c];
     if ch.main.sfx != -1 || ch.sfx_music == -1 {
         return;
     }
     let index = ch.sfx_music as usize;
     let speed = sfx_speed(index) as i64;
-    let mut new_offset = MUSIC.offset / speed;
+    let mut new_offset = MUSIC().offset / speed;
     let (ls, le) = sfx_loop(index);
     let loop_range = (le - ls) as i64;
     let mut want_play = true;
@@ -509,7 +543,7 @@ unsafe fn resume_music_sfx(c: usize) {
 /// macro) into new oscillator parameters, detecting harsh changes for the
 /// de-click crossfade.
 unsafe fn sequence_channel(c: usize) {
-    let ch = &mut CHANNELS[c];
+    let ch = &mut CHANNELS()[c];
     let last = ch.last;
     let mut new = Synth {
         phase: last.phase,
@@ -696,7 +730,8 @@ fn wave(
             // Q16 state and coefficients, folded to Q14 x Q14 so the products
             // stay in 32 bits (the PS1 has no 64-bit multiply).
             let r = rand_q16();
-            let nl = ((*noise_last >> 2) * ((65536 - noise_a) >> 2) + (r >> 2) * (noise_a >> 2)) >> 12;
+            let nl =
+                ((*noise_last >> 2) * ((65536 - noise_a) >> 2) + (r >> 2) * (noise_a >> 2)) >> 12;
             *noise_last = nl;
             ((nl >> 2) * (noise_gain >> 2)) >> 13
         }
@@ -716,7 +751,7 @@ unsafe fn synth_gain(s: &Synth, c: usize) -> i32 {
         if MUSIC_MUTE & (1 << c) != 0 {
             return 0;
         }
-        ((s.vol as i64 * MUSIC.fade_vol as i64 * MUSIC_GAIN as i64) >> 19) as i32
+        ((s.vol as i64 * MUSIC().fade_vol as i64 * MUSIC_GAIN as i64) >> 19) as i32
     } else {
         s.vol * SFX_GAIN / 8
     }
@@ -733,7 +768,7 @@ fn hz_to_inc(freq: i32) -> u32 {
 
 /// Render one block of one channel into `mix` (i32 accumulator).
 unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
-    let ch = &mut CHANNELS[c];
+    let ch = &mut CHANNELS()[c];
     let gain = synth_gain(&ch.last, c);
     let fade_gain = if ch.fade > 0 {
         synth_gain(&ch.fade_synth, c)
@@ -904,7 +939,8 @@ pub(crate) fn encode_block(pcm: &[i16; BLOCK_SAMPLES], flags: u8, out: &mut [u8;
     // stationary for far longer than 5 ms; the SNR cost measured 1 dB on the
     // host bench); the other blocks keep the last winner and only measure its
     // residual peak for the shift. The search pass shares each filter's
-    // products across all five candidates.
+    // products across all five candidates. (Reusing the shift too was tried:
+    // another 1.5 dB, not worth 2% of the frame.)
     let search = unsafe { ENC_BLOCK & 3 == 0 };
     let mut best_f = unsafe { ENC_FILTER };
     let mut best_max = 0i32;
@@ -938,8 +974,7 @@ pub(crate) fn encode_block(pcm: &[i16; BLOCK_SAMPLES], flags: u8, out: &mut [u8;
         let (k0, k1) = ADPCM_FILTERS[best_f];
         for &x in pcm.iter() {
             let x = x as i32;
-            let r = x - ((p1 * k0) >> 6) - ((p2 * k1) >> 6);
-            best_max = best_max.max(r.abs());
+            best_max = best_max.max((x - ((p1 * k0) >> 6) - ((p2 * k1) >> 6)).abs());
             p2 = p1;
             p1 = x;
         }
@@ -948,24 +983,43 @@ pub(crate) fn encode_block(pcm: &[i16; BLOCK_SAMPLES], flags: u8, out: &mut [u8;
         ENC_FILTER = best_f;
         ENC_BLOCK = ENC_BLOCK.wrapping_add(1);
     }
-    // Smallest shift whose 4-bit range covers the residual peak.
-    let mut shift = 12u32;
-    while shift > 0 && best_max > (7 << (12 - shift)) {
-        shift -= 1;
-    }
+    let shift = shift_for(best_max);
     let (k0, k1) = ADPCM_FILTERS[best_f];
-    let (mut p1, mut p2) = (s1, s2);
+    quantize(pcm, k0, k1, shift, s1, s2, out);
     out[0] = ((best_f as u8) << 4) | shift as u8;
     out[1] = flags;
+}
+
+/// Smallest shift whose 4-bit range covers a residual peak.
+fn shift_for(rmax: i32) -> u32 {
+    let mut shift = 12u32;
+    while shift > 0 && rmax > (7 << (12 - shift)) {
+        shift -= 1;
+    }
+    shift
+}
+
+/// Closed-loop quantisation of one block with predictor `(k0, k1)` and `shift`,
+/// from decoder history `(s1, s2)`. Writes the nibbles and the new history.
+fn quantize(
+    pcm: &[i16; BLOCK_SAMPLES],
+    k0: i32,
+    k1: i32,
+    shift: u32,
+    s1: i32,
+    s2: i32,
+    out: &mut [u8; BLOCK_BYTES],
+) {
+    let (mut p1, mut p2) = (s1, s2);
     let rs = 12 - shift;
     for i in 0..BLOCK_SAMPLES {
         let pred = ((p1 * k0) >> 6) + ((p2 * k1) >> 6);
         let r = pcm[i] as i32 - pred;
-        let q = if rs > 0 {
+        let q = (if rs > 0 {
             (r + (1 << (rs - 1))) >> rs
         } else {
             r
-        }
+        })
         .clamp(-8, 7);
         let dec = (((q << 12) >> shift) + pred).clamp(-0x8000, 0x7FFF);
         p2 = p1;
@@ -1012,11 +1066,11 @@ pub fn load(audio: AudioData) {
         for (speed, rows) in ROWS_PER_BLOCK_AT_SPEED.iter_mut().enumerate() {
             *rows = (BLOCK_SAMPLES as i64) * ROW / (183 * speed.max(1) as i64);
         }
-        CHANNELS = [CH0; 4];
-        MUSIC.pattern = -1;
-        MUSIC.fade_vol = 65536;
-        MUSIC.fade_step = 0;
-        MUSIC.mask = 0;
+        *state() = STATE0;
+        MUSIC().pattern = -1;
+        MUSIC().fade_vol = 65536;
+        MUSIC().fade_step = 0;
+        MUSIC().mask = 0;
         ENC_S1 = 0;
         ENC_S2 = 0;
         ENC_FILTER = 0;
@@ -1024,15 +1078,29 @@ pub fn load(audio: AudioData) {
     }
 }
 
+/// The four-channel mix accumulator. On the console it lives in the 1 KiB
+/// scratchpad (zero-wait data RAM; the PS1 has no data cache), where main RAM
+/// would stall every one of the ~450 accesses a block makes.
+#[cfg(target_arch = "mips")]
+unsafe fn mix_buf() -> &'static mut [i32; BLOCK_SAMPLES] {
+    &mut *(0x1F80_0000 as *mut [i32; BLOCK_SAMPLES])
+}
+#[cfg(not(target_arch = "mips"))]
+unsafe fn mix_buf() -> &'static mut [i32; BLOCK_SAMPLES] {
+    static mut MIX: [i32; BLOCK_SAMPLES] = [0; BLOCK_SAMPLES];
+    &mut *core::ptr::addr_of_mut!(MIX)
+}
+
 /// Render the next 28 samples of the four-channel mix.
 pub fn render_block(pcm: &mut [i16; BLOCK_SAMPLES]) {
     unsafe {
-        let mut mix = [0i32; BLOCK_SAMPLES];
+        let mix = mix_buf();
+        *mix = [0i32; BLOCK_SAMPLES];
         advance_music();
         for c in 0..4 {
             resume_music_sfx(c);
             sequence_channel(c);
-            render_channel(c, &mut mix);
+            render_channel(c, mix);
         }
         for i in 0..BLOCK_SAMPLES {
             pcm[i] = mix[i].clamp(-32767, 32767) as i16;
@@ -1059,25 +1127,25 @@ pub fn play_ch(id: i32, channel: i32, offset: i32, length: i32) {
                 if channel != -1 && channel as usize != c {
                     continue;
                 }
-                if !CHANNELS[c].is_music {
+                if !CHANNELS()[c].is_music {
                     if id == -1 {
-                        CHANNELS[c].main.sfx = -1;
+                        CHANNELS()[c].main.sfx = -1;
                     } else {
-                        CHANNELS[c].can_loop = false;
+                        CHANNELS()[c].can_loop = false;
                     }
                 }
             }
             return;
         }
         let mut chan = channel;
-        let mask = MUSIC.mask;
+        let mask = MUSIC().mask;
         if chan == -1 {
             // A free channel, or one already playing this sfx (PICO-8 reuses it).
             for c in 0..4 {
                 if mask & (1 << c) != 0 {
                     continue;
                 }
-                if CHANNELS[c].main.sfx == -1 || CHANNELS[c].main.sfx == id {
+                if CHANNELS()[c].main.sfx == -1 || CHANNELS()[c].main.sfx == id {
                     chan = c as i32;
                     break;
                 }
@@ -1086,7 +1154,7 @@ pub fn play_ch(id: i32, channel: i32, offset: i32, length: i32) {
         if chan == -1 {
             // Else borrow the first music channel not reserved by music()'s mask.
             for c in 0..4 {
-                if mask & (1 << c) == 0 && CHANNELS[c].is_music {
+                if mask & (1 << c) == 0 && CHANNELS()[c].is_music {
                     chan = c as i32;
                     break;
                 }
@@ -1099,7 +1167,7 @@ pub fn play_ch(id: i32, channel: i32, offset: i32, length: i32) {
                 if mask & (1 << c) != 0 {
                     continue;
                 }
-                let s = CHANNELS[c].main.sfx;
+                let s = CHANNELS()[c].main.sfx;
                 if !(0..64).contains(&s) {
                     continue;
                 }
@@ -1114,13 +1182,13 @@ pub fn play_ch(id: i32, channel: i32, offset: i32, length: i32) {
             return;
         }
         for c in 0..4 {
-            if CHANNELS[c].main.sfx == id {
-                CHANNELS[c].main.sfx = -1;
+            if CHANNELS()[c].main.sfx == id {
+                CHANNELS()[c].main.sfx = -1;
             }
         }
         let c = chan as usize;
-        if CHANNELS[c].main.sfx != -1 && CHANNELS[c].is_music {
-            CHANNELS[c].sfx_music = CHANNELS[c].main.sfx; // music resumes afterwards
+        if CHANNELS()[c].main.sfx != -1 && CHANNELS()[c].is_music {
+            CHANNELS()[c].sfx_music = CHANNELS()[c].main.sfx; // music resumes afterwards
         }
         launch_sfx(
             id,
@@ -1144,18 +1212,18 @@ pub fn music(pattern: i32, fade_len: i32, mask: i32) {
             if fade_len <= 0 {
                 set_music_pattern(-1);
             } else {
-                MUSIC.fade_step = -((MUSIC.fade_vol as i64 * MUSIC_FADE_Q16_PER_MS_BLOCK
+                MUSIC().fade_step = -((MUSIC().fade_vol as i64 * MUSIC_FADE_Q16_PER_MS_BLOCK
                     / (fade_len as i64 * 65536))
                     .max(1)) as i32;
             }
             return;
         }
-        MUSIC.mask = (mask & 0xF) as u8;
-        MUSIC.fade_vol = 65536;
-        MUSIC.fade_step = 0;
+        MUSIC().mask = (mask & 0xF) as u8;
+        MUSIC().fade_vol = 65536;
+        MUSIC().fade_step = 0;
         if fade_len > 0 {
-            MUSIC.fade_vol = 0;
-            MUSIC.fade_step = (MUSIC_FADE_Q16_PER_MS_BLOCK / fade_len as i64).max(1) as i32;
+            MUSIC().fade_vol = 0;
+            MUSIC().fade_step = (MUSIC_FADE_Q16_PER_MS_BLOCK / fade_len as i64).max(1) as i32;
         }
         set_music_pattern(pattern);
     }

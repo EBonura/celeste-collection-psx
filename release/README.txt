@@ -1,4 +1,4 @@
-Celeste Classic Collection (PSX)  -  v0.1.1
+Celeste Classic Collection (PSX)  -  v0.2.0
 ===========================================
 
 Two PICO-8 Celeste Classic games, the original Celeste and Celeste 2: Lani's
@@ -11,6 +11,12 @@ To run:
 
 In the launcher: D-pad to choose, Cross to play, Select for credits.
 
+v0.2.0: sound rebuilt -- the PICO-8 synthesiser now runs on the PS1 itself
+        and streams to the sound chip, tuned against recordings of the real
+        carts, so every effect and tune sounds like the original. Celeste 2
+        levels now spawn all their objects (later spikes, grapplers,
+        checkpoints and crumble blocks were missing), show their intended
+        colours, and run at a steady 60 fps throughout.
 v0.1.1: improved compatibility with original PlayStation controllers
         (works with a genuine SCPH-1200 pad, not just third-party ones).
 

@@ -910,86 +910,175 @@ pub fn circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, clip: ClipRect) {
 
 /// Draw a clipped disc as flat rectangles (`tex` = None) or as dithered
 /// textured rectangles (`tex` = the texcoord word's CLUT half; the pattern
-/// phase is derived from the screen position). Closure-free and, in deferred
-/// mode, with the list cursor in a register: closures captured the clip by
-/// reference and per-rectangle `emit` calls spent more on the list's static
-/// loads and stores than on the rectangle itself (each one a RAM stall).
+/// phase is derived from the screen position).
 #[inline(always)]
 fn disc_fill(cx: i16, cy: i16, radius: i16, clip: ClipRect, cmd: u32, tex: Option<u32>) {
     if radius < 0 {
         return;
     }
-    let scale = unsafe { SCALE as i32 };
+    unsafe {
+        if !DEFERRED {
+            disc_fill_immediate(cx, cy, radius, clip, cmd, tex);
+        } else if let Some(t) = tex {
+            disc_fill_list::<true>(cx, cy, radius, clip, cmd, t);
+        } else {
+            disc_fill_list::<false>(cx, cy, radius, clip, cmd, 0);
+        }
+    }
+}
+
+/// The listed disc: the hot path (the clouds are ~84 of these a frame). The
+/// merged runs come from the per-radius table through a raw pointer, the
+/// rectangle words go straight into the list with the cursor in a register,
+/// and the loop keeps few enough values live to stay out of the stack (the
+/// PS1 has no data cache, so every spill is a RAM stall).
+#[inline(never)]
+unsafe fn disc_fill_list<const DITHER: bool>(
+    cx: i16,
+    cy: i16,
+    radius: i16,
+    clip: ClipRect,
+    cmd: u32,
+    tex: u32,
+) {
+    let words = if DITHER { 4 } else { 3 };
+    let scale = SCALE as i32;
     // Screen x = px * scale + sx_off (camera and centring folded in).
-    let sx_off = ofs_x() as i32 - unsafe { CAM_X as i32 } * scale;
-    let sy_off = unsafe { V_OFS as i32 - CAM_Y as i32 * scale };
+    let ox = ofs_x() as i32;
+    let oy = V_OFS as i32;
+    let sx_off = ox - CAM_X as i32 * scale;
+    let sy_off = oy - CAM_Y as i32 * scale;
     let (cx, cy) = (cx as i32, cy as i32);
     let (clx, cty, crx, cby) = (clip.0 as i32, clip.1 as i32, clip.2 as i32, clip.3 as i32);
-    let words = if tex.is_some() { 4 } else { 3 };
-    unsafe {
-        let deferred = DEFERRED;
-        let (mut len, mut head) = (LIST_LEN, NODE_HEAD);
-        let mut runs = DiscRuns::new(radius as i32);
-        while let Some((dx, dy0, dy1)) = runs.next() {
-            let lx = (cx - dx).max(clx);
-            let rx = (cx + dx + 1).min(crx);
-            if rx <= lx {
+    let (mut p, end) = disc_table(radius as i32);
+    let mut len = LIST_LEN;
+    let mut head = NODE_HEAD;
+    while p != end {
+        let run = *p;
+        p = p.add(1);
+        let dx = (run & 0xFF) as i32;
+        let lx = (cx - dx).max(clx);
+        let rx = (cx + dx + 1).min(crx);
+        if rx <= lx {
+            continue;
+        }
+        let x = lx * scale + sx_off;
+        let w = (rx - lx) * scale;
+        let dy0 = ((run >> 8) & 0xFF) as i32;
+        let dy1 = (run >> 16) as i32;
+        // The run below the centre (or straddling it), then its mirror above.
+        let mut ty = if dy0 == 0 { cy - dy1 } else { cy + dy0 };
+        let mut by = cy + dy1 + 1;
+        let mut halves = if dy0 == 0 { 1 } else { 2 };
+        loop {
+            let t = ty.max(cty);
+            let b = by.min(cby);
+            if b > t {
+                if len - head - 1 + words > NODE_MAX {
+                    LIST_LEN = len;
+                    packet(words);
+                    len = LIST_LEN;
+                    head = NODE_HEAD;
+                }
+                let y = t * scale + sy_off;
+                let q = LIST.0.as_mut_ptr().add(len);
+                *q = cmd;
+                *q.add(1) = pack_vertex(x as i16, y as i16);
+                if DITHER {
+                    *q.add(2) = tex | (((y - oy) as u32 & 0xFF) << 8) | ((x - ox) as u32 & 0xFF);
+                    *q.add(3) = pack_xy(w as u16, ((b - t) * scale) as u16);
+                } else {
+                    *q.add(2) = pack_xy(w as u16, ((b - t) * scale) as u16);
+                }
+                len += words;
+            }
+            halves -= 1;
+            if halves == 0 {
+                break;
+            }
+            ty = cy - dy1;
+            by = cy - dy0 + 1;
+        }
+    }
+    LIST_LEN = len;
+}
+
+/// The packed merged runs of a disc of radius `r`: the table's for the radii
+/// it covers, else computed into a static scratch (a stack array here cost a
+/// `memset` per disc).
+#[inline(always)]
+unsafe fn disc_table(r: i32) -> (*const u32, *const u32) {
+    if r as usize <= DISC_LUT_RADIUS && DISC_LUT_BUILT {
+        let (n, runs) = &DISC_LUT[r as usize];
+        let p = runs.as_ptr();
+        return (p, p.add(*n as usize));
+    }
+    disc_table_slow(r)
+}
+
+#[inline(never)]
+unsafe fn disc_table_slow(r: i32) -> (*const u32, *const u32) {
+    if r as usize <= DISC_LUT_RADIUS {
+        build_disc_lut();
+        return disc_table(r);
+    }
+    static mut SCRATCH: [u32; 2 * (DISC_LUT_RADIUS + 1)] = [0; 2 * (DISC_LUT_RADIUS + 1)];
+    let mut runs = DiscRuns::computed(r);
+    let mut n = 0usize;
+    while let Some((dx, dy0, dy1)) = runs.next() {
+        if n == SCRATCH.len() {
+            break;
+        }
+        SCRATCH[n] = dx as u32 | (dy0 as u32) << 8 | (dy1 as u32) << 16;
+        n += 1;
+    }
+    let p = SCRATCH.as_ptr();
+    (p, p.add(n))
+}
+
+/// The immediate-mode disc (launcher, pause overlay): plain and slow is fine.
+unsafe fn disc_fill_immediate(
+    cx: i16,
+    cy: i16,
+    radius: i16,
+    clip: ClipRect,
+    cmd: u32,
+    tex: Option<u32>,
+) {
+    let scale = SCALE as i32;
+    let sx_off = ofs_x() as i32 - CAM_X as i32 * scale;
+    let sy_off = V_OFS as i32 - CAM_Y as i32 * scale;
+    let (cx, cy) = (cx as i32, cy as i32);
+    let (clx, cty, crx, cby) = (clip.0 as i32, clip.1 as i32, clip.2 as i32, clip.3 as i32);
+    let mut runs = DiscRuns::new(radius as i32);
+    while let Some((dx, dy0, dy1)) = runs.next() {
+        let lx = (cx - dx).max(clx);
+        let rx = (cx + dx + 1).min(crx);
+        if rx <= lx {
+            continue;
+        }
+        let x = (lx * scale + sx_off) as i16;
+        let w = ((rx - lx) * scale) as u16;
+        let ranges = if dy0 == 0 {
+            [(cy - dy1, cy + dy1 + 1), (0, 0)]
+        } else {
+            [(cy + dy0, cy + dy1 + 1), (cy - dy1, cy - dy0 + 1)]
+        };
+        for (ty, by) in ranges {
+            let t = ty.max(cty);
+            let b = by.min(cby);
+            if b <= t {
                 continue;
             }
-            let x = (lx * scale + sx_off) as i16;
-            let w = ((rx - lx) * scale) as u16;
-            // The run below the centre, then its mirror above (one rectangle
-            // when the run straddles the centre row).
-            let mut half = 0;
-            while half < 2 {
-                let (y0, y1) = if dy0 == 0 {
-                    half = 2;
-                    (-dy1, dy1)
-                } else if half == 0 {
-                    half = 1;
-                    (dy0, dy1)
-                } else {
-                    half = 2;
-                    (-dy1, -dy0)
-                };
-                let ty = (cy + y0).max(cty);
-                let by = (cy + y1 + 1).min(cby);
-                if by <= ty {
-                    continue;
-                }
-                let y = (ty * scale + sy_off) as i16;
-                let h = ((by - ty) * scale) as u16;
-                let v = pack_vertex(x, y);
-                let xy = pack_xy(w, h);
-                if deferred {
-                    if len - head - 1 + words > NODE_MAX {
-                        LIST_LEN = len;
-                        packet(words);
-                        len = LIST_LEN;
-                        head = NODE_HEAD;
-                    }
-                    *LIST.0.get_unchecked_mut(len) = cmd;
-                    *LIST.0.get_unchecked_mut(len + 1) = v;
-                    if let Some(t) = tex {
-                        *LIST.0.get_unchecked_mut(len + 2) = uv_word(t, x, y);
-                        *LIST.0.get_unchecked_mut(len + 3) = xy;
-                    } else {
-                        *LIST.0.get_unchecked_mut(len + 2) = xy;
-                    }
-                    len += words;
-                } else {
-                    wait_cmd_ready();
-                    write_gp0(cmd);
-                    write_gp0(v);
-                    if let Some(t) = tex {
-                        write_gp0(uv_word(t, x, y));
-                    }
-                    write_gp0(xy);
-                }
+            let y = (t * scale + sy_off) as i16;
+            let h = ((b - t) * scale) as u16;
+            wait_cmd_ready();
+            write_gp0(cmd);
+            write_gp0(pack_vertex(x, y));
+            if let Some(t) = tex {
+                write_gp0(uv_word(t, x, y));
             }
-        }
-        if deferred {
-            LIST_LEN = len;
+            write_gp0(pack_xy(w, h));
         }
     }
 }

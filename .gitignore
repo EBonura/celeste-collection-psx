@@ -42,3 +42,4 @@ psoxide-pin/target/
 
 # Reference audio may also be a symlink into another checkout
 audio-ref
+tools/psx-audio-capture/Cargo.lock

@@ -19,6 +19,10 @@ fn main() {
     // PSX-EXE image (the script lays out the executable header) instead
     // of an ELF.
     println!("cargo:rustc-link-arg=-T{}", ld.display());
-    println!("cargo:rustc-link-arg=--oformat=binary");
+    // PSX_ELF=1 keeps the ELF (symbols for profiling); it is not a bootable image.
+    if std::env::var_os("PSX_ELF").is_none() {
+        println!("cargo:rustc-link-arg=--oformat=binary");
+    }
+    println!("cargo:rerun-if-env-changed=PSX_ELF");
     println!("cargo:rerun-if-changed={}", ld.display());
 }

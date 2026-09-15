@@ -187,6 +187,9 @@ static mut MUSIC: Music = Music {
 };
 /// Index just past the last audible note of each sfx (0 = all silent).
 static mut LAST_NOTE: [u8; 64] = [0; 64];
+/// Rows (Q32) one block advances at each SFX speed: 28 * ROW / (183 * speed).
+/// Tabulated at load; the 64-bit division cost more than a note's rendering.
+static mut ROWS_PER_BLOCK_AT_SPEED: [i64; 256] = [0; 256];
 /// Pause-menu gains in eighths (8 = unity).
 static mut MUSIC_GAIN: i32 = 8;
 static mut SFX_GAIN: i32 = 8;
@@ -261,7 +264,7 @@ unsafe fn update_sfx(
     let index = st.sfx as usize;
     let speed = sfx_speed(index);
     let (loop_start, loop_end) = sfx_loop(index);
-    let per_block = (BLOCK_SAMPLES as i64) * ROW / (183 * speed as i64);
+    let per_block = ROWS_PER_BLOCK_AT_SPEED[speed as usize];
     let offset = st.offset;
     let mut next_offset = offset + per_block;
     let next_time = st.time + per_block;
@@ -760,7 +763,7 @@ unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
     };
     // A continuing note interpolates pitch and level from the previous block's
     // values (smooth slides/drops/fades, like PICO-8's per-sample evaluation).
-    let (mut f, df, mut g, dg) = if ch.ramp {
+    let (f, df, mut g, dg) = if ch.ramp {
         let g0 = synth_gain(
             &Synth {
                 vol: ch.prev_vol,
@@ -777,6 +780,14 @@ unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
     } else {
         (s.freq, 0, gain, 0)
     };
+    // The phase increment is linear in the pitch, so a ramp steps it per sample
+    // rather than recomputing it (a 64-bit multiply and, for the phaser's
+    // detuned voice, a division) for every sample: on the PS1 that arithmetic
+    // was most of the synth's cost.
+    let mut inc = hz_to_inc(f);
+    let mut inc2 = inc / 110 * 109;
+    let dinc = ((df as i64 * HZ_TO_INC as i64) >> 8) as i32;
+    let dinc2 = dinc / 110 * 109;
 
     if ch.fade > 0 {
         let fsy = &mut ch.fade_synth;
@@ -790,11 +801,11 @@ unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
         let finstr = fsy.instr;
         let mut fade = ch.fade;
         for m in mix.iter_mut() {
-            f += df;
+            inc = inc.wrapping_add_signed(dinc);
+            inc2 = inc2.wrapping_add_signed(dinc2);
             g += dg;
-            let inc = hz_to_inc(f);
             s.phase = s.phase.wrapping_add(inc);
-            s.phase2 = s.phase2.wrapping_add(inc / 110 * 109);
+            s.phase2 = s.phase2.wrapping_add(inc2);
             let v = (wave(instr, s.phase, s.phase2, &mut s.noise_last, na, ng) * g >> GAIN_SHIFT)
                 .clamp(-32767, 32767);
             fsy.phase = fsy.phase.wrapping_add(finc);
@@ -808,22 +819,13 @@ unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
             fade -= FADE_STEP_Q16;
         }
         ch.fade = fade.max(0);
-    } else if df == 0 && dg == 0 {
-        let inc = hz_to_inc(f);
-        let inc2 = inc / 110 * 109;
-        for m in mix.iter_mut() {
-            s.phase = s.phase.wrapping_add(inc);
-            s.phase2 = s.phase2.wrapping_add(inc2);
-            *m += (wave(instr, s.phase, s.phase2, &mut s.noise_last, na, ng) * g >> GAIN_SHIFT)
-                .clamp(-32767, 32767);
-        }
     } else {
         for m in mix.iter_mut() {
-            f += df;
+            inc = inc.wrapping_add_signed(dinc);
+            inc2 = inc2.wrapping_add_signed(dinc2);
             g += dg;
-            let inc = hz_to_inc(f);
             s.phase = s.phase.wrapping_add(inc);
-            s.phase2 = s.phase2.wrapping_add(inc / 110 * 109);
+            s.phase2 = s.phase2.wrapping_add(inc2);
             *m += (wave(instr, s.phase, s.phase2, &mut s.noise_last, na, ng) * g >> GAIN_SHIFT)
                 .clamp(-32767, 32767);
         }
@@ -917,6 +919,9 @@ pub fn load(audio: AudioData) {
                 }
             }
             LAST_NOTE[i] = last;
+        }
+        for (speed, rows) in ROWS_PER_BLOCK_AT_SPEED.iter_mut().enumerate() {
+            *rows = (BLOCK_SAMPLES as i64) * ROW / (183 * speed.max(1) as i64);
         }
         CHANNELS = [CH0; 4];
         MUSIC.pattern = -1;

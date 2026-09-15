@@ -28,7 +28,7 @@ use psx_pad::button;
 // it's called instead of syncing to the display, which left only ~1.3ms of
 // per-frame compute before dropping below 60fps. The VBlank IRQ counter
 // (already installed for audio) gives the full ~16.6ms frame.
-use psx_rt::interrupts::wait_vblank;
+use pico8::sfx::wait_vblank; // renders audio ahead while it waits
 
 /// Celeste's spritesheet + tilemap as the active PICO-8 cart.
 const CART: Cart = Cart {

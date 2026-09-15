@@ -29,7 +29,7 @@ use psx_pad::button;
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display, leaving almost no per-frame compute budget; the
 // VBlank IRQ counter gives the full ~16.6ms frame.
-use psx_rt::interrupts::wait_vblank;
+use pico8::sfx::wait_vblank; // renders audio ahead while it waits
 
 /// Celeste 2's spritesheet + tilemap as the active PICO-8 cart.
 pub const CART: Cart = Cart {

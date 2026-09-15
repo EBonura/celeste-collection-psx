@@ -35,7 +35,7 @@ use psx_gpu::{self as gpu, framebuf::FrameBuffer, Resolution, VideoMode};
 use psx_pad::{button, ButtonState};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display; the VBlank IRQ counter waits for the real blank.
-use psx_rt::interrupts::wait_vblank;
+use pico8::sfx::wait_vblank; // renders audio ahead while it waits
 use psx_vram::{upload_16bpp, Clut, TexDepth, Tpage, VramRect};
 
 // Menu SFX are dedicated CC0 one-shot samples (see pico8::menusfx), NOT in-game

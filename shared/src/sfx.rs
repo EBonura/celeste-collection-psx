@@ -15,7 +15,9 @@
 //! tempo is exactly 183 samples per speed unit like PICO-8, independent of
 //! the frame rate. `update` must be called every frame; it polls the latch,
 //! renders as many 28-sample blocks as the play head has consumed, and DMAs
-//! them into the ring ahead of it.
+//! them into the ring ahead of it. Use this module's [`wait_vblank`] in the
+//! same loop: it renders the next frame's blocks while the game is idle, so
+//! the audio costs the frame nothing.
 //!
 //! The sound data is the cart's own 0x3100/0x3200 RAM (tools/p8_audio.py);
 //! the synthesiser itself lives in [`crate::synth`], this module is the stream.
@@ -53,8 +55,11 @@ const BLOCKS_PER_FRAME_Q16: i64 = 860_160;
 /// IRQ marker distance ahead of the estimate: more than a frame's consumption
 /// so a lagging estimate is pulled forward by every latch.
 const MARK_AHEAD: u32 = 16;
-/// Most blocks rendered in one update (bounds the staging buffer + CPU spike).
+/// Most blocks rendered in one update (bounds the CPU spike after a stall).
 const MAX_BLOCKS_PER_UPDATE: u32 = 64;
+/// How far past the last update's target the VBlank wait may render ahead:
+/// one frame's consumption, so the next update finds its blocks staged.
+const FILL_AHEAD_BLOCKS: u32 = 14;
 const SPU_IRQ_ADDR: u32 = 0x1F80_1DA4;
 const SPUCNT_IRQ_ENABLE: u16 = 1 << 6;
 const SPUSTAT_IRQ_FLAG: u16 = 1 << 6;
@@ -66,6 +71,8 @@ const SPUSTAT_IRQ_FLAG: u16 = 1 << 6;
 static mut STARTED: bool = false;
 static mut PLAY_Q16: i64 = 0; // estimated play head
 static mut WRITE: u32 = 0; // next block to render
+static mut UPLOADED: u32 = 0; // next block to DMA: [UPLOADED, WRITE) is staged only
+static mut TARGET: u32 = 0; // where the last update wanted WRITE
 static mut MARK: u32 = 0; // block the SPU IRQ latch is armed on
 static mut LAST_VBLANK: u32 = 0;
 
@@ -122,29 +129,59 @@ unsafe fn arm_mark() {
     reg_write(SPUCNT, cnt | SPUCNT_IRQ_ENABLE);
 }
 
-/// Render blocks `WRITE..WRITE+n` into the stage buffer and DMA them into the
-/// ring (in one or two runs around the wrap).
-unsafe fn render_and_upload(n: u32) {
-    let mut done = 0u32;
-    while done < n {
-        let first = WRITE % RING_BLOCKS;
-        let run = (n - done).min(RING_BLOCKS - first);
-        for b in 0..run {
-            let mut pcm = [0i16; BLOCK_SAMPLES];
-            synth::render_block(&mut pcm);
-            let off = (b as usize) * BLOCK_BYTES;
-            synth::encode_block(
-                &pcm,
-                ring_flags(WRITE),
-                &mut STAGE.0[off..off + BLOCK_BYTES],
-            );
-            WRITE += 1;
-        }
-        let bytes = (run as usize) * BLOCK_BYTES;
-        spu::upload_adpcm(SpuAddr::new(ring_addr(WRITE - run)), &STAGE.0[..bytes]);
-        done += run;
+/// Render block `WRITE` into its ring slot of the stage buffer.
+unsafe fn render_one() {
+    let mut pcm = [0i16; BLOCK_SAMPLES];
+    synth::render_block(&mut pcm);
+    let off = (WRITE % RING_BLOCKS) as usize * BLOCK_BYTES;
+    synth::encode_block(&pcm, ring_flags(WRITE), &mut STAGE.0[off..off + BLOCK_BYTES]);
+    WRITE += 1;
+}
+
+/// DMA the staged blocks `UPLOADED..WRITE` into the ring (one or two runs
+/// around the wrap).
+unsafe fn flush() {
+    while UPLOADED < WRITE {
+        let first = UPLOADED % RING_BLOCKS;
+        let run = (WRITE - UPLOADED).min(RING_BLOCKS - first);
+        let off = first as usize * BLOCK_BYTES;
+        spu::upload_adpcm(
+            SpuAddr::new(ring_addr(UPLOADED)),
+            &STAGE.0[off..off + run as usize * BLOCK_BYTES],
+        );
+        UPLOADED += run;
     }
 }
+
+/// Render one block ahead if the stream has room for it: `true` when it did.
+/// The idle time in [`wait_vblank`] is spent here, so a frame's audio costs
+/// the frame nothing unless the CPU is genuinely saturated. Without this the
+/// loop was bistable: one late frame doubled the next update's rendering,
+/// which kept the frame late (a steady 30 fps on PSoXide).
+unsafe fn fill_one() -> bool {
+    if !STARTED || WRITE >= TARGET + FILL_AHEAD_BLOCKS {
+        return false;
+    }
+    render_one();
+    true
+}
+
+/// Wait for the next VBlank, rendering audio ahead meanwhile. Use this instead
+/// of `psx_rt::interrupts::wait_vblank` in any loop that calls [`update`].
+#[cfg(target_arch = "mips")]
+pub fn wait_vblank() {
+    let v = vblank_count();
+    while vblank_count() == v {
+        unsafe {
+            if !fill_one() {
+                core::hint::spin_loop();
+            }
+        }
+    }
+}
+/// Host: the VBlank counter never advances, so waiting would hang.
+#[cfg(not(target_arch = "mips"))]
+pub fn wait_vblank() {}
 
 /// Key the stream voice on at block 0 (after the first blocks are in the ring).
 unsafe fn start_stream() {
@@ -174,6 +211,8 @@ pub fn init(audio: AudioData) {
     unsafe {
         STARTED = false;
         WRITE = 0;
+        UPLOADED = 0;
+        TARGET = 0;
 
         spu::init();
         spu::set_main_volume(Volume::MAX, Volume::MAX);
@@ -195,7 +234,11 @@ pub fn init(audio: AudioData) {
 pub fn update() {
     unsafe {
         if !STARTED {
-            render_and_upload(LEAD_BLOCKS);
+            while WRITE < LEAD_BLOCKS {
+                render_one();
+            }
+            flush();
+            TARGET = WRITE;
             start_stream();
             return;
         }
@@ -222,11 +265,14 @@ pub fn update() {
             // The head overran the writer (a long stall): skip ahead. The ring's
             // stale lap plays for the gap; the decoder history is stale too.
             WRITE = play + 4;
+            UPLOADED = WRITE;
             synth::reset_encoder();
         }
-        let target = play + LEAD_BLOCKS;
-        if target > WRITE {
-            render_and_upload((target - WRITE).min(MAX_BLOCKS_PER_UPDATE));
+        TARGET = play + LEAD_BLOCKS;
+        let stop = TARGET.min(WRITE + MAX_BLOCKS_PER_UPDATE);
+        while WRITE < stop {
+            render_one();
         }
+        flush();
     }
 }

@@ -57,7 +57,12 @@ const SPRITE_CLUT_B: Clut = Clut::new(16, 480);
 const MAP_ALT_CLUT: Clut = Clut::new(32, 480);
 const TEXT_CLUT: Clut = Clut::new(0, 481); // one row, re-uploaded per print colour
 const FILLP_TPAGE: Tpage = Tpage::new(768, 0, TexDepth::Bit4); // 8x8 dither patterns side-by-side
-const FILL_CLUT: Clut = Clut::new(0, 482); // 2 entries (0 = transparent, 1 = fill colour)
+                                                               // Two fillp CLUT slots (entry 0 = transparent, 1 = the fill colour), ping-ponged
+                                                               // on every colour change: the GPU caches a CLUT by its clut word, so rewriting
+                                                               // one slot in place mid-frame (fog in white, then columns in dark blue) left the
+                                                               // columns drawn in the fog's white.
+const FILL_CLUT_A: Clut = Clut::new(0, 482);
+const FILL_CLUT_B: Clut = Clut::new(16, 482);
 
 // ---- Screen transform ----
 // Pixel scale: 1 = native 128x128 (whole screen visible, centred in 320x240),
@@ -383,8 +388,11 @@ const FILLP_VALUES: [u16; 3] = [
     0b1010_0101_1010_0101,
 ];
 
-/// Build an 8x8 4bpp tile from a cart 4x4 fillp pattern: texel 1 where the bit is
-/// set (drawn), 0 elsewhere (transparent). 16 halfwords (2 wide x 8 tall).
+/// Build an 8x8 4bpp tile from a cart 4x4 fillp pattern: texel 1 (drawn) where the
+/// pattern bit is CLEAR, 0 (transparent) where it is set -- PICO-8's `.1` patterns
+/// (all three here) paint the colour on the 0 bits and leave the 1 bits
+/// transparent, e.g. the columns' sparse pattern is solid colour with a few holes.
+/// 16 halfwords (2 wide x 8 tall).
 fn build_pattern(p: u16, scale: usize) -> [u16; 16] {
     let mut out = [0u16; 16];
     let mut y = 0usize;
@@ -393,7 +401,7 @@ fn build_pattern(p: u16, scale: usize) -> [u16; 16] {
         let mut x = 0usize;
         while x < 8 {
             let bit = 15 - (((y / scale) % 4) * 4 + ((x / scale) % 4));
-            if (p >> bit) & 1 != 0 {
+            if (p >> bit) & 1 == 0 {
                 hw[x / 4] |= 1u16 << ((x % 4) * 4);
             }
             x += 1;
@@ -442,9 +450,20 @@ unsafe fn set_tex_window(mask_x: u32, mask_y: u32, off_x: u32, off_y: u32) {
     );
 }
 
-/// Colour currently in the fillp CLUT (so a run of same-colour dithered fills,
-/// e.g. a level's columns or fog clouds, uploads it once, not per primitive).
+/// Colour currently in the active fillp CLUT slot (so a run of same-colour
+/// dithered fills, e.g. a level's columns or fog clouds, uploads it once, not per
+/// primitive) and which slot holds it.
 static mut FILL_CLUT_COL: u16 = 0xFFFF;
+static mut FILL_CLUT_SLOT: bool = false;
+
+#[inline]
+fn fill_clut() -> Clut {
+    if unsafe { FILL_CLUT_SLOT } {
+        FILL_CLUT_B
+    } else {
+        FILL_CLUT_A
+    }
+}
 
 /// Set up dithered drawing in colour `c` with pattern `pattern`: upload the fill
 /// CLUT (1 = colour, 0 = transparent) if it changed, select the pattern tpage as
@@ -460,10 +479,9 @@ unsafe fn fillp_begin(c: i32, pattern: usize) {
     let col = PICO8_CLUT[(PAL[(c as usize) & 15] as usize) & 15];
     if col != FILL_CLUT_COL {
         FILL_CLUT_COL = col;
-        upload_16bpp(
-            VramRect::new(FILL_CLUT.x(), FILL_CLUT.y(), 2, 1),
-            &[0u16, col],
-        );
+        FILL_CLUT_SLOT = !FILL_CLUT_SLOT; // new clut word -> the GPU reloads it
+        let clut = fill_clut();
+        upload_16bpp(VramRect::new(clut.x(), clut.y(), 2, 1), &[0u16, col]);
     }
     FILLP_TPAGE.apply_as_draw_mode();
     let tile = pattern as u32 + if SCALE == 1 { 3 } else { 0 };
@@ -480,7 +498,7 @@ unsafe fn fillp_prim(x: i16, y: i16, w: u16, h: u16, u: u8, v: u8) {
     wait_cmd_ready();
     write_gp0(0x6400_0000 | pack_color(0x80, 0x80, 0x80));
     write_gp0(pack_vertex(x, y));
-    write_gp0(pack_texcoord(u, v, FILL_CLUT.uv_clut_word()));
+    write_gp0(pack_texcoord(u, v, fill_clut().uv_clut_word()));
     write_gp0(pack_xy(w, h));
 }
 

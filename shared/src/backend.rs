@@ -154,8 +154,11 @@ pub fn begin_sprite_pass() {
 /// Words of list storage: a frame is ~450 primitives (~2k words) plus CLUT
 /// uploads; a full list is submitted and waited on, then refilled.
 const LIST_WORDS: usize = 8192;
-/// Most data words the DMA walker takes from one node.
-const NODE_MAX: usize = 255;
+/// Sony's Run-Time Library Overview 4.6, p. 8-13 limits a combined
+/// primitive to 16 words in total. Reserve one for the DMA tag. A node
+/// must fit the GPU command FIFO; the tag's 8-bit count is not its capacity.
+/// Keep complete GP0 packets together, including small CLUT uploads.
+const NODE_MAX: usize = 15;
 #[repr(C, align(16))]
 struct List([u32; LIST_WORDS]);
 static mut LIST: List = List([0; LIST_WORDS]);

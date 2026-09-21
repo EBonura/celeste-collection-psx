@@ -19,4 +19,4 @@ publish = false
 [workspace]
 
 [dependencies]
-psoxide-link = { git = "https://github.com/EBonura/PSoXide.git", rev = "74c9b9ed411a3ba6788910fcdad104c4902a4530" }
+psoxide-link = { git = "https://github.com/EBonura/PSoXide.git", rev = "93e39d6dad6aa1899298c0d7e108fe0d81cbaa76" }

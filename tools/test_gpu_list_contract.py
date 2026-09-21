@@ -6,7 +6,6 @@ No assets, executable code or RAM outside its GPU command list are included.
 """
 import json
 from pathlib import Path
-import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,11 +58,11 @@ class GpuListContract(unittest.TestCase):
         self.nodes = json.loads((ROOT / "tools/fixtures/gpu-list-classic-frame.json").read_text())
         self.commands = [packet for node in self.nodes for packet in packets(node["words"])]
 
-    def test_backend_config_respects_total_primitive_limit(self):
+    def test_backend_uses_sdk_ordered_stream(self):
         source = (ROOT / "shared/src/backend.rs").read_text()
-        maximum = int(re.search(r"const NODE_MAX: usize = (\d+);", source).group(1))
-        self.assertLessEqual(maximum, SAFE_PAYLOAD_WORDS)
-        self.assertGreaterEqual(maximum, max(map(len, self.commands)))
+        self.assertIn("gpu::ordered::OrderedCommandStream", source)
+        self.assertNotIn("const NODE_MAX", source)
+        self.assertNotIn("fn kick_pending", source)
 
     def test_shipped_fixture_demonstrates_violation(self):
         self.assertEqual([node["count"] for node in self.nodes], [254, 253, 252, 236])

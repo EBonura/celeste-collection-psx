@@ -154,178 +154,74 @@ pub fn begin_sprite_pass() {
 /// Words of list storage: a frame is ~450 primitives (~2k words) plus CLUT
 /// uploads; a full list is submitted and waited on, then refilled.
 const LIST_WORDS: usize = 8192;
-/// Sony's Run-Time Library Overview 4.6, p. 8-13 limits a combined
-/// primitive to 16 words in total. Reserve one for the DMA tag. A node
-/// must fit the GPU command FIFO; the tag's 8-bit count is not its capacity.
-/// Keep complete GP0 packets together, including small CLUT uploads.
-const NODE_MAX: usize = 15;
 #[repr(C, align(16))]
 struct List([u32; LIST_WORDS]);
 static mut LIST: List = List([0; LIST_WORDS]);
-static mut LIST_LEN: usize = 0; // words used, including node headers
-static mut NODE_HEAD: usize = 0; // index of the open node's header word
+static mut STREAM: Option<gpu::ordered::OrderedCommandStream> = None;
 static mut DEFERRED: bool = false;
-static mut SUBMITTED: bool = false;
-static mut SENT_UPTO: usize = 0; // header index of the first node not yet handed to DMA
 
-/// Route the backend's GPU output through the display list (`true`) or straight
-/// to GP0 (`false`, the default). Switching to immediate mode submits and waits
-/// for anything already listed.
+#[inline]
+unsafe fn stream() -> &'static mut gpu::ordered::OrderedCommandStream {
+    let slot = &mut *core::ptr::addr_of_mut!(STREAM);
+    slot.get_or_insert_with(|| {
+        gpu::ordered::OrderedCommandStream::new(&mut *core::ptr::addr_of_mut!(LIST.0))
+    })
+}
+
+/// Select SDK ordered DMA output or immediate GP0 output. Switching to
+/// immediate mode drains the list before SDK font or upload calls can run.
 pub fn set_deferred(on: bool) {
     unsafe {
         if DEFERRED && !on {
             draw_sync();
         }
         DEFERRED = on;
-        if on && LIST_LEN == 0 {
-            open_node();
-        }
     }
 }
 
-#[inline]
-unsafe fn open_node() {
-    NODE_HEAD = LIST_LEN;
-    LIST.0[NODE_HEAD] = 0x00FF_FFFF; // terminator until the next node links it
-    LIST_LEN += 1;
-}
-
-/// Close the open node: its header gets the data-word count and the address of
-/// the node that follows (`next` = the list index, or the terminator). Then, if
-/// the DMA channel is idle, hand it every closed node not yet sent: the GPU
-/// starts on the frame while the CPU is still listing the rest of it, the
-/// overlap the GP0 FIFO used to give immediate-mode drawing.
-#[inline]
-unsafe fn close_node(next_index: Option<usize>) {
-    let words = (LIST_LEN - NODE_HEAD - 1) as u32;
-    let link = match next_index {
-        Some(i) => (core::ptr::addr_of!(LIST.0[i]) as u32) & 0x00FF_FFFF,
-        None => 0x00FF_FFFF,
-    };
-    LIST.0[NODE_HEAD] = (words << 24) | link;
-    if !psx_io::dma::is_busy(psx_io::dma::Channel::Gpu) {
-        kick_pending();
-    }
-}
-
-/// DMA the closed nodes `SENT_UPTO..=NODE_HEAD` as one chain (the last one's
-/// link becomes the terminator; a node closed later starts the next chain).
-/// The caller has checked that the channel is idle, or waited for it.
-unsafe fn kick_pending() {
-    if SENT_UPTO > NODE_HEAD {
-        return;
-    }
-    LIST.0[NODE_HEAD] = (LIST.0[NODE_HEAD] & 0xFF00_0000) | 0x00FF_FFFF;
-    gpu::submit_linked_list_async(core::ptr::addr_of!(LIST.0[SENT_UPTO]));
-    SENT_UPTO = LIST_LEN;
-    SUBMITTED = true;
-}
-
-/// Reserve room for a packet of `n` words in the open node, starting a new node
-/// (or submitting a full list) when it would not fit.
-#[inline(always)]
-unsafe fn packet(n: usize) {
-    if LIST_LEN - NODE_HEAD - 1 + n > NODE_MAX {
-        if LIST_LEN + 1 + n > LIST_WORDS {
-            // Out of storage: draw what we have, then start over.
-            draw_sync();
-        } else {
-            close_node(Some(LIST_LEN));
-            open_node();
-        }
-    }
-}
-
-/// Append one GP0 word to the open packet.
-#[inline(always)]
-unsafe fn put(w: u32) {
-    LIST.0[LIST_LEN] = w;
-    LIST_LEN += 1;
-}
-
-/// Emit a complete GP0 packet: listed in deferred mode, written otherwise.
-/// Generic over the packet size and by value, so the words stay in registers
-/// (a slice of a stack array turned into a `memcpy` call per primitive).
 #[inline(always)]
 fn emit<const N: usize>(words: [u32; N]) {
     unsafe {
         if DEFERRED {
-            packet(N);
-            let mut len = LIST_LEN;
-            for w in words {
-                *LIST.0.get_unchecked_mut(len) = w;
-                len += 1;
-            }
-            LIST_LEN = len;
+            stream().push_packet(words);
         } else {
             wait_cmd_ready();
-            for w in words {
-                write_gp0(w);
+            for word in words {
+                write_gp0(word);
             }
         }
     }
 }
 
-/// A CPU-to-VRAM upload of 16-bit pixels (GP0 0xA0): listed in deferred mode
-/// so it lands between the draws that precede and follow it.
 #[inline(never)]
 fn emit_upload(rect: VramRect, pixels: &[u16]) {
     unsafe {
-        if !DEFERRED {
+        if DEFERRED {
+            stream().push_upload(rect.x, rect.y, rect.w, rect.h, pixels);
+        } else {
             upload_16bpp(rect, pixels);
-            return;
-        }
-        let words = pixels.len().div_ceil(2);
-        packet(3 + words);
-        put(0xA000_0000);
-        put((rect.y as u32) << 16 | rect.x as u32);
-        put((rect.h as u32) << 16 | rect.w as u32);
-        let mut i = 0;
-        while i + 1 < pixels.len() {
-            put(pixels[i] as u32 | (pixels[i + 1] as u32) << 16);
-            i += 2;
-        }
-        if i < pixels.len() {
-            put(pixels[i] as u32);
         }
     }
 }
 
-/// Hand the frame's list to the GPU (DMA channel 2, linked-list mode) and
-/// return at once; the CPU is free until [`draw_sync`]. No-op outside deferred
-/// mode or when nothing was listed.
+/// Submit the SDK ordered stream while retaining its DMA storage.
 pub fn submit() {
     unsafe {
-        if !DEFERRED || LIST_LEN <= NODE_HEAD + 1 {
-            return; // nothing listed since the last kick
+        if DEFERRED {
+            stream().submit();
         }
-        close_node(None);
-        if SENT_UPTO <= NODE_HEAD {
-            // The channel was busy when the node closed: queue behind it.
-            gpu::submit_linked_list_wait();
-            kick_pending();
-        }
-        open_node();
     }
 }
 
-/// Wait for the GPU to finish everything drawn so far: the listed frame (after
-/// [`submit`], which this issues if needed) and the GPU's own queue. Call before
-/// the display flip and before any immediate-mode drawing.
+/// Drain both DMA and drawing before immediate commands or framebuffer swaps.
 pub fn draw_sync() {
     unsafe {
         if DEFERRED {
-            submit();
-            if SUBMITTED {
-                gpu::submit_linked_list_wait();
-                SUBMITTED = false;
-            }
-            LIST_LEN = 0;
-            SENT_UPTO = 0;
-            open_node();
+            stream().draw_sync();
+        } else {
+            gpu::draw_sync();
         }
     }
-    gpu::draw_sync();
 }
 
 /// The GP0(E1h) draw-mode word for a texture page (what
@@ -932,7 +828,7 @@ fn disc_fill(cx: i16, cy: i16, radius: i16, clip: ClipRect, cmd: u32, tex: Optio
 
 /// The listed disc: the hot path (the clouds are ~84 of these a frame). The
 /// merged runs come from the per-radius table through a raw pointer, the
-/// rectangle words go straight into the list with the cursor in a register,
+/// rectangle packets go through the SDK ordered stream,
 /// and the loop keeps few enough values live to stay out of the stack (the
 /// PS1 has no data cache, so every spill is a RAM stall).
 #[inline(never)]
@@ -944,7 +840,6 @@ unsafe fn disc_fill_list<const DITHER: bool>(
     cmd: u32,
     tex: u32,
 ) {
-    let words = if DITHER { 4 } else { 3 };
     let scale = SCALE as i32;
     // Screen x = px * scale + sx_off (camera and centring folded in).
     let ox = ofs_x() as i32;
@@ -954,8 +849,7 @@ unsafe fn disc_fill_list<const DITHER: bool>(
     let (cx, cy) = (cx as i32, cy as i32);
     let (clx, cty, crx, cby) = (clip.0 as i32, clip.1 as i32, clip.2 as i32, clip.3 as i32);
     let (mut p, end) = disc_table(radius as i32);
-    let mut len = LIST_LEN;
-    let mut head = NODE_HEAD;
+    let list = stream();
     while p != end {
         let run = *p;
         p = p.add(1);
@@ -977,23 +871,15 @@ unsafe fn disc_fill_list<const DITHER: bool>(
             let t = ty.max(cty);
             let b = by.min(cby);
             if b > t {
-                if len - head - 1 + words > NODE_MAX {
-                    LIST_LEN = len;
-                    packet(words);
-                    len = LIST_LEN;
-                    head = NODE_HEAD;
-                }
                 let y = t * scale + sy_off;
-                let q = LIST.0.as_mut_ptr().add(len);
-                *q = cmd;
-                *q.add(1) = pack_vertex(x as i16, y as i16);
+                let vertex = pack_vertex(x as i16, y as i16);
+                let size = pack_xy(w as u16, ((b - t) * scale) as u16);
                 if DITHER {
-                    *q.add(2) = tex | (((y - oy) as u32 & 0xFF) << 8) | ((x - ox) as u32 & 0xFF);
-                    *q.add(3) = pack_xy(w as u16, ((b - t) * scale) as u16);
+                    let uv = tex | (((y - oy) as u32 & 0xFF) << 8) | ((x - ox) as u32 & 0xFF);
+                    list.push_packet([cmd, vertex, uv, size]);
                 } else {
-                    *q.add(2) = pack_xy(w as u16, ((b - t) * scale) as u16);
+                    list.push_packet([cmd, vertex, size]);
                 }
-                len += words;
             }
             halves -= 1;
             if halves == 0 {
@@ -1003,7 +889,6 @@ unsafe fn disc_fill_list<const DITHER: bool>(
             by = cy - dy0 + 1;
         }
     }
-    LIST_LEN = len;
 }
 
 /// The packed merged runs of a disc of radius `r`: the table's for the radii

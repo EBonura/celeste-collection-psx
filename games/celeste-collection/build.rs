@@ -1,7 +1,8 @@
 //! Inject PSoXide's PSX linker script into the final link, by absolute
 //! path derived from this crate's location. This keeps the game
 //! buildable from anywhere (no brittle `-T../../..` relative paths in
-//! RUSTFLAGS) while the script itself lives in the pinned submodule.
+//! RUSTFLAGS) while the script itself lives in the .psoxide tree that
+//! `make psoxide` imports from components.lock.json.
 
 use std::path::PathBuf;
 

@@ -1,10 +1,10 @@
 # pico8-psx -- PICO-8 demakes for the PlayStation 1, built on the
-# PSoXide Rust SDK (pinned as a git submodule under third_party/).
+# PSoXide Rust SDK (imported into .psoxide/ from components.lock.json).
 #
 # Each game is its own standalone Cargo workspace under games/<name>.
 # A plain `cargo build --release` inside a game dir already produces a
 # PSX-EXE (see that game's .cargo/config.toml + build.rs); these
-# targets add disc packing via the submodule's mkisopsx tool.
+# targets add disc packing via the imported mkisopsx tool.
 
 ROOT     := $(CURDIR)
 PSOXIDE  := $(ROOT)/.psoxide
@@ -24,6 +24,7 @@ COLLECTION_NAME := Celeste Classic Collection
 
 help:
 	@echo "pico8-psx targets:"
+	@echo "  make psoxide            - import the components.lock.json revisions into .psoxide"
 	@echo "  make collection         - build the Celeste Classic Collection launcher PSX-EXE (both games + menu)"
 	@echo "  make collection-disc    - build the collection + pack dist/celeste-collection.{bin,cue}  [headline artifact]"
 	@echo "  make collection-install - build the collection + install into PSoXide's library as 'Celeste Classic Collection'"
@@ -34,17 +35,21 @@ help:
 	@echo "  make capture-tools      - build the host emulator tools (frametest, psx-audio-capture) for the benches"
 	@echo "  make clean              - remove build output"
 
-# Which PSoXide this is built against. Cargo owns the pin (psoxide-pin/), and
-# psoxide-link copies the resolved checkout to .psoxide so the path
-# dependencies and the linker script resolve. PSOXIDE_FROM=/path/to/tree
-# overrides it, which is how the demo disc puts every program on one SDK.
+# Which PSoXide this is built against. components.lock.json pins the SDK,
+# editor/engine and emulator-library revisions separately, the same lock the
+# rest of the game fleet uses, and tools/bootstrap-components.py imports them
+# into .psoxide so the path dependencies and the linker script resolve. An
+# unchanged lock is verified against its receipt and not fetched again.
+#
+# PSOXIDE_FROM=/path/to/tree overrides the lock with a working tree, which is
+# how the demo disc puts every program it presses on one SDK.
 PSOXIDE_FROM ?=
 psoxide:
 	@if [ -n "$(PSOXIDE_FROM)" ]; then \
 		cargo run -q --manifest-path $(PSOXIDE_FROM)/tools/psoxide-link/Cargo.toml -- \
 			--from "$(PSOXIDE_FROM)" --into $(PSOXIDE); \
 	else \
-		cargo run -q --manifest-path $(ROOT)/psoxide-pin/Cargo.toml -- $(PSOXIDE); \
+		python3 $(ROOT)/tools/bootstrap-components.py --root $(PSOXIDE) --lock $(ROOT)/components.lock.json; \
 	fi
 
 # The emulator lives in its own repository since the SDK split. Only the host

@@ -14,6 +14,8 @@ jobs:
         run: |
           rustup toolchain install nightly-2026-03-25 --component rust-src
           rustup default nightly-2026-03-25
+      - name: Check circle visibility against existing raster spans
+        run: python3 tools/test_disc_visibility.py
       - name: Hydrate the pinned PSoXide dependencies
         run: make psoxide
       - name: Check shared/ for the host target

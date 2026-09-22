@@ -848,6 +848,9 @@ unsafe fn disc_fill_list<const DITHER: bool>(
     let sy_off = oy - CAM_Y as i32 * scale;
     let (cx, cy) = (cx as i32, cy as i32);
     let (clx, cty, crx, cby) = (clip.0 as i32, clip.1 as i32, clip.2 as i32, clip.3 as i32);
+    if disc_outside_view(cx, cy, radius as i32, clip, scale, sx_off, sy_off) {
+        return;
+    }
     let (mut p, end) = disc_table(radius as i32);
     let list = stream();
     while p != end {
@@ -889,6 +892,37 @@ unsafe fn disc_fill_list<const DITHER: bool>(
             by = cy - dy0 + 1;
         }
     }
+}
+
+/// Reject only discs whose clipped bounding box cannot touch the framebuffer.
+/// Keep the original packet path for coordinates that may wrap in GP0's signed
+/// 11-bit vertex fields. Palette uploads and texture-window changes remain in
+/// the caller, even when the disc itself contributes no pixels.
+/// Both deferred cart loops use a 320x240 framebuffer and matching draw area;
+/// the backend's scale setter restricts the positive transform to 1x or 2x.
+#[inline(always)]
+fn disc_outside_view(
+    cx: i32,
+    cy: i32,
+    radius: i32,
+    clip: ClipRect,
+    scale: i32,
+    sx_off: i32,
+    sy_off: i32,
+) -> bool {
+    let left = (cx - radius).max(clip.0 as i32);
+    let right = (cx + radius + 1).min(clip.2 as i32);
+    let top = (cy - radius).max(clip.1 as i32);
+    let bottom = (cy + radius + 1).min(clip.3 as i32);
+    if right <= left || bottom <= top {
+        return true;
+    }
+    let (left, right) = (left * scale + sx_off, right * scale + sx_off);
+    let (top, bottom) = (top * scale + sy_off, bottom * scale + sy_off);
+    if left < -1024 || top < -1024 || right > 1024 || bottom > 1024 {
+        return false;
+    }
+    right <= 0 || left >= 320 || bottom <= 0 || top >= 240
 }
 
 /// The packed merged runs of a disc of radius `r`: the table's for the radii

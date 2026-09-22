@@ -51,7 +51,7 @@ psoxide:
 # benches need it (tools/psx-audio-capture path-deps into this tree), so it is
 # cloned on demand at a pinned revision and bootstrapped the way its own
 # Makefile does (materialising the SDK crates it builds against).
-EMULATOR_REV := c6d2b091ab761909b806b27f361ad47a66eb08e2
+EMULATOR_REV := 25cb81b1ae94233bec726e8d0d9d280b73e96ca2
 EMULATOR     := $(ROOT)/.psoxide-emulator
 emulator:
 	@if [ ! -d "$(EMULATOR)/.git" ]; then \

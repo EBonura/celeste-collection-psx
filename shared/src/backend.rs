@@ -459,6 +459,19 @@ pub fn map(mx: i32, my: i32, tx: i16, ty: i16, mw: i32, mh: i32, mask: i32) {
 // Flat shapes
 // --------------------------------------------------------------------
 
+/// PICO-8 `pset`: the same scaled solid rectangle as `rectfill(x, y, x, y)`.
+/// SCALE is restricted to 1 or 2. Even at i16 wrap boundaries, the old
+/// inclusive endpoint subtraction produces exactly this scale-sized extent.
+pub fn pset(x: i16, y: i16, c: i32) {
+    let (r, g, b) = rgb(c);
+    let size = unsafe { SCALE } as u16;
+    emit([
+        0x6000_0000 | pack_color(r, g, b),
+        pack_vertex(sx(x), sy(y)),
+        pack_xy(size, size),
+    ]);
+}
+
 /// PICO-8 `rectfill(x,y,x2,y2,c)` -- inclusive, camera-relative.
 pub fn rectfill(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
     let (lx, rx) = if x <= x2 { (x, x2) } else { (x2, x) };

@@ -1646,10 +1646,10 @@ unsafe fn player_draw(i: usize) {
         s.y = last.y + (s.y - last.y).max(fx(-1.5)).min(fx(1.5));
         SCARF[k - 1] = s;
         let (sx, sy) = (s.x.to_int() as i16, s.y.to_int() as i16);
-        backend::rectfill(sx, sy, sx, sy, 10);
+        backend::pset(sx, sy, 10);
         let mx = ((s.x + last.x) / fi(2)).to_int() as i16;
         let my = ((s.y + last.y) / fi(2)).to_int() as i16;
-        backend::rectfill(mx, my, mx, my, 10);
+        backend::pset(mx, my, 10);
         last = s;
     }
 
@@ -2417,10 +2417,10 @@ unsafe fn print_center(text: &[u8], cx: i16, y: i16, c: i32) {
     backend::print(text, x, y, c);
 }
 
-/// PICO-8 `pset` -- a single pixel (the backend has no pset; a 1px rectfill is it).
+/// PICO-8 `pset` through the shared scaled-pixel backend.
 #[inline]
 unsafe fn pset(x: i16, y: i16, c: i32) {
-    backend::rectfill(x, y, x, y, c);
+    backend::pset(x, y, c);
 }
 
 /// PICO-8 `draw_sine_h` -- a horizontal wavy line from x0 to x1 at height `y`,
@@ -2552,7 +2552,7 @@ unsafe fn draw_active_flag(x: i16, y: i16) {
             }
             let px = x + col as i16;
             let py = y + off + row as i16;
-            backend::rectfill(px, py, px, py, c);
+            backend::pset(px, py, c);
         }
     }
 }

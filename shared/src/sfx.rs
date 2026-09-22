@@ -57,9 +57,6 @@ const BLOCKS_PER_FRAME_Q16: i64 = 860_160;
 const MARK_AHEAD: u32 = 16;
 /// Most blocks rendered in one update (bounds the CPU spike after a stall).
 const MAX_BLOCKS_PER_UPDATE: u32 = 64;
-/// How far past the last update's target the VBlank wait may render ahead:
-/// one frame's consumption, so the next update finds its blocks staged.
-const FILL_AHEAD_BLOCKS: u32 = 14;
 const SPU_IRQ_ADDR: u32 = 0x1F80_1DA4;
 const SPUCNT_IRQ_ENABLE: u16 = 1 << 6;
 const SPUSTAT_IRQ_FLAG: u16 = 1 << 6;
@@ -167,15 +164,24 @@ unsafe fn flush() {
     }
 }
 
-/// Render one block ahead if the stream has room for it: `true` when it did.
-/// The idle time in [`wait_vblank`] is spent here, and the backend calls it
-/// between bursts of GPU primitives (`backend::drew_prim`) so the GPU drains
-/// its FIFO while the CPU renders instead of stalling the next write: a
-/// frame's audio then costs the frame nothing unless the CPU is saturated. Without this the
-/// loop was bistable: one late frame doubled the next update's rendering,
-/// which kept the frame late (a steady 30 fps on PSoXide).
+/// Target for the next VBlank wait. A missed frame has already consumed more
+/// than one frame of audio since the last update. Stage that due work while
+/// waiting, before the same post-swap update, rather than idling at a fixed
+/// fourteen-block cap and paying the backlog immediately after presentation.
+/// Normal one-VBlank waits retain the previous fourteen-block allowance.
+#[inline]
+fn wait_fill_target(target: u32, last_vblank: u32, now: u32) -> u32 {
+    const _: () = assert!(LEAD_BLOCKS + MAX_BLOCKS_PER_UPDATE < RING_BLOCKS);
+    // Match update's bounded elapsed-clock policy, including counter wrapping.
+    let frames = now.wrapping_sub(last_vblank).min(7) + 1;
+    let blocks = ((BLOCKS_PER_FRAME_Q16 as u64 * frames as u64 + 65535) >> 16) as u32;
+    target.saturating_add(blocks.min(MAX_BLOCKS_PER_UPDATE))
+}
+
+/// Render one due block while waiting, without advancing across a game update
+/// or changing the sequencer's sample order. Upload remains in `update`.
 pub(crate) unsafe fn fill_one() -> bool {
-    if !STARTED || WRITE >= TARGET + FILL_AHEAD_BLOCKS {
+    if !STARTED || WRITE >= wait_fill_target(TARGET, LAST_VBLANK, vblank_count()) {
         return false;
     }
     render_one();

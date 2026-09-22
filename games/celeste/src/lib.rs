@@ -95,6 +95,10 @@ pub fn run() {
     // Drive the audio sequencer off real VBlanks, not render frames, so the
     // music keeps PICO-8's hardware tempo even when rendering can't hold 60fps.
     psx_rt::interrupts::install_vblank_counter();
+    // Prime the initial 40 audio blocks after init selects the title music,
+    // while loading and before the first visible update. This preserves all
+    // startup samples without charging their synthesis to the first frame.
+    sfx::update();
     let mut prev_start = true; // require a fresh press before the first pause
 
     loop {

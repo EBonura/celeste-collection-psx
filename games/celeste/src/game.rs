@@ -598,6 +598,13 @@ unsafe fn destroy_object(o: *mut Obj) {
     let mut p = o;
     while p.add(1) < base.add(MAX_OBJECTS) {
         *p = *p.add(1);
+        // Active objects form a packed prefix: allocation uses the first
+        // inactive slot and resets all its fields, and removal shifts left.
+        // Once its terminating inactive slot is copied, later inactive data
+        // cannot affect gameplay and need not move with each expiring smoke.
+        if !(*p).active {
+            return;
+        }
         p = p.add(1);
     }
     (*base.add(MAX_OBJECTS - 1)).active = false;

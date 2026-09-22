@@ -1,30 +1,29 @@
-Celeste Classic Collection (PSX)  -  v0.2.3
+Celeste Classic Collection (PSX)  -  v0.2.4
 ===========================================
 
 Two PICO-8 Celeste Classic games, the original Celeste and Celeste 2: Lani's
 Trek, ported natively to the PlayStation 1, on one bootable disc.
 
 To run:
-  - Boot celeste-collection.cue in a PS1 emulator (PSoXide, DuckStation, or
-    PCSX-Redux), or
-  - burn it to a CD-R and run on a modchipped console.
+  - Open celeste-collection.cue in a PS1 emulator, or
+  - burn the CUE/BIN pair to a CD-R for a compatible PlayStation console.
 
 In the launcher: D-pad to choose, Cross to play, Select for credits. On a
-DualShock in analog mode the left stick works as the d-pad everywhere.
+DualShock in analog mode the left stick works as the D-pad everywhere.
+Press Select+Start together to return to the launcher.
 
-v0.2.3: Celeste 2's fog levels hold 60 fps too (the cloud drawing was the
-        last thing over budget).
-v0.2.2: both games hold 60 fps in play again (the audio stream could lock
-        a level into 30 fps on some emulators).
-v0.2.1: analog controller support -- the left stick of a DualShock in
-        analog mode works as the d-pad in both games and the menus.
-v0.2.0: sound rebuilt -- the PICO-8 synthesiser now runs on the PS1 itself
-        and streams to the sound chip, tuned against recordings of the real
-        carts, so every effect and tune sounds like the original. Celeste 2
-        levels now spawn all their objects (later spikes, grapplers,
-        checkpoints and crumble blocks were missing), show their intended
-        colours, and run at a steady 60 fps throughout.
-v0.1.1: improved compatibility with original PlayStation controllers
-        (works with a genuine SCPH-1200 pad, not just third-party ones).
+v0.2.4:
+  - Classic avoids copying unused object slots when effects disappear.
+  - Celeste 2 reuses ordered grapple candidates within each throw step.
+  - Classic prepares its initial audio before the first visible update.
+  - Audio synthesis uses otherwise idle VBlank time to prepare due samples.
+  - Shared scaled-pixel drawing avoids generic rectangle setup.
+  - Updated shared SDK display-list handling and renderer optimizations.
+
+The tested gameplay route preserved matched checkpoint images and game
+state. In the measured emulator route, Classic had no unexplained missed
+presentation deadlines; Celeste 2 still had occasional misses. This release
+does not claim locked 60 fps in every scene. The latest build was also
+reported working on original PlayStation hardware.
 
 Bonnie Studios  -  https://bonnie-studios.itch.io

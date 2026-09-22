@@ -16,6 +16,8 @@ jobs:
         run: |
           rustup toolchain install nightly-2026-03-25 --component rust-src
           rustup default nightly-2026-03-25
+      - name: Check Classic object removal lifecycle
+        run: python3 tools/test_classic_object_prefix.py
       - name: Check circle visibility against existing raster spans
         run: python3 tools/test_disc_visibility.py
       - name: Check deferred circle packets against the frozen transform

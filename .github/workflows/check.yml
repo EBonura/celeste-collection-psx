@@ -8,8 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check SDK hydration pin consistency
-        run: python3 tools/test_sdk_pin.py
       - name: Check GPU linked-list packing
         run: python3 tools/test_gpu_list_contract.py
       - name: Install the pinned nightly
@@ -28,8 +26,10 @@ jobs:
         run: python3 tools/test_disc_visibility.py
       - name: Check deferred circle packets against the frozen transform
         run: python3 tools/test_disc_packets.py
-      - name: Hydrate the pinned PSoXide dependencies
+      - name: Import the locked PSoXide components
         run: make psoxide
+      - name: Check the imported components against the lock
+        run: python3 tools/bootstrap-components.py --root .psoxide --lock components.lock.json --check
       - name: Check shared/ for the host target
         run: |
           HOST=$(rustc -vV | sed -n 's/host: //p')

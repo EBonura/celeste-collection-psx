@@ -33,9 +33,12 @@ make celeste2-disc    # standalone Celeste 2 -> dist/celeste2.{bin,cue}
 ```
 
 Install Rust through rustup, Make and host C/C++ build tools. Rust **nightly** is
-pinned by `rust-toolchain.toml`. `make` hydrates the historical SDK pin from
-`psoxide-pin/` into ignored `.psoxide/`; no SDK submodule or sibling clone is
-required. Boot the `.cue` with its adjacent `.bin`
+pinned by `rust-toolchain.toml`. `make` imports the exact SDK, editor/engine and
+emulator-library revisions in `components.lock.json` into ignored `.psoxide/` (the
+same lock the other PSoXide games use); no SDK submodule or sibling clone is
+required. For a checkout that predates the lock, preserve or remove its old
+`.psoxide/` cache once before building: imports refuse to overwrite unowned or
+edited files. Boot the `.cue` with its adjacent `.bin`
 in [PSoXide Emulator](https://github.com/EBonura/PSoXide-emulator) (or another PS1 emulator), or burn it to a CD-R
 for real hardware. In the launcher: D-pad to choose, X to play; hold Select+Start in-game to
 return. A DualShock in analog mode can use the left stick as the d-pad everywhere.
@@ -69,7 +72,7 @@ lives in [the SDK](https://github.com/EBonura/PSoXide),
 Each game is a standalone Cargo workspace exposing `run()`, shipped on its own or linked into the
 `celeste-collection` launcher (both games in one combined EXE, packed into a single `.bin`/`.cue`
 disc image). Shared runtime (rendering, SPU audio, fonts, pause menu) lives in `shared/`. The
-PSoXide SDK revision is recorded in `psoxide-pin/`; `tools/` holds the PICO-8 to Rust
+PSoXide revisions are recorded in `components.lock.json`; `tools/` holds the PICO-8 to Rust
 asset/audio converters and the fidelity benches (`synth_bench.py` scores the synth on the host,
 `sfx_bench.sh` scores the emulator's SPU output, both against PICO-8 recordings in `audio-ref/`;
 `scene.sh` puts a PICO-8 frame of a level or room next to the PSX frame, pixel for pixel).

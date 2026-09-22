@@ -33,12 +33,11 @@ AGENTS.md
 __pycache__/
 *.pyc
 
-# Hydrated by psoxide-link from the pin in psoxide-pin/. Never committed:
-# the pin is the source of truth, this is a cache.
+# Imported by tools/bootstrap-components.py from components.lock.json. Never
+# committed: the lock is the source of truth, this is a cache.
 .psoxide/
 # The emulator, cloned by `make emulator` at the revision pinned in the Makefile.
 .psoxide-emulator/
-psoxide-pin/target/
 
 # Reference audio may also be a symlink into another checkout
 audio-ref

@@ -841,11 +841,14 @@ unsafe fn disc_fill_list<const DITHER: bool>(
     tex: u32,
 ) {
     let scale = SCALE as i32;
+    // SCALE is initialized to 2 and its setter only admits 1 or 2. Shifts keep
+    // the signed transform exact without a multiply interlock for every span.
+    let scale_shift = (scale - 1) as u32;
     // Screen x = px * scale + sx_off (camera and centring folded in).
     let ox = ofs_x() as i32;
     let oy = V_OFS as i32;
-    let sx_off = ox - CAM_X as i32 * scale;
-    let sy_off = oy - CAM_Y as i32 * scale;
+    let sx_off = ox - ((CAM_X as i32) << scale_shift);
+    let sy_off = oy - ((CAM_Y as i32) << scale_shift);
     let (cx, cy) = (cx as i32, cy as i32);
     let (clx, cty, crx, cby) = (clip.0 as i32, clip.1 as i32, clip.2 as i32, clip.3 as i32);
     if disc_outside_view(cx, cy, radius as i32, clip, scale, sx_off, sy_off) {
@@ -862,8 +865,8 @@ unsafe fn disc_fill_list<const DITHER: bool>(
         if rx <= lx {
             continue;
         }
-        let x = lx * scale + sx_off;
-        let w = (rx - lx) * scale;
+        let x = (lx << scale_shift) + sx_off;
+        let w = (rx - lx) << scale_shift;
         let dy0 = ((run >> 8) & 0xFF) as i32;
         let dy1 = (run >> 16) as i32;
         // The run below the centre (or straddling it), then its mirror above.
@@ -874,9 +877,9 @@ unsafe fn disc_fill_list<const DITHER: bool>(
             let t = ty.max(cty);
             let b = by.min(cby);
             if b > t {
-                let y = t * scale + sy_off;
+                let y = (t << scale_shift) + sy_off;
                 let vertex = pack_vertex(x as i16, y as i16);
-                let size = pack_xy(w as u16, ((b - t) * scale) as u16);
+                let size = pack_xy(w as u16, ((b - t) << scale_shift) as u16);
                 if DITHER {
                     let uv = tex | (((y - oy) as u32 & 0xFF) << 8) | ((x - ox) as u32 & 0xFF);
                     list.push_packet([cmd, vertex, uv, size]);

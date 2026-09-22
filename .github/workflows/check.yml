@@ -18,6 +18,7 @@ jobs:
           rustup default nightly-2026-03-25
       - name: Check Classic object removal lifecycle
         run: python3 tools/test_classic_object_prefix.py
+        run: python3 tools/test_grapple_candidates.py
       - name: Check circle visibility against existing raster spans
         run: python3 tools/test_disc_visibility.py
       - name: Check deferred circle packets against the frozen transform

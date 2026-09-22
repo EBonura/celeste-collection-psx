@@ -942,8 +942,34 @@ unsafe fn start_grapple(i: usize) {
     psfx(8, 0, 5);
 }
 
+// One throw step probes up to 18 neighbouring points without changing object
+// eligibility. Snapshot only the ordered eligible indices, lazily after the
+// first tile miss. A hit ends the probing loop before any object can change.
+struct GrappleCandidates {
+    slots: [u8; MAX_OBJ],
+    count: usize,
+}
+impl GrappleCandidates {
+    fn new() -> Self {
+        const _: () = assert!(MAX_OBJ <= 256);
+        Self { slots: [0; MAX_OBJ], count: MAX_OBJ + 1 }
+    }
+    unsafe fn indices(&mut self) -> &[u8] {
+        if self.count > MAX_OBJ {
+            self.count = 0;
+            for j in 0..MAX_OBJ {
+                if OBJ[j].exists && !OBJ[j].destroyed && OBJ[j].grapple_mode != 0 {
+                    self.slots[self.count] = j as u8;
+                    self.count += 1;
+                }
+            }
+        }
+        &self.slots[..self.count]
+    }
+}
+
 /// grapple_check: 0 = nothing, 1 = hit, 2 = fail. Sets grapple_hit.
-unsafe fn grapple_check(i: usize, x: Fix32, y: Fix32) -> i32 {
+unsafe fn grapple_check(i: usize, x: Fix32, y: Fix32, candidates: &mut GrappleCandidates) -> i32 {
     let tx = (x / fi(8)).floor_int();
     let ty = (y / fi(8)).floor_int();
     let tile = tile_at(tx, ty);
@@ -951,7 +977,8 @@ unsafe fn grapple_check(i: usize, x: Fix32, y: Fix32) -> i32 {
         OBJ[i].grapple_hit = NONE;
         return if backend::fget(tile, 2) { 2 } else { 1 };
     }
-    for j in 0..MAX_OBJ {
+    for &index in candidates.indices() {
+        let j = index as usize;
         if OBJ[j].exists && !OBJ[j].destroyed && OBJ[j].grapple_mode != 0 && contains(j, x, y) {
             OBJ[i].grapple_hit = j;
             return 1;
@@ -1177,13 +1204,14 @@ unsafe fn player_update(i: usize) {
             let amount = (fi(64) - dist).min(fi(6)).max(Fix32::ZERO).to_int();
             let mut grabbed = false;
             let dir = fi(OBJ[i].grapple_dir);
+            let mut candidates = GrappleCandidates::new();
             for _ in 0..amount {
-                let mut hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y);
+                let mut hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y, &mut candidates);
                 if hit == 0 {
-                    hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y - fi(1));
+                    hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y - fi(1), &mut candidates);
                 }
                 if hit == 0 {
-                    hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y + fi(1));
+                    hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y + fi(1), &mut candidates);
                 }
                 let mode = if OBJ[i].grapple_hit != NONE {
                     OBJ[OBJ[i].grapple_hit].grapple_mode

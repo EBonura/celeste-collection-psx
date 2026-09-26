@@ -148,27 +148,7 @@ pub fn run() {
 fn run_pause(fb: &mut FrameBuffer) -> bool {
     let mut menu = Pause::new(2, true); // show the debug FLY row
     loop {
-        let b = pico8::input::poll_buttons();
-        let mut m = 0u8;
-        if b.is_held(button::UP) {
-            m |= pause::UP;
-        }
-        if b.is_held(button::DOWN) {
-            m |= pause::DOWN;
-        }
-        if b.is_held(button::LEFT) {
-            m |= pause::LEFT;
-        }
-        if b.is_held(button::RIGHT) {
-            m |= pause::RIGHT;
-        }
-        if b.is_held(button::CROSS) {
-            m |= pause::CONFIRM;
-        }
-        if b.is_held(button::START) {
-            m |= pause::START;
-        }
-        match menu.update(m) {
+        match menu.update(pause::mask(pico8::input::poll_buttons())) {
             Some(Exit::Resume) => return false,
             Some(Exit::QuitToMenu) => return true,
             None => {}

@@ -20,7 +20,7 @@ DIST     := $(ROOT)/dist
 PSOXIDE_LIB     ?= $(HOME)/Downloads/ps1 games
 COLLECTION_NAME := Celeste Classic Collection
 
-.PHONY: help psoxide emulator capture-tools clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
+.PHONY: help psoxide emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
 
 help:
 	@echo "pico8-psx targets:"
@@ -33,6 +33,7 @@ help:
 	@echo "  make celeste2           - build the standalone Celeste 2 PSX-EXE"
 	@echo "  make celeste2-disc      - build celeste2 + pack a burnable .bin/.cue into dist/"
 	@echo "  make capture-tools      - build the host emulator tools (frametest, psx-audio-capture) for the benches"
+	@echo "  make nav-routes FRONTEND=/path/to/frontend - replay every launcher/pause navigation path headlessly"
 	@echo "  make clean              - remove build output"
 
 # Which PSoXide this is built against. components.lock.json pins the SDK,
@@ -113,6 +114,14 @@ collection-release: collection-disc
 	@mkdir -p $(RELEASE)
 	cp $(DIST)/celeste-collection.bin $(DIST)/celeste-collection.cue $(RELEASE)/
 	@echo "RELEASE -> $(RELEASE)/  (now: git add release && git commit && git push)"
+
+# Every way around the launcher and both pause menus, replayed headlessly on the
+# collection disc (tools/nav_routes.py). FRONTEND is PSoXide's headless
+# `frontend` binary (PSoXide-editor: cargo build --release -p frontend).
+FRONTEND ?=
+nav-routes: collection-disc
+	@test -n "$(FRONTEND)" || { echo "set FRONTEND=/path/to/frontend"; exit 2; }
+	python3 tools/nav_routes.py --frontend "$(FRONTEND)" --disc "$(DIST)/celeste-collection.cue" --out "$(DIST)/nav-routes"
 
 # ---- Celeste ---------------------------------------------------------
 CELESTE_DIR := $(ROOT)/games/celeste

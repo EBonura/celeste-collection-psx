@@ -1,0 +1,19 @@
+Celeste Classic Collection (PSX)  -  credits and notices
+========================================================
+
+This is an unofficial, non-commercial fan port. It is not affiliated with or
+endorsed by the creators of Celeste or PICO-8.
+
+Celeste (2016) and Celeste 2: Lani's Trek (2021), the original PICO-8 games:
+  Maddy Thorson and Noel Berry. Celeste 2 music by Lena Raine.
+  The levels, art and music on this disc are theirs, and all rights to the
+  original games remain with their creators.
+
+PICO-8: Lexaloffle Games.
+
+Menu sounds: Kenney's Interface Sounds (CC0 / public domain).
+
+Port code: GPL-2.0, built on the PSoXide PS1 SDK.
+Source: https://github.com/EBonura/celeste-collection-psx
+
+Bonnie Studios  -  https://bonnie-studios.itch.io

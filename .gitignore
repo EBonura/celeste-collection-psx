@@ -8,6 +8,8 @@ target/
 *.bin
 *.cue
 *.toc
+# Headless navigation route output (tools/nav_routes.py)
+/dist/nav-routes/
 
 # itch.io release artifacts -- pushed to itch via butler, so the disc image in
 # release/ must be tracked despite the *.bin / *.cue ignores above.

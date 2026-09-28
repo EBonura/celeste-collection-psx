@@ -16,6 +16,7 @@ dependencies = [
  "psx-gpu",
  "psx-pad",
  "psx-rt",
+ "psx-tick",
 ]
 
 [[package]]
@@ -40,6 +41,7 @@ dependencies = [
  "psx-gpu",
  "psx-pad",
  "psx-rt",
+ "psx-tick",
 ]
 
 [[package]]
@@ -157,6 +159,10 @@ dependencies = [
  "psx-hw",
  "psx-io",
 ]
+
+[[package]]
+name = "psx-tick"
+version = "0.1.0"
 
 [[package]]
 name = "psx-vram"

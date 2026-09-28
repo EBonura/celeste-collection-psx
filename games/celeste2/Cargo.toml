@@ -52,5 +52,6 @@ lto           = true
 [dependencies]
 pico8   = { path = "../../shared" }
 psx-rt  = { path = "../../.psoxide/sdk/crates/psx-rt" }
+psx-tick = { path = "../../.psoxide/sdk/crates/psx-tick" }
 psx-gpu = { path = "../../.psoxide/sdk/crates/psx-gpu" }
 psx-pad = { path = "../../.psoxide/sdk/crates/psx-pad" }

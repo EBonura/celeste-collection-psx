@@ -100,6 +100,13 @@ pub fn run() {
     // startup samples without charging their synthesis to the first frame.
     sfx::update();
     let mut prev_start = true; // require a fresh press before the first pause
+    // Cart logic runs on the shared psx-tick clock, one update per VBlank. A
+    // frame that missed VBlanks catches up (up to four updates before it draws,
+    // the rest over the next frames) instead of slowing the game down.
+    let mut clock = psx_tick::FixedClock::new(
+        psx_tick::TickConfig::new(psx_tick::TickRate::HZ60).with_interleave(4),
+        psx_rt::interrupts::vblank_count(),
+    );
 
     loop {
         // Quit to the launcher: Select+Start held together.
@@ -115,13 +122,19 @@ pub fn run() {
                 return; // player chose "quit to menu"
             }
             prev_start = true; // wait for release before it can pause again
+            // The game was frozen behind the menu; do not catch its time up.
+            clock.realign(psx_rt::interrupts::vblank_count());
             continue;
         }
         prev_start = start;
 
         game::set_input(pad_mask());
 
-        game::update();
+        let now = psx_rt::interrupts::vblank_count();
+        while clock.due(now) {
+            game::update();
+        }
+        clock.end_frame();
 
         // Freeze frames (dash/orb): hold the last drawn frame on screen by not
         // redrawing or swapping -- exactly the PICO-8 freeze effect (the cart's

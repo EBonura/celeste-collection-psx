@@ -1,7 +1,9 @@
 //! In-game pause menu (not in the original PICO-8 carts).
 //!
 //! Pressing Start opens an overlay with two volume sliders (SFX / music), a debug
-//! fly toggle, and a "quit to menu" item. The panel/sliders draw through
+//! fly toggle, and a "quit to menu" item. Start or Circle resumes, Cross acts on
+//! the highlighted row, and Select+Start quits to the launcher from here too,
+//! exactly as it does during play. The panel/sliders draw through
 //! [`crate::backend`] (PICO-8 128-space rects), but the TEXT is rendered in the
 //! PSoXide BASIC font, deliberately NOT the PICO-8 typeface, so the menu reads as
 //! an add-on rather than part of the original game. Driven one frame at a time by
@@ -9,11 +11,13 @@
 //! frozen game behind it and advancing the SPU, so the volume sliders are live.
 //!
 //! Control mask bits (edge-detected internally): 0 up, 1 down, 2 left, 3 right,
-//! 4 confirm (X), 5 start.
+//! 4 confirm (X), 5 start, 6 back (Circle), 7 select. [`mask`] builds it from the
+//! pad.
 
 use crate::backend;
 use crate::sfx;
 use psx_font::{fonts::BASIC, FontAtlas};
+use psx_pad::{button, ButtonState};
 use psx_vram::{Clut, TexDepth, Tpage};
 
 pub const UP: u8 = 1 << 0;
@@ -22,6 +26,29 @@ pub const LEFT: u8 = 1 << 2;
 pub const RIGHT: u8 = 1 << 3;
 pub const CONFIRM: u8 = 1 << 4;
 pub const START: u8 = 1 << 5;
+pub const BACK: u8 = 1 << 6;
+pub const SELECT: u8 = 1 << 7;
+
+/// The pause menu's control mask for a pad state (see the module docs).
+pub fn mask(b: ButtonState) -> u8 {
+    const MAP: [(u16, u8); 8] = [
+        (button::UP, UP),
+        (button::DOWN, DOWN),
+        (button::LEFT, LEFT),
+        (button::RIGHT, RIGHT),
+        (button::CROSS, CONFIRM),
+        (button::START, START),
+        (button::CIRCLE, BACK),
+        (button::SELECT, SELECT),
+    ];
+    let mut m = 0u8;
+    for (pad, bit) in MAP {
+        if b.is_held(pad) {
+            m |= bit;
+        }
+    }
+    m
+}
 
 const ROW_SFX: u8 = 0;
 const ROW_MUSIC: u8 = 1;
@@ -59,10 +86,11 @@ pub enum Exit {
 pub struct Pause {
     sel: u8,
     prev: u8,
-    blip: i32,       // SFX id played when nudging a volume slider, so it's audible
-    fly: bool,       // show the debug "FLY" row (toggles pico8::debug fly mode)
-    changed: bool,   // a PERSISTED setting was touched; save to card on close
-    font: FontAtlas, // PSX (non-PICO-8) typeface for the menu text
+    blip: i32,        // SFX id played when nudging a volume slider, so it's audible
+    fly: bool,        // show the debug "FLY" row (toggles pico8::debug fly mode)
+    changed: bool,    // a PERSISTED setting was touched; save to card on close
+    back_armed: bool, // Circle went down inside the menu; resume on its release
+    font: FontAtlas,  // PSX (non-PICO-8) typeface for the menu text
 }
 
 impl Pause {
@@ -79,6 +107,7 @@ impl Pause {
             blip,
             fly,
             changed: false,
+            back_armed: false,
             font,
         }
     }
@@ -111,17 +140,28 @@ impl Pause {
     /// `Some(..)` when the menu should close.
     pub fn update(&mut self, mask: u8) -> Option<Exit> {
         let pressed = mask & !self.prev; // rising edges only
+        let released = self.prev & !mask;
         self.prev = mask;
 
-        let count = self.row_count();
-        if pressed & START != 0 {
-            // Closing after a settings change is the save point (never per
-            // slider tick; card writes are slow). No-op without a card.
-            if self.changed {
-                crate::save::save();
-            }
-            return Some(Exit::Resume);
+        // Select+Start leaves the game from anywhere, including this menu. It is
+        // checked before Start alone so a Start that lands a frame ahead of
+        // Select (the pause opens on it) still quits when Select joins it.
+        if mask & (SELECT | START) == SELECT | START {
+            return Some(self.close(Exit::QuitToMenu));
         }
+        if pressed & START != 0 {
+            return Some(self.close(Exit::Resume));
+        }
+        // Circle is Celeste's dash and Celeste 2's grapple, so resuming on its
+        // press would hand the game a held Circle. Resume when it comes back up.
+        if pressed & BACK != 0 {
+            self.back_armed = true;
+        }
+        if released & BACK != 0 && self.back_armed {
+            return Some(self.close(Exit::Resume));
+        }
+
+        let count = self.row_count();
         if pressed & (UP | DOWN) != 0 {
             crate::menusfx::play(crate::menusfx::SFX_NAV);
         }
@@ -192,14 +232,20 @@ impl Pause {
                 crate::menusfx::play(crate::menusfx::SFX_CONFIRM);
             } else if self.sel == self.quit_row() {
                 crate::menusfx::play(crate::menusfx::SFX_CONFIRM);
-                // Quit-to-menu is also a save point for pending changes.
-                if self.changed {
-                    crate::save::save();
-                }
-                return Some(Exit::QuitToMenu);
+                return Some(self.close(Exit::QuitToMenu));
             }
         }
         None
+    }
+
+    /// Leave the menu with `exit`. Every way out is a save point for pending
+    /// settings changes (never per slider tick; card writes are slow). No-op
+    /// without a card or without a change.
+    fn close(&self, exit: Exit) -> Exit {
+        if self.changed {
+            crate::save::save();
+        }
+        exit
     }
 
     /// Draw the overlay (call after the game's own draw, before the buffer swap).

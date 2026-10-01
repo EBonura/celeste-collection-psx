@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.5 | 2026-09-26
+
+Not yet published.
+
+- Launcher navigation follows one rule set everywhere: Cross confirms or
+  advances, Circle or Start goes back, and a press counts only on the frame
+  its button goes down. Leaving a game (pause menu or Select+Start), the
+  credits or the settings lands on the cover menu with the last game still
+  selected; it used to reset to Celeste.
+- `pico8::input::poll_buttons` repeats the last clean pad state when a poll's
+  ID handshake stays garbled through the SDK's retries. The garbled bytes used
+  to reach the launcher as buttons: the menu tests Select before Cross and
+  Start, so a garbled read could open the credits, and the credits' exit test
+  (any of Cross, Circle or Start newly down) never fires while garbage reads
+  as one of them held. The credits now edge-detect each button on its own.
+- The pause menu resumes on Circle (on its release, so Celeste's dash and
+  Celeste 2's grapple do not see a held Circle) and quits on Select+Start,
+  which it used to ignore when Start arrived first and opened it.
+- `tools/nav_routes.py` (`make nav-routes FRONTEND=...`) replays every
+  navigation path headlessly and checks the screen and selection at each
+  step.
+
 ## 0.2.3 | 2026-09-15
 
 Download published on itch.io.

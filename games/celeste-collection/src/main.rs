@@ -2,10 +2,18 @@
 //!
 //! Boot flow: a fading Bonnie Studios intro (logo + "Built with PSoXIDE") ->
 //! a cover menu showing the real PICO-8 cart labels for each demade game. Pick
-//! one with the D-pad and press X to launch it, or press Select for a scrolling
-//! credits screen. Each game is linked in as a library and exposes `run()`,
-//! which boots the game and returns when the player holds Select+Start --
+//! one with the D-pad and press X to launch it, Start for the settings screen
+//! or Select for a scrolling credits screen. Each game is linked in as a
+//! library and exposes `run()`, which boots the game and returns when the
+//! player holds Select+Start or picks "Quit to Menu" in its pause menu --
 //! dropping back here to the menu.
+//!
+//! Button rules, the same on every screen: Cross confirms or advances, Circle
+//! or Start goes back, and a press only counts on the frame its button goes
+//! down (a button still held from the previous screen does nothing). Every
+//! way back from a game, the settings or the credits lands on the cover menu
+//! with the last game still selected. The left stick of a DualShock in analog
+//! mode works as the D-pad throughout (see `pico8::input::poll_buttons`).
 //!
 //! The menu uses psx-font's BASIC atlas; the intro/credits use the shared
 //! PICO-8 font (`pico8::backend`).
@@ -82,12 +90,18 @@ fn main() {
     atmos::init(); // seed the menu's cloud/particle backdrops
     show_intro(); // Bonnie Studios logo fade -> menu (once, on boot)
     let mut first = true; // play the intro->menu transition only on the first menu
+    let mut sel = 0usize; // highlighted game, kept across every trip away from the menu
     loop {
-        match show_menu(first) {
-            0 => celeste::run(),
-            1 => celeste2::run(),
-            2 => show_credits(),
-            _ => show_settings(),
+        match show_menu(first, &mut sel) {
+            MenuPick::Play => {
+                if sel == 0 {
+                    celeste::run()
+                } else {
+                    celeste2::run()
+                }
+            }
+            MenuPick::Credits => show_credits(),
+            MenuPick::Settings => show_settings(),
         }
         first = false;
         // The game/credits clobbered VRAM and left the GPU in its own mode; the
@@ -97,6 +111,16 @@ fn main() {
 
 /// Boot intro: fade the Bonnie Studios logo (with "Built with PSoXide") in, hold,
 /// fade out, then return to the menu. Any face button skips it.
+/// Buttons in `mask` that went down between `prev` and `now`. Each button is
+/// edge-detected on its own, so one held button never masks another's press.
+#[inline]
+fn pressed(now: ButtonState, prev: ButtonState, mask: u16) -> bool {
+    now.bits() & !prev.bits() & mask != 0
+}
+
+/// Cross, Circle or Start: what skips the intro and closes the credits.
+const ANY_FACE: u16 = button::CROSS | button::CIRCLE | button::START;
+
 fn show_intro() {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
     let mut fb = FrameBuffer::new(320, 240);
@@ -115,14 +139,11 @@ fn show_intro() {
     const TOTAL: i32 = 150;
     const FADE_OUT: i32 = TOTAL - FADE_IN - HOLD;
 
-    let any = |b: ButtonState| {
-        b.is_held(button::CROSS) || b.is_held(button::CIRCLE) || b.is_held(button::START)
-    };
     let mut prev = pico8::input::poll_buttons();
     let mut frame = 0i32;
     while frame < TOTAL {
         let b = pico8::input::poll_buttons();
-        if frame > 8 && any(b) && !any(prev) {
+        if frame > 8 && pressed(b, prev, ANY_FACE) {
             break; // fresh press skips
         }
         prev = b;
@@ -161,7 +182,7 @@ fn show_intro() {
 }
 
 /// Scrolling credits screen (reached with Select from the menu). Default font,
-/// proper capitalisation; any face button returns to the menu.
+/// proper capitalisation; Cross, Circle or Start returns to the menu.
 fn show_credits() {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
     let mut fb = FrameBuffer::new(320, 240);
@@ -212,15 +233,14 @@ fn show_credits() {
     const LINE_H: i16 = 12;
     let content_h = LINES.len() as i16 * LINE_H;
 
-    let any = |b: ButtonState| {
-        b.is_held(button::CROSS) || b.is_held(button::CIRCLE) || b.is_held(button::START)
-    };
     let mut prev = pico8::input::poll_buttons(); // void a button still held from the menu
     let mut scroll = 0i16;
     let mut tick = 0u32;
     loop {
         let b = pico8::input::poll_buttons();
-        if any(b) && !any(prev) {
+        // Per-button edges: with the old any-of-three test, one of the three
+        // reading as held kept every other press from ever counting.
+        if pressed(b, prev, ANY_FACE) {
             return; // fresh press exits
         }
         prev = b;
@@ -284,9 +304,20 @@ fn upload_cover_clut() {
     upload_16bpp(VramRect::new(COVER_CLUT.x(), COVER_CLUT.y(), 16, 1), &clut);
 }
 
-/// Show the cover menu and block until the player picks something.
-/// Returns 0 = Celeste, 1 = Celeste 2, 2 = credits (Select).
-fn show_menu(first: bool) -> usize {
+/// What the player picked on the cover menu.
+enum MenuPick {
+    /// Cross: launch the highlighted game (`sel`).
+    Play,
+    /// Select: the credits screen.
+    Credits,
+    /// Start: the settings screen.
+    Settings,
+}
+
+/// Show the cover menu and block until the player picks something. `sel` is the
+/// highlighted game (0 = Celeste, 1 = Celeste 2); it opens where the player left
+/// it and is updated as they move.
+fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
     let mut fb = FrameBuffer::new(320, 240);
     gpu::set_draw_area(0, 0, 319, 239);
@@ -303,12 +334,11 @@ fn show_menu(first: bool) -> usize {
         menusfx::SFX_TRANSITION
     });
 
-    let mut sel: usize = 0;
     let mut frame = 0i32; // animation clock (starfield drift, glow pulse)
 
     // Dissolve in from black: covers the intro -> menu reveal and returning from a game.
     for k in 0..FADE_FRAMES {
-        draw_menu_scene(&mut fb, &font, sel, frame);
+        draw_menu_scene(&mut fb, &font, *sel, frame);
         fade_quad((255 - 255 * k / FADE_FRAMES) as u8);
         gpu::draw_sync();
         wait_vblank();
@@ -322,36 +352,36 @@ fn show_menu(first: bool) -> usize {
 
     loop {
         let b = pico8::input::poll_buttons();
-        let pressed = |m: u16| b.is_held(m) && !prev.is_held(m);
+        let pressed = |m: u16| pressed(b, prev, m);
 
-        let old_sel = sel;
+        let old_sel = *sel;
         if pressed(button::LEFT) {
-            sel = 0;
+            *sel = 0;
         }
         if pressed(button::RIGHT) {
-            sel = 1;
+            *sel = 1;
         }
-        if sel != old_sel {
+        if *sel != old_sel {
             menusfx::play(menusfx::SFX_NAV); // cursor moved
-        }
-        if pressed(button::SELECT) {
-            menusfx::play(menusfx::SFX_NAV);
-            return 2; // open the credits screen
-        }
-        if pressed(button::START) {
-            menusfx::play(menusfx::SFX_NAV);
-            return 3; // open the settings menu
         }
         if pressed(button::CROSS) {
             // Launch sound, then dissolve to black before the game boots (this also
             // gives the sound time to be heard before the SPU is clobbered).
             menusfx::play(menusfx::SFX_CONFIRM);
-            fade_out(&mut fb, &font, sel, &mut frame);
-            return sel;
+            fade_out(&mut fb, &font, *sel, &mut frame);
+            return MenuPick::Play;
+        }
+        if pressed(button::SELECT) {
+            menusfx::play(menusfx::SFX_NAV);
+            return MenuPick::Credits;
+        }
+        if pressed(button::START) {
+            menusfx::play(menusfx::SFX_NAV);
+            return MenuPick::Settings;
         }
         prev = b;
 
-        draw_menu_scene(&mut fb, &font, sel, frame);
+        draw_menu_scene(&mut fb, &font, *sel, frame);
         sfx::update(); // keep the SPU sequencer ticking
         gpu::draw_sync();
         wait_vblank();
@@ -439,7 +469,7 @@ fn draw_menu_scene(fb: &mut FrameBuffer, font: &FontAtlas, sel: usize, frame: i3
     ol_text(font, tx, 216, "Credits", lcol);
 }
 
-/// Settings screen (Triangle from the menu): the same global options as the
+/// Settings screen (Start from the menu): the same global options as the
 /// in-game pause overlay -- volumes, pixel scale, screen mode, borders. Writes
 /// the shared backend/sfx state, so both menus stay in sync.
 fn show_settings() {
@@ -461,7 +491,7 @@ fn show_settings() {
 
     loop {
         let b = pico8::input::poll_buttons();
-        let pressed = |m: u16| b.is_held(m) && !prev.is_held(m);
+        let pressed = |m: u16| pressed(b, prev, m);
         let scale1x = backend::pixel_scale() == 1;
 
         if pressed(button::UP) {

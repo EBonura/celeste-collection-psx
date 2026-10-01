@@ -15,9 +15,13 @@
 //! the SDK's [`PadTracker`]; this module just keeps PICO-8's bit-indexed API
 //! and repeat cadence on top of it.
 
-use psx_pad::{button, poll_port1, ButtonState, PadTracker};
+use psx_pad::{button, poll_port1, ButtonState, PadMode, PadTracker};
 
 static mut TRACKER: PadTracker = PadTracker::new();
+
+/// The last cleanly read buttons (d-pad already merged with the stick), reused
+/// when a poll comes back garbled.
+static mut LAST_CLEAN: ButtonState = ButtonState::NONE;
 
 /// Left-stick deflection (of 127) that counts as a d-pad press. Per axis, so
 /// a diagonal push sets both bits like a diagonal on the d-pad; generous
@@ -30,11 +34,27 @@ const STICK_THRESHOLD: i16 = 48;
 /// simply gets its stick read as a second d-pad; in digital mode the sticks
 /// are centred and nothing changes. Use this everywhere the games, launcher
 /// and pause menu read the pad.
+///
+/// A poll whose ID handshake stays garbled through the SDK's retries
+/// ([`PadMode::Unknown`]) carries button bytes that mean nothing: decoded as
+/// active-low they can read as a burst of buttons nobody pressed, which the
+/// launcher would take as fresh presses (Select opens the credits) and, if it
+/// persists, as buttons held forever (no fresh press ever registers). Such a
+/// poll repeats the last clean state instead, so it can neither invent a press
+/// nor release a held button.
 pub fn poll_buttons() -> ButtonState {
     let pad = poll_port1();
-    if !pad.mode.has_sticks() {
-        return pad.buttons;
-    }
+    let clean = match pad.mode {
+        PadMode::Unknown => return unsafe { LAST_CLEAN },
+        PadMode::Analog | PadMode::Config => with_stick(pad),
+        PadMode::Digital | PadMode::Disconnected => pad.buttons,
+    };
+    unsafe { LAST_CLEAN = clean };
+    clean
+}
+
+/// `pad`'s buttons with its left stick folded into the d-pad bits.
+fn with_stick(pad: psx_pad::PadState) -> ButtonState {
     let (x, y) = pad.sticks.left_centered();
     let mut bits = pad.buttons.bits();
     if x <= -STICK_THRESHOLD {

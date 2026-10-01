@@ -1,16 +1,20 @@
 # Changelog
 
-## 0.2.6 | Unreleased
+## 0.2.6 | 2026-10-01
 
 - Controller polling waits for each non-final byte's ACK before sending the
   next byte. A failed transfer rejects the whole packet and retries instead
-  of accepting incomplete button or stick data.
-- This candidate targets the SCPH-110 analogue-mode navigation failure.
-  Console confirmation is pending.
+  of accepting incomplete button or stick data. This targets the SCPH-110
+  analogue-mode failure where the launcher opened the credits by itself and
+  Cross would not close them. Tested in the emulator; not yet confirmed on a
+  console.
+- Both carts run their logic on the SDK's psx-tick clock, one update per
+  VBlank: a frame that misses its VBlank catches up instead of slowing the
+  game down. The clock realigns when the pause menu closes.
 
 ## 0.2.5 | 2026-09-26
 
-Not yet published.
+Download published on itch.io.
 
 - Launcher navigation follows one rule set everywhere: Cross confirms or
   advances, Circle or Start goes back, and a press counts only on the frame

@@ -1,4 +1,4 @@
-Celeste Classic Collection (PSX)  -  v0.2.5
+Celeste Classic Collection (PSX)  -  v0.2.6
 ===========================================
 
 Two PICO-8 Celeste Classic games, the original Celeste and Celeste 2: Lani's
@@ -14,6 +14,14 @@ back. In a game, Start pauses and Start or Circle resumes. Press Select+Start
 together, or pick Quit to Menu in the pause menu, to return to the launcher
 with the game you were playing still selected. On a DualShock in analog mode
 the left stick works as the D-pad everywhere.
+
+v0.2.6:
+  - Controller reads wait for the pad to acknowledge each byte, and a read
+    that fails partway is thrown away and retried. This targets a DualShock
+    in analog mode opening the credits by itself, with Cross not closing
+    them. Tested in the emulator; not yet confirmed on a console.
+  - Both games run one logic update per VBlank: a frame that misses its
+    VBlank catches up instead of slowing the game down.
 
 v0.2.5:
   - Leaving a game, the credits or the settings always returns to the
@@ -39,6 +47,7 @@ The tested gameplay route preserved matched checkpoint images and game
 state. In the measured emulator route, Classic had no unexplained missed
 presentation deadlines; Celeste 2 still had occasional misses. This release
 does not claim locked 60 fps in every scene. The latest build was also
-reported working on original PlayStation hardware.
+reported working on original PlayStation hardware; v0.2.6 has not
+yet been run on one.
 
 Bonnie Studios  -  https://bonnie-studios.itch.io

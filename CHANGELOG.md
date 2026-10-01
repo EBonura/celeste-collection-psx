@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.6 | Unreleased
+
+- Controller polling waits for each non-final byte's ACK before sending the
+  next byte. A failed transfer rejects the whole packet and retries instead
+  of accepting incomplete button or stick data.
+- This candidate targets the SCPH-110 analogue-mode navigation failure.
+  Console confirmation is pending.
+
 ## 0.2.5 | 2026-09-26
 
 Not yet published.

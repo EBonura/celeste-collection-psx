@@ -24,7 +24,7 @@ page, no console needed.
 ## Build & run
 
 ```sh
-git clone https://github.com/EBonura/celeste-collection-psx.git
+git clone --recursive https://github.com/EBonura/celeste-collection-psx
 cd celeste-collection-psx
 
 make collection-disc  # the collection       -> dist/celeste-collection.{bin,cue}

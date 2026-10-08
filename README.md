@@ -2,7 +2,9 @@
 
 **[Download the latest version on itch.io](https://bonnie-studios.itch.io/celeste-classic-collection-psx)**
 
-> **Built with agentic coding.** AI coding agents write most of the code in PSoXide and in this game. I direct them, review what they produce, and test the results in the emulator and on a real PlayStation.
+> **Largely written with agentic coding.** I direct the agents and test their work in two places: PSoXide's emulator, which profiles every cycle, and a real PlayStation, which shows me where the emulator is wrong. Working between them is where the accuracy and the speed come from. [How PSoXide is built](https://ebonura.github.io/PSoXide/how-its-built/)
+>
+> **AI-generated content:** code only. The launcher cover art comes from the games themselves, the levels, art and music are the original creators', and the menu sounds are a CC0 pack.
 
 It's also on the [PSoXide Demo Disc](https://bonnie-studios.itch.io/psoxide-demo-disc) with the other Bonnie Studios PlayStation games, and you can [play it in your browser](https://bonnie-studios.itch.io/psoxide).
 

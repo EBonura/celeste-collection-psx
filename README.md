@@ -1,8 +1,8 @@
 # Celeste Classic Collection PSX
 
-Start with the [PSoXide Demo Disc](https://bonnie-studios.itch.io/psoxide-demo-disc): it includes Celeste Classic Collection PSX
-and the other Bonnie Studios PlayStation demos. Standalone downloads are available
-for testing just this collection.
+**[Download the latest version on itch.io](https://bonnie-studios.itch.io/celeste-classic-collection-psx)**
+
+It's also on the [PSoXide Demo Disc](https://bonnie-studios.itch.io/psoxide-demo-disc) with the other Bonnie Studios PlayStation games, and you can [play it in your browser](https://bonnie-studios.itch.io/psoxide).
 
 [PICO-8](https://www.lexaloffle.com/pico-8.php) games demade for the **PlayStation 1**,
 built on the [PSoXide](https://github.com/EBonura/PSoXide) Rust SDK.

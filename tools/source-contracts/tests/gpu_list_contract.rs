@@ -20,7 +20,11 @@ fn packets(words: &[u32]) -> Result<Vec<Packet>, String> {
         let opcode = words[at] >> 24;
         let size = match opcode {
             0xA0 => {
-                let wh = i64::from(*words.get(at + 2).ok_or("GPU packet crosses node boundary")?);
+                let wh = i64::from(
+                    *words
+                        .get(at + 2)
+                        .ok_or("GPU packet crosses node boundary")?,
+                );
                 let width = ((wh - 1) & 1023) + 1;
                 let height = (((wh >> 16) - 1) & 511) + 1;
                 3 + ((width * height + 1) / 2) as usize
@@ -72,7 +76,10 @@ fn fixture() -> Fixture {
     let text = common::read("tools/fixtures/gpu-list-classic-frame.json");
     let nodes: Value = serde_json::from_str(&text).expect("fixture JSON");
     let nodes = nodes.as_array().expect("array of nodes");
-    let counts = nodes.iter().map(|n| n["count"].as_u64().expect("count")).collect();
+    let counts = nodes
+        .iter()
+        .map(|n| n["count"].as_u64().expect("count"))
+        .collect();
     let node_words: Vec<Vec<u32>> = nodes
         .iter()
         .map(|n| {
@@ -107,7 +114,10 @@ fn backend_uses_sdk_ordered_stream() {
 fn shipped_fixture_demonstrates_violation() {
     let f = fixture();
     assert_eq!(f.counts, [254, 253, 252, 236]);
-    assert!(f.counts.iter().all(|&count| count > SAFE_PAYLOAD_WORDS as u64));
+    assert!(f
+        .counts
+        .iter()
+        .all(|&count| count > SAFE_PAYLOAD_WORDS as u64));
     assert_eq!(f.commands.len(), 264);
 }
 
@@ -118,7 +128,10 @@ fn regroup_preserves_every_word_and_packet() {
     assert!(small.iter().all(|node| node.len() <= SAFE_PAYLOAD_WORDS));
     let flat = |nodes: &[Vec<u32>]| nodes.iter().flatten().copied().collect::<Vec<u32>>();
     assert_eq!(flat(&small), flat(&f.node_words));
-    let regrouped: Vec<Packet> = small.iter().flat_map(|node| packets(node).unwrap()).collect();
+    let regrouped: Vec<Packet> = small
+        .iter()
+        .flat_map(|node| packets(node).unwrap())
+        .collect();
     assert_eq!(regrouped, f.commands);
 }
 
@@ -136,7 +149,12 @@ fn exact_limit_and_oversize_packet() {
 #[test]
 fn upload_cannot_be_split() {
     let f = fixture();
-    let upload = f.commands.iter().find(|p| p[0] >> 24 == 0xA0).unwrap().clone();
+    let upload = f
+        .commands
+        .iter()
+        .find(|p| p[0] >> 24 == 0xA0)
+        .unwrap()
+        .clone();
     assert_eq!(upload.len(), 11);
     assert_eq!(
         regroup(&[vec![0; 5], upload.clone()], 15).unwrap(),

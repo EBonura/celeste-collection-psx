@@ -63,5 +63,11 @@ fn elapsed_clock_wait_budget() {
         .collect();
     let unit = format!("{}\n{}{}", constants.join("\n"), &source[start..end], TESTS);
     let scratch = common::Scratch::new("celeste-audio-wait-");
-    common::compile_and_run(&scratch, "tests", &unit, &["--edition=2021", "--test", "-O"], &[]);
+    common::compile_and_run(
+        &scratch,
+        "tests",
+        &unit,
+        &["--edition=2021", "--test", "-O"],
+        &[],
+    );
 }

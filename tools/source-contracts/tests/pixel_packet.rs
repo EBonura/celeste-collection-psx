@@ -54,7 +54,13 @@ fn shared_pset_matches_inclusive_rectangle() {
         &scratch,
         "test",
         &unit,
-        &["--edition=2021", "--test", "-O", "-C", "overflow-checks=off"],
+        &[
+            "--edition=2021",
+            "--test",
+            "-O",
+            "-C",
+            "overflow-checks=off",
+        ],
         &["--test-threads=1"],
     );
 }

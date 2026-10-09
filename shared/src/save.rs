@@ -1,7 +1,8 @@
 //! Collection settings on the PS1 memory card (via `psx-mc`).
 //!
 //! One tiny save file persists the player options that outlive a session:
-//! SFX volume, music volume, pixel scale (1x/2x) and the borders preset.
+//! SFX volume, music volume, pixel scale (1x/2x), the borders preset and the
+//! brightness step.
 //! (Berry/death counters are per-run in both carts and reset by the games
 //! themselves, so they are deliberately not saved.)
 //!
@@ -15,6 +16,7 @@
 //!   AND the player is saving; read errors never trigger a format.
 
 use crate::{backend, sfx};
+use psx_display::Brightness;
 use psx_mc::{Card, HardwareCard, Slot};
 
 /// BIOS file name (region + product code + label). PS1 names cap at 20
@@ -25,8 +27,11 @@ const TITLE: &str = "CELESTE COLLECTION";
 
 /// Payload magic + layout version. Bump the digit if the layout changes.
 const MAGIC: [u8; 4] = *b"CCS1";
-/// magic(4) + sfx vol + music vol + pixel scale + borders preset.
-const PAYLOAD_LEN: usize = 8;
+/// magic(4) + sfx vol + music vol + pixel scale + borders preset + brightness.
+const PAYLOAD_LEN: usize = 9;
+/// The payload before brightness was added. Files of this length still load,
+/// with brightness at DEFAULT.
+const PAYLOAD_LEN_V1: usize = 8;
 
 /// The payload as last synced with the card (loaded or written), so [`save`]
 /// can skip the slow write when the live settings already match. `None` until
@@ -41,6 +46,7 @@ fn snapshot() -> [u8; PAYLOAD_LEN] {
     p[5] = sfx::music_volume() as u8;
     p[6] = backend::pixel_scale() as u8;
     p[7] = backend::side_preset();
+    p[8] = backend::brightness().to_byte();
     p
 }
 
@@ -52,7 +58,7 @@ pub fn load() {
     let Ok(len) = card.read(FILE_NAME, &mut buf) else {
         return;
     };
-    if len < PAYLOAD_LEN || buf[0..4] != MAGIC {
+    if len < PAYLOAD_LEN_V1 || buf[0..4] != MAGIC {
         return;
     }
     // Every setter clamps/wraps on its own, so a stale payload from a future
@@ -61,6 +67,12 @@ pub fn load() {
     sfx::set_music_volume(buf[5] as u16); // clamps to 0..=8
     backend::set_pixel_scale(buf[6] as i16); // clamps to 1|2
     backend::set_side_preset(buf[7]); // wraps % preset count
+    // A file from before brightness has no ninth byte: DEFAULT.
+    backend::set_brightness(if len >= PAYLOAD_LEN {
+        Brightness::from_byte(buf[8]) // clamps to -5..=5
+    } else {
+        Brightness::DEFAULT
+    });
     unsafe { SYNCED = Some(snapshot()) };
 }
 

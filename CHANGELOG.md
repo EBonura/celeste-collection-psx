@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- The pause menu has a Brightness row between Borders and Quit: DEFAULT in the
+  middle, DARKER 1 to 5 to the left, BRIGHTER 1 to 5 to the right, from the
+  SDK's psx-display. It is one grey rectangle over the finished frame, so the
+  pause panel is dimmed or lifted with the game, and nothing is drawn at
+  DEFAULT. The step is saved with the other options in one extra byte; a save
+  from before it loads as DEFAULT. Covers Celeste, Celeste 2 and the
+  collection's games. The collection's own Settings screen does not have the
+  row yet.
+- The SDK pin moves to 1ecf28ae6. The controller transport is the SDK's shared
+  SIO0 engine now (the 0.2.6 ACK-paced fix lives on in it), so this needs a
+  console run before it ships.
+
 ## 0.2.6 | 2026-10-01
 
 - Controller polling waits for each non-final byte's ACK before sending the

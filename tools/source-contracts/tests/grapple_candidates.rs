@@ -12,7 +12,8 @@ let mut a=old::cache();let mut b=new::cache();for q in 0..18{let tile=if q==17{2
 fn ordered_grapple_candidate_queries() {
     let root = common::root();
     let s = common::read("games/celeste2/src/game.rs");
-    let old = common::read("tools/fixtures/celeste2_grapple_check-8ed8.rs") + "unsafe fn player_bounce(";
+    let old =
+        common::read("tools/fixtures/celeste2_grapple_check-8ed8.rs") + "unsafe fn player_bounce(";
     let start = index(&s, "#[derive(Clone, Copy, PartialEq)]\nenum ObjType");
     let common_end = index_from(&s, "static mut OBJ:", start);
     let types = s[start..common_end].replace(
@@ -22,7 +23,11 @@ fn ordered_grapple_candidate_queries() {
     let contains = &s[index(&s, "unsafe fn contains(")..index(&s, "unsafe fn check_solid(")];
 
     let scratch = common::Scratch::new("celeste-grapple-");
-    std::fs::write(scratch.0.join("fixed.rs"), common::read("shared/src/fixed.rs")).unwrap();
+    std::fs::write(
+        scratch.0.join("fixed.rs"),
+        common::read("shared/src/fixed.rs"),
+    )
+    .unwrap();
     let mut unit = String::from("#![allow(dead_code,static_mut_refs)]\n");
     unit += &format!(
         "mod sin_table {{include!(\"{}/shared/src/sin_table.rs\");}}\n",
@@ -31,7 +36,8 @@ fn ordered_grapple_candidate_queries() {
     unit += "#[path=\"fixed.rs\"]mod fixed;use fixed::{Fix32,fx};fn fi(n:i32)->Fix32{Fix32::from_int(n)}\n";
     unit += &types;
     for (name, text) in [("old", old.as_str()), ("new", s.as_str())] {
-        let query = &text[index(text, "unsafe fn grapple_check(")..index(text, "unsafe fn player_bounce(")];
+        let query =
+            &text[index(text, "unsafe fn grapple_check(")..index(text, "unsafe fn player_bounce(")];
         let helper = if name == "new" {
             &s[index(&s, "struct GrappleCandidates {")..index(&s, "/// grapple_check:")]
         } else {
@@ -41,7 +47,10 @@ fn ordered_grapple_candidate_queries() {
             "mod {name} {{use super::*;pub static mut OBJ:[Obj;MAX_OBJ]=[OBJ0;MAX_OBJ];pub static mut TILE:i32=0;fn tile_at(_:i32,_:i32)->i32{{unsafe{{TILE}}}}mod backend{{pub fn fget(t:i32,f:i32)->bool{{t&(1<<f)!=0}}}}\n"
         );
         unit += contains;
-        unit += &helper.replace("struct GrappleCandidates {", "pub struct GrappleCandidates {");
+        unit += &helper.replace(
+            "struct GrappleCandidates {",
+            "pub struct GrappleCandidates {",
+        );
         unit += query;
         unit += if name == "new" {
             "pub type Cache=GrappleCandidates;pub fn cache()->Cache{Cache::new()}pub unsafe fn probe(i:usize,x:Fix32,y:Fix32,c:&mut Cache)->i32{grapple_check(i,x,y,c)}"

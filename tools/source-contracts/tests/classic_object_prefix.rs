@@ -38,8 +38,13 @@ fn packed_live_object_lifecycle() {
     );
 
     let scratch = common::Scratch::new("celeste-object-prefix-");
-    std::fs::write(scratch.0.join("fixed.rs"), common::read("shared/src/fixed.rs")).unwrap();
-    let mut unit = String::from("#![allow(dead_code,static_mut_refs)]\nuse core::ptr::addr_of_mut;\n");
+    std::fs::write(
+        scratch.0.join("fixed.rs"),
+        common::read("shared/src/fixed.rs"),
+    )
+    .unwrap();
+    let mut unit =
+        String::from("#![allow(dead_code,static_mut_refs)]\nuse core::ptr::addr_of_mut;\n");
     unit += &format!(
         "mod sin_table {{include!(\"{}/shared/src/sin_table.rs\");}}\n",
         root.display()

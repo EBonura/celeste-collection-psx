@@ -16,7 +16,8 @@ fn circle_visibility_against_existing_raster_spans() {
     let walker = &source[index(&source, "enum DiscRuns {")..];
     let walker = &walker[..index(walker, "/// PICO-8 `circ(x,y,r,c)`")];
     let tests = common::read("shared/src/backend_visibility_tests.rs");
-    let mut unit = String::from("#![allow(dead_code, static_mut_refs)]\ntype ClipRect = (i16,i16,i16,i16);\n");
+    let mut unit =
+        String::from("#![allow(dead_code, static_mut_refs)]\ntype ClipRect = (i16,i16,i16,i16);\n");
     unit += "const NO_CLIP: ClipRect = (i16::MIN,i16::MIN,i16::MAX,i16::MAX);\n";
     unit += predicate;
     unit += walker;

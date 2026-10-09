@@ -73,7 +73,8 @@ fn deferred_circle_packets_match_frozen_transform() {
     let legacy = common::read("tools/fixtures/disc_fill_list-048a8.rs");
     let current = section("unsafe fn disc_fill_list<", "/// Reject only discs");
 
-    let mut unit = String::from("#![allow(dead_code,static_mut_refs)]\ntype ClipRect=(i16,i16,i16,i16);\n");
+    let mut unit =
+        String::from("#![allow(dead_code,static_mut_refs)]\ntype ClipRect=(i16,i16,i16,i16);\n");
     unit += "const NO_CLIP:ClipRect=(i16::MIN,i16::MIN,i16::MAX,i16::MAX);\n";
     for (name, implementation) in [("old", legacy.as_str()), ("new", current.as_str())] {
         unit += &format!("mod {name} {{ use super::*;");

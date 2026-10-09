@@ -52,8 +52,18 @@ fn routes() -> Vec<Route> {
     let none: &[Event] = &[];
     vec![
         // boot and the cover menu
-        route("intro_skip_cross", none, &[(60, "cross", 8)], &[(150, "menu", Some(0))]),
-        route("intro_skip_circle", none, &[(60, "circle", 8)], &[(150, "menu", Some(0))]),
+        route(
+            "intro_skip_cross",
+            none,
+            &[(60, "cross", 8)],
+            &[(150, "menu", Some(0))],
+        ),
+        route(
+            "intro_skip_circle",
+            none,
+            &[(60, "circle", 8)],
+            &[(150, "menu", Some(0))],
+        ),
         route(
             "intro_skip_start",
             none,
@@ -69,7 +79,11 @@ fn routes() -> Vec<Route> {
         route(
             "menu_stick",
             none,
-            &[(60, "cross", 8), (150, "stick_right", 8), (250, "stick_left", 8)],
+            &[
+                (60, "cross", 8),
+                (150, "stick_right", 8),
+                (250, "stick_left", 8),
+            ],
             &[(200, "menu", Some(1)), (300, "menu", Some(0))],
         ),
         route(
@@ -82,32 +96,57 @@ fn routes() -> Vec<Route> {
         route(
             "credits_cross",
             none,
-            &[(60, "cross", 8), (150, "right", 8), (200, "select", 8), (400, "cross", 8)],
+            &[
+                (60, "cross", 8),
+                (150, "right", 8),
+                (200, "select", 8),
+                (400, "cross", 8),
+            ],
             &[(300, "credits", None), (500, "menu", Some(1))],
         ),
         route(
             "credits_circle",
             none,
-            &[(60, "cross", 8), (150, "right", 8), (200, "select", 8), (400, "circle", 8)],
+            &[
+                (60, "cross", 8),
+                (150, "right", 8),
+                (200, "select", 8),
+                (400, "circle", 8),
+            ],
             &[(300, "credits", None), (500, "menu", Some(1))],
         ),
         route(
             "credits_start",
             none,
-            &[(60, "cross", 8), (150, "right", 8), (200, "select", 8), (400, "start", 8)],
+            &[
+                (60, "cross", 8),
+                (150, "right", 8),
+                (200, "select", 8),
+                (400, "start", 8),
+            ],
             &[(300, "credits", None), (500, "menu", Some(1))],
         ),
         // settings: Start opens, Circle / Start close, stick moves the row
         route(
             "settings_circle",
             none,
-            &[(60, "cross", 8), (150, "right", 8), (200, "start", 8), (300, "circle", 8)],
+            &[
+                (60, "cross", 8),
+                (150, "right", 8),
+                (200, "start", 8),
+                (300, "circle", 8),
+            ],
             &[(260, "settings", Some(0)), (400, "menu", Some(1))],
         ),
         route(
             "settings_start",
             none,
-            &[(60, "cross", 8), (150, "right", 8), (200, "start", 8), (300, "start", 8)],
+            &[
+                (60, "cross", 8),
+                (150, "right", 8),
+                (200, "start", 8),
+                (300, "start", 8),
+            ],
             &[(260, "settings", Some(0)), (400, "menu", Some(1))],
         ),
         route(
@@ -131,7 +170,12 @@ fn routes() -> Vec<Route> {
         route(
             "c1_pause_quit",
             &LAUNCH_C1,
-            &[(500, "start", 8), (560, "up", 8), (620, "cross", 8), (800, "cross", 8)],
+            &[
+                (500, "start", 8),
+                (560, "up", 8),
+                (620, "cross", 8),
+                (800, "cross", 8),
+            ],
             &[
                 (400, "game", None),
                 (540, "pause", None),
@@ -142,7 +186,12 @@ fn routes() -> Vec<Route> {
         route(
             "c2_pause_quit",
             &LAUNCH_C2,
-            &[(550, "start", 8), (610, "up", 8), (670, "cross", 8), (850, "cross", 8)],
+            &[
+                (550, "start", 8),
+                (610, "up", 8),
+                (670, "cross", 8),
+                (850, "cross", 8),
+            ],
             &[
                 (450, "game", None),
                 (590, "pause", None),
@@ -203,7 +252,11 @@ fn routes() -> Vec<Route> {
                 (800, "select", 8),
                 (1000, "cross", 8),
             ],
-            &[(720, "menu", Some(0)), (900, "credits", None), (1100, "menu", Some(0))],
+            &[
+                (720, "menu", Some(0)),
+                (900, "credits", None),
+                (1100, "menu", Some(0)),
+            ],
         ),
         route(
             "c2_quit_then_credits",
@@ -214,7 +267,11 @@ fn routes() -> Vec<Route> {
                 (800, "select", 8),
                 (1000, "circle", 8),
             ],
-            &[(720, "menu", Some(1)), (900, "credits", None), (1100, "menu", Some(1))],
+            &[
+                (720, "menu", Some(1)),
+                (900, "credits", None),
+                (1100, "menu", Some(1)),
+            ],
         ),
     ]
 }
@@ -258,7 +315,11 @@ fn tape_bytes(events: &[Event], length: usize) -> Vec<u8> {
     let mut samples = vec![(0u16, 0x80u8, 0x80u8, 0x80u8, 0x80u8); length];
     for &(tick, inputs, hold) in events {
         for name in inputs.split('+') {
-            for sample in samples.iter_mut().take((tick + hold).min(length)).skip(tick) {
+            for sample in samples
+                .iter_mut()
+                .take((tick + hold).min(length))
+                .skip(tick)
+            {
                 if let Some(bits) = button(name) {
                     sample.0 |= bits;
                 } else {
@@ -357,7 +418,13 @@ fn classify(frame: &Frame) -> Screen {
         return ("credits", None);
     }
     let bar: Vec<i64> = (60..210usize)
-        .filter(|&y| (60..260).step_by(4).filter(|&x| frame.pixel(x, y) == SETTINGS_BAR).count() > 20)
+        .filter(|&y| {
+            (60..260)
+                .step_by(4)
+                .filter(|&x| frame.pixel(x, y) == SETTINGS_BAR)
+                .count()
+                > 20
+        })
         .map(|y| y as i64)
         .collect();
     if bar.len() >= 8 {
@@ -376,7 +443,11 @@ fn save_png(frame: &Frame, path: &Path) {
     let Ok(file) = fs::File::create(path) else {
         return;
     };
-    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), frame.width as u32, frame.height as u32);
+    let mut encoder = png::Encoder::new(
+        std::io::BufWriter::new(file),
+        frame.width as u32,
+        frame.height as u32,
+    );
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
     if let Ok(mut writer) = encoder.write_header() {
@@ -390,7 +461,13 @@ const STEPS_PER_TICK: usize = 300_000; // measured ~240k retired instructions pe
 struct Outcome {
     name: &'static str,
     rc: i32,
-    results: Vec<(usize, &'static str, Option<i64>, (String, Option<i64>), bool)>,
+    results: Vec<(
+        usize,
+        &'static str,
+        Option<i64>,
+        (String, Option<i64>),
+        bool,
+    )>,
 }
 
 fn run_route(route: &Route, frontend: &Path, disc: &Path, out: &Path) -> Outcome {
@@ -518,16 +595,20 @@ fn main() {
             }
             names
                 .iter()
-                .map(|name| all.iter().find(|route| route.name == name).expect("checked"))
+                .map(|name| {
+                    all.iter()
+                        .find(|route| route.name == name)
+                        .expect("checked")
+                })
                 .collect()
         }
         _ => all.iter().collect(),
     };
-    let disc = fs::canonicalize(&options.disc).unwrap_or_else(|_| {
-        std::env::current_dir().expect("cwd").join(&options.disc)
-    });
+    let disc = fs::canonicalize(&options.disc)
+        .unwrap_or_else(|_| std::env::current_dir().expect("cwd").join(&options.disc));
     let next = AtomicUsize::new(0);
-    let slots: Mutex<Vec<Option<Outcome>>> = Mutex::new((0..selected.len()).map(|_| None).collect());
+    let slots: Mutex<Vec<Option<Outcome>>> =
+        Mutex::new((0..selected.len()).map(|_| None).collect());
     std::thread::scope(|scope| {
         for _ in 0..options.jobs.min(selected.len().max(1)) {
             scope.spawn(|| loop {
@@ -569,7 +650,11 @@ fn main() {
             );
         }
     }
-    println!("{}/{} routes passed", selected.len() - failed, selected.len());
+    println!(
+        "{}/{} routes passed",
+        selected.len() - failed,
+        selected.len()
+    );
     std::process::exit(i32::from(failed != 0));
 }
 
@@ -635,9 +720,21 @@ mod tests {
         assert_eq!(classify(&menu_right), ("menu", Some(1)));
         assert_eq!(classify(&frame(|_, _| CREDITS_NAVY)), ("credits", None));
         // Settings bar on the second row: rows 96..104 painted.
-        let settings = frame(|x, y| if (60..260).contains(&x) && (96..106).contains(&y) { SETTINGS_BAR } else { [0, 0, 0] });
+        let settings = frame(|x, y| {
+            if (60..260).contains(&x) && (96..106).contains(&y) {
+                SETTINGS_BAR
+            } else {
+                [0, 0, 0]
+            }
+        });
         assert_eq!(classify(&settings), ("settings", Some(1)));
-        let pause = frame(|x, y| if (x == 56 || x == 262) && (60..180).contains(&y) { PAUSE_WHITE } else { [0, 0, 0] });
+        let pause = frame(|x, y| {
+            if (x == 56 || x == 262) && (60..180).contains(&y) {
+                PAUSE_WHITE
+            } else {
+                [0, 0, 0]
+            }
+        });
         assert_eq!(classify(&pause), ("pause", None));
         assert_eq!(classify(&frame(|_, _| [0, 0, 0])), ("game", None));
     }

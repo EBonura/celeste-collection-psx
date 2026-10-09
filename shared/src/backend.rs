@@ -232,6 +232,15 @@ pub fn brightness_overlay() {
     }
 }
 
+/// [`brightness_overlay`] for a screen mid-fade: `fade` is the screen's
+/// strength, 128 being full, so a fade to black still ends black instead of a
+/// lifted grey. The launcher's intro and menu dissolves use it.
+pub fn brightness_overlay_faded(fade: u8) {
+    if let Some(overlay) = brightness().faded_overlay(Resolution::R320X240, fade) {
+        emit(overlay.words());
+    }
+}
+
 /// Submit the SDK ordered stream while retaining its DMA storage.
 pub fn submit() {
     unsafe {

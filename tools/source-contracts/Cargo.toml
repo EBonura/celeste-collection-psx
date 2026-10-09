@@ -1,0 +1,12 @@
+[package]
+name        = "source-contracts"
+version     = "0.1.0"
+edition     = "2021"
+publish     = false
+description = "Host tests for the PS1 runtime: slices of the no_std source are compiled with rustc and run against frozen oracles."
+
+# Its own workspace: the games and shared/ build for the PS1, these for the host.
+[workspace]
+
+[dev-dependencies]
+serde_json = "1"

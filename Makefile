@@ -116,12 +116,12 @@ collection-release: collection-disc
 	@echo "RELEASE -> $(RELEASE)/  (now: git add release && git commit && git push)"
 
 # Every way around the launcher and both pause menus, replayed headlessly on the
-# collection disc (tools/nav_routes.py). FRONTEND is PSoXide's headless
+# collection disc (tools/nav-routes). FRONTEND is PSoXide's headless
 # `frontend` binary (PSoXide-editor: cargo build --release -p frontend).
 FRONTEND ?=
 nav-routes: collection-disc
 	@test -n "$(FRONTEND)" || { echo "set FRONTEND=/path/to/frontend"; exit 2; }
-	python3 tools/nav_routes.py --frontend "$(FRONTEND)" --disc "$(DIST)/celeste-collection.cue" --out "$(DIST)/nav-routes"
+	cargo run -q --release --manifest-path tools/nav-routes/Cargo.toml -- --frontend "$(FRONTEND)" --disc "$(DIST)/celeste-collection.cue" --out "$(DIST)/nav-routes"
 
 # ---- Celeste ---------------------------------------------------------
 CELESTE_DIR := $(ROOT)/games/celeste

@@ -1,24 +1,12 @@
-#!/usr/bin/env python3
-"""Exercise the production wait-budget arithmetic, not a replacement synth.
+//! Exercise the production wait-budget arithmetic, not a replacement synth.
+//!
+//! The end-to-end replay separately checks real samples and events. These tests
+//! prove the bounded clock forecast and reproduce the old fourteen-block cap
+//! leaving due work idle before the very next post-swap update.
 
-The end-to-end replay separately checks real samples and events. These tests
-prove the bounded clock forecast and reproduce the old fourteen-block cap
-leaving due work idle before the very next post-swap update.
-"""
-from pathlib import Path
-import subprocess
-import tempfile
+mod common;
 
-ROOT = Path(__file__).resolve().parents[1]
-source = (ROOT / "shared/src/sfx.rs").read_text()
-start = source.index("fn wait_fill_target(")
-end = source.index("\n/// Render one due block", start)
-constants = "\n".join(
-    line for line in source.splitlines()
-    if line.startswith(("const LEAD_BLOCKS:", "const MAX_BLOCKS_PER_UPDATE:",
-                        "const RING_BLOCKS:", "const BLOCKS_PER_FRAME_Q16:"))
-)
-unit = constants + "\n" + source[start:end] + r"""
+const TESTS: &str = r####"
 #[test]
 fn normal_frame_and_counter_wrap() {
     assert_eq!(wait_fill_target(100, 10, 10), 114);
@@ -53,10 +41,27 @@ fn stale_clock_or_pause_cannot_fill_the_ring() {
         assert!(LEAD_BLOCKS + allowance < RING_BLOCKS);
     }
 }
-"""
-with tempfile.TemporaryDirectory(prefix="celeste-audio-wait-") as directory:
-    path = Path(directory)
-    (path / "tests.rs").write_text(unit)
-    subprocess.run(["rustc", "--edition=2021", "--test", "-O",
-                    str(path / "tests.rs"), "-o", str(path / "tests")], check=True)
-    subprocess.run([str(path / "tests")], check=True)
+"####;
+
+#[test]
+fn elapsed_clock_wait_budget() {
+    let source = common::read("shared/src/sfx.rs");
+    let start = common::index(&source, "fn wait_fill_target(");
+    let end = common::index_from(&source, "\n/// Render one due block", start);
+    let constants: Vec<&str> = source
+        .lines()
+        .filter(|line| {
+            [
+                "const LEAD_BLOCKS:",
+                "const MAX_BLOCKS_PER_UPDATE:",
+                "const RING_BLOCKS:",
+                "const BLOCKS_PER_FRAME_Q16:",
+            ]
+            .iter()
+            .any(|prefix| line.starts_with(prefix))
+        })
+        .collect();
+    let unit = format!("{}\n{}{}", constants.join("\n"), &source[start..end], TESTS);
+    let scratch = common::Scratch::new("celeste-audio-wait-");
+    common::compile_and_run(&scratch, "tests", &unit, &["--edition=2021", "--test", "-O"], &[]);
+}

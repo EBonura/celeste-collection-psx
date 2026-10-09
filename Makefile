@@ -38,16 +38,22 @@ help:
 
 # Which PSoXide this is built against. components.lock.json pins the SDK,
 # editor/engine and emulator-library revisions separately, the same lock the
-# rest of the game fleet uses. psoxide-components (the SDK's tools/psoxide-link)
-# imports them into .psoxide so the path dependencies and the linker script
-# resolve; it is installed once per SDK revision, from the revision the lock
-# pins, under target/. An unchanged lock is verified against its receipt and not
-# fetched again.
+# rest of the game fleet uses. psoxide-components (built from the SDK's
+# tools/psoxide-link) imports them into .psoxide so the path dependencies and
+# the linker script resolve. An unchanged lock is verified against its receipt
+# and not fetched again.
+#
+# The tool is installed once per COMPONENTS_REV under target/. It is pinned here
+# rather than read from the lock because the lock's SDK revision can predate the
+# tool (the psoxide-components binary first exists at 4e97cf3); the tool only
+# reads the lock, so any SDK revision that has it imports the same tree. Once
+# the lock's SDK revision has the tool this can follow it, as the other fleet
+# repos do.
 #
 # PSOXIDE_FROM=/path/to/tree overrides the lock with a working tree, which is
 # how the demo disc puts every program it presses on one SDK.
-SDK_REV    := $(shell sed -n '/"sdk": *{/,/"revision"/s/.*"revision": *"\([0-9a-f]*\)".*/\1/p' "$(ROOT)/components.lock.json")
-COMPONENTS := $(ROOT)/target/psoxide-components/$(SDK_REV)
+COMPONENTS_REV := 1ecf28ae6ee9a391ea25a6f27afdb7e7278b5790
+COMPONENTS     := $(ROOT)/target/psoxide-components/$(COMPONENTS_REV)
 PSOXIDE_FROM ?=
 psoxide:
 	@if [ -n "$(PSOXIDE_FROM)" ]; then \
@@ -55,7 +61,7 @@ psoxide:
 			--from "$(PSOXIDE_FROM)" --into $(PSOXIDE); \
 	else \
 		[ -x "$(COMPONENTS)/bin/psoxide-components" ] || cargo install -q --locked \
-			--git https://github.com/EBonura/PSoXide --rev $(SDK_REV) --root "$(COMPONENTS)" psoxide-link; \
+			--git https://github.com/EBonura/PSoXide --rev $(COMPONENTS_REV) --root "$(COMPONENTS)" psoxide-link; \
 		"$(COMPONENTS)/bin/psoxide-components" --root "$(PSOXIDE)" --lock "$(ROOT)/components.lock.json"; \
 	fi
 

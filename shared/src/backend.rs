@@ -18,6 +18,7 @@ use crate::palette::{PICO8_CLUT, PICO8_RGB, TEXT_CLUTS};
 use psx_gpu::{self as gpu};
 use psx_hw::gpu::{pack_color, pack_texcoord, pack_vertex, pack_xy};
 use psx_io::gpu::{wait_cmd_ready, write_gp0};
+use psx_io::periph::GpuDma;
 use psx_vram::{upload_16bpp, Clut, TexDepth, Tpage, VramRect};
 
 /// A game's PICO-8 graphics data: the doubled 256x256 4bpp spritesheet and the
@@ -164,7 +165,10 @@ static mut DEFERRED: bool = false;
 unsafe fn stream() -> &'static mut gpu::ordered::OrderedCommandStream {
     let slot = &mut *core::ptr::addr_of_mut!(STREAM);
     slot.get_or_insert_with(|| {
-        gpu::ordered::OrderedCommandStream::new(&mut *core::ptr::addr_of_mut!(LIST.0))
+        gpu::ordered::OrderedCommandStream::with_dma(
+            &mut *core::ptr::addr_of_mut!(LIST.0),
+            GpuDma::steal(),
+        )
     })
 }
 
@@ -217,7 +221,7 @@ pub fn submit() {
 pub fn draw_sync() {
     unsafe {
         if DEFERRED {
-            stream().draw_sync();
+            stream().flush();
         } else {
             gpu::draw_sync();
         }

@@ -48,6 +48,7 @@ dependencies = [
 name = "pico8"
 version = "0.1.0"
 dependencies = [
+ "psx-display",
  "psx-font",
  "psx-gpu",
  "psx-hw",
@@ -65,7 +66,16 @@ name = "psx-asset"
 version = "0.1.0"
 dependencies = [
  "psx-gte",
+ "psx-hw",
  "psxed-format",
+]
+
+[[package]]
+name = "psx-display"
+version = "0.1.0"
+dependencies = [
+ "psx-gpu",
+ "psx-hw",
 ]
 
 [[package]]
@@ -83,6 +93,7 @@ dependencies = [
 name = "psx-gpu"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "psx-hw",
  "psx-io",
 ]
@@ -92,6 +103,7 @@ name = "psx-gte"
 version = "0.1.0"
 dependencies = [
  "psx-gte-core",
+ "psx-hw",
 ]
 
 [[package]]

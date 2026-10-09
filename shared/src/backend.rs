@@ -15,9 +15,12 @@
 
 use crate::font::FONT_DATA;
 use crate::palette::{PICO8_CLUT, PICO8_RGB, TEXT_CLUTS};
+use psx_display::Brightness;
+use psx_gpu::display::Resolution;
 use psx_gpu::{self as gpu};
 use psx_hw::gpu::{pack_color, pack_texcoord, pack_vertex, pack_xy};
 use psx_io::gpu::{wait_cmd_ready, write_gp0};
+use psx_io::periph::GpuDma;
 use psx_vram::{upload_16bpp, Clut, TexDepth, Tpage, VramRect};
 
 /// A game's PICO-8 graphics data: the doubled 256x256 4bpp spritesheet and the
@@ -164,7 +167,10 @@ static mut DEFERRED: bool = false;
 unsafe fn stream() -> &'static mut gpu::ordered::OrderedCommandStream {
     let slot = &mut *core::ptr::addr_of_mut!(STREAM);
     slot.get_or_insert_with(|| {
-        gpu::ordered::OrderedCommandStream::new(&mut *core::ptr::addr_of_mut!(LIST.0))
+        gpu::ordered::OrderedCommandStream::with_dma(
+            &mut *core::ptr::addr_of_mut!(LIST.0),
+            GpuDma::steal(),
+        )
     })
 }
 
@@ -204,10 +210,42 @@ fn emit_upload(rect: VramRect, pixels: &[u16]) {
     }
 }
 
+/// The player's BRIGHTNESS setting (the pause menu row): DEFAULT, DARKER 1 to 5
+/// or BRIGHTER 1 to 5. A player setting, saved with the others.
+static mut BRIGHTNESS: Brightness = Brightness::DEFAULT;
+
+pub fn set_brightness(b: Brightness) {
+    unsafe { BRIGHTNESS = b };
+}
+pub fn brightness() -> Brightness {
+    unsafe { BRIGHTNESS }
+}
+
+/// Put the brightness overlay (one grey rectangle over the 320x240 frame) at
+/// the end of whatever is being drawn: listed when the frame is deferred,
+/// written to GP0 otherwise. Nothing at DEFAULT, so the default picture is the
+/// picture as drawn and costs no packet. It leaves GP0(E1h) in its own blend
+/// mode; every textured draw here sets its own draw mode first.
+pub fn brightness_overlay() {
+    if let Some(overlay) = brightness().overlay(Resolution::R320X240) {
+        emit(overlay.words());
+    }
+}
+
+/// [`brightness_overlay`] for a screen mid-fade: `fade` is the screen's
+/// strength, 128 being full, so a fade to black still ends black instead of a
+/// lifted grey. The launcher's intro and menu dissolves use it.
+pub fn brightness_overlay_faded(fade: u8) {
+    if let Some(overlay) = brightness().faded_overlay(Resolution::R320X240, fade) {
+        emit(overlay.words());
+    }
+}
+
 /// Submit the SDK ordered stream while retaining its DMA storage.
 pub fn submit() {
     unsafe {
         if DEFERRED {
+            brightness_overlay();
             stream().submit();
         }
     }
@@ -217,7 +255,7 @@ pub fn submit() {
 pub fn draw_sync() {
     unsafe {
         if DEFERRED {
-            stream().draw_sync();
+            stream().flush();
         } else {
             gpu::draw_sync();
         }

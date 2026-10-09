@@ -25,7 +25,7 @@
 #![allow(static_mut_refs)]
 
 use crate::synth::{self, BLOCK_BYTES, BLOCK_SAMPLES, SAMPLE_RATE};
-use psx_io::spu::{SPUCNT, SPUSTAT};
+use psx_hw::spu::{SPUCNT, SPUSTAT};
 use psx_spu as spu;
 use spu::{Adsr, Pitch, SpuAddr, Voice, Volume};
 

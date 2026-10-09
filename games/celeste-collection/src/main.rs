@@ -174,6 +174,7 @@ fn show_intro() {
             lvl as i32,
         );
 
+        backend::brightness_overlay_faded(lvl);
         gpu::draw_sync();
         wait_vblank();
         fb.swap();
@@ -291,6 +292,7 @@ fn show_credits() {
         }
 
         sfx::update();
+        backend::brightness_overlay();
         gpu::draw_sync();
         wait_vblank();
         fb.swap();
@@ -340,6 +342,7 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
     for k in 0..FADE_FRAMES {
         draw_menu_scene(&mut fb, &font, *sel, frame);
         fade_quad((255 - 255 * k / FADE_FRAMES) as u8);
+        backend::brightness_overlay_faded((128 * k / FADE_FRAMES) as u8);
         gpu::draw_sync();
         wait_vblank();
         fb.swap();
@@ -383,6 +386,7 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
 
         draw_menu_scene(&mut fb, &font, *sel, frame);
         sfx::update(); // keep the SPU sequencer ticking
+        backend::brightness_overlay();
         gpu::draw_sync();
         wait_vblank();
         fb.swap();
@@ -481,7 +485,7 @@ fn show_settings() {
     sfx::init(celeste::AUDIO);
     menusfx::init();
 
-    const N: usize = 6; // SFX, Music, Pixel, Screen, Borders, Fly
+    const N: usize = 7; // SFX, Music, Pixel, Screen, Borders, Brightness, Fly
     let mut sel = 0usize;
     let mut prev = pico8::input::poll_buttons();
     let mut frame = 0i32;
@@ -521,11 +525,12 @@ fn show_settings() {
                     let c = backend::side_preset() as i32;
                     backend::set_side_preset((c + dir).rem_euclid(n) as u8);
                 }
-                5 => debug::set_fly(dir > 0), // right = on, left = off
+                5 => backend::set_brightness(backend::brightness().stepped(dir as i8)),
+                6 => debug::set_fly(dir > 0), // right = on, left = off
                 _ => changed = false,
             }
             if changed {
-                dirty |= matches!(sel, 0 | 1 | 2 | 4);
+                dirty |= matches!(sel, 0 | 1 | 2 | 4 | 5);
                 menusfx::play(menusfx::SFX_NAV);
             }
         }
@@ -538,7 +543,7 @@ fn show_settings() {
                     let n = backend::side_preset_count();
                     backend::set_side_preset((backend::side_preset() + 1) % n);
                 }
-                5 => debug::set_fly(!debug::fly_enabled()),
+                6 => debug::set_fly(!debug::fly_enabled()),
                 _ => changed = false,
             }
             if changed {
@@ -572,8 +577,8 @@ fn show_settings() {
             0x80,
         );
 
-        const ROWS: [&str; N] = ["SFX", "Music", "Pixel", "Screen", "Borders", "Fly"];
-        const Y0: i16 = 74;
+        const ROWS: [&str; N] = ["SFX", "Music", "Pixel", "Screen", "Borders", "Brightness", "Fly"];
+        const Y0: i16 = 64; // seven rows: start higher so the last clears the Back hint
         const RH: i16 = 22;
         let (lx, vx) = (84i16, 188i16);
         for (i, label) in ROWS.iter().enumerate() {
@@ -622,6 +627,12 @@ fn show_settings() {
                     tint,
                 ),
                 5 => {
+                    let label = backend::brightness().label();
+                    let value = label.as_str();
+                    // right-aligned: "BRIGHTER 5" is wider than the value column
+                    ol_text(&font, 258 - font.text_width(value) as i16, y, value, tint);
+                }
+                6 => {
                     // mark the Triangle button it maps to in-game, beside the label
                     icons::draw(
                         &icons::TRIANGLE,
@@ -643,6 +654,7 @@ fn show_settings() {
         ol_text(&font, bx + cw + 4, 216, "Back", (0x60, 0x60, 0x6c));
 
         sfx::update();
+        backend::brightness_overlay();
         gpu::draw_sync();
         wait_vblank();
         fb.swap();
@@ -693,6 +705,7 @@ fn fade_out(fb: &mut FrameBuffer, font: &FontAtlas, sel: usize, frame: &mut i32)
     for k in 1..=FADE_FRAMES {
         draw_menu_scene(fb, font, sel, *frame);
         fade_quad((255 * k / FADE_FRAMES) as u8);
+        backend::brightness_overlay_faded((128 * (FADE_FRAMES - k) / FADE_FRAMES) as u8);
         gpu::draw_sync();
         wait_vblank();
         fb.swap();

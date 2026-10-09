@@ -20,7 +20,7 @@ DIST     := $(ROOT)/dist
 PSOXIDE_LIB     ?= $(HOME)/Downloads/ps1 games
 COLLECTION_NAME := Celeste Classic Collection
 
-.PHONY: help psoxide emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
+.PHONY: help psoxide verify-components emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
 
 help:
 	@echo "pico8-psx targets:"
@@ -38,25 +38,35 @@ help:
 
 # Which PSoXide this is built against. components.lock.json pins the SDK,
 # editor/engine and emulator-library revisions separately, the same lock the
-# rest of the game fleet uses, and tools/bootstrap-components.py imports them
-# into .psoxide so the path dependencies and the linker script resolve. An
-# unchanged lock is verified against its receipt and not fetched again.
+# rest of the game fleet uses. psoxide-components (the SDK's tools/psoxide-link)
+# imports them into .psoxide so the path dependencies and the linker script
+# resolve; it is installed once per SDK revision, from the revision the lock
+# pins, under target/. An unchanged lock is verified against its receipt and not
+# fetched again.
 #
 # PSOXIDE_FROM=/path/to/tree overrides the lock with a working tree, which is
 # how the demo disc puts every program it presses on one SDK.
+SDK_REV    := $(shell sed -n '/"sdk": *{/,/"revision"/s/.*"revision": *"\([0-9a-f]*\)".*/\1/p' "$(ROOT)/components.lock.json")
+COMPONENTS := $(ROOT)/target/psoxide-components/$(SDK_REV)
 PSOXIDE_FROM ?=
 psoxide:
 	@if [ -n "$(PSOXIDE_FROM)" ]; then \
 		cargo run -q --manifest-path $(PSOXIDE_FROM)/tools/psoxide-link/Cargo.toml -- \
 			--from "$(PSOXIDE_FROM)" --into $(PSOXIDE); \
 	else \
-		python3 $(ROOT)/tools/bootstrap-components.py --root $(PSOXIDE) --lock $(ROOT)/components.lock.json; \
+		[ -x "$(COMPONENTS)/bin/psoxide-components" ] || cargo install -q --locked \
+			--git https://github.com/EBonura/PSoXide --rev $(SDK_REV) --root "$(COMPONENTS)" psoxide-link; \
+		"$(COMPONENTS)/bin/psoxide-components" --root "$(PSOXIDE)" --lock "$(ROOT)/components.lock.json"; \
 	fi
+
+# Verify the imported tree against the lock without fetching (CI runs this).
+verify-components: psoxide
+	"$(COMPONENTS)/bin/psoxide-components" --root "$(PSOXIDE)" --lock "$(ROOT)/components.lock.json" --check
 
 # The emulator lives in its own repository since the SDK split. Only the host
 # benches need it (tools/psx-audio-capture path-deps into this tree), so it is
-# cloned on demand at a pinned revision and bootstrapped the way its own
-# Makefile does (materialising the SDK crates it builds against).
+# cloned on demand at a pinned revision and bootstrapped with its own
+# `make bootstrap` (materialising the SDK crates it builds against).
 EMULATOR_REV := 25cb81b1ae94233bec726e8d0d9d280b73e96ca2
 EMULATOR     := $(ROOT)/.psoxide-emulator
 emulator:
@@ -64,7 +74,7 @@ emulator:
 		git clone -q https://github.com/EBonura/PSoXide-emulator.git "$(EMULATOR)"; \
 	fi
 	@cd "$(EMULATOR)" && git fetch -q origin $(EMULATOR_REV) && git checkout -q $(EMULATOR_REV) \
-		&& python3 tools/bootstrap-components.py
+		&& $(MAKE) -s bootstrap
 
 capture-tools: emulator
 	cd tools/psx-audio-capture && cargo build --release

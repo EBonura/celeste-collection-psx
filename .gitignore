@@ -35,7 +35,7 @@ AGENTS.md
 __pycache__/
 *.pyc
 
-# Imported by tools/bootstrap-components.py from components.lock.json. Never
+# Imported by psoxide-components (make psoxide) from components.lock.json. Never
 # committed: the lock is the source of truth, this is a cache.
 .psoxide/
 # The emulator, cloned by `make emulator` at the revision pinned in the Makefile.

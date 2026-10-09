@@ -17,7 +17,7 @@ jobs:
       - name: Import the locked PSoXide components
         run: make psoxide
       - name: Check the imported components against the lock
-        run: python3 tools/bootstrap-components.py --root .psoxide --lock components.lock.json --check
+        run: make verify-components
       - name: Check shared/ for the host target
         run: |
           HOST=$(rustc -vV | sed -n 's/host: //p')

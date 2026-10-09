@@ -8,8 +8,10 @@
   pause panel is dimmed or lifted with the game, and nothing is drawn at
   DEFAULT. The step is saved with the other options in one extra byte; a save
   from before it loads as DEFAULT. Covers Celeste, Celeste 2 and the
-  collection's games. The collection's own Settings screen does not have the
-  row yet.
+  collection's games. The launcher's Settings screen has the same row
+  (between Borders and Fly, sharing the saved value), and the intro, cover
+  menu, credits and settings are dimmed or lifted too; the fades still end
+  black.
 - The SDK pin moves to 1ecf28ae6. The controller transport is the SDK's shared
   SIO0 engine now (the 0.2.6 ACK-paced fix lives on in it), so this needs a
   console run before it ships.

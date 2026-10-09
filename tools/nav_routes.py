@@ -180,7 +180,7 @@ def classify(path):
     bar = [y for y in range(60, 210)
            if sum(im.getpixel((x, y)) == SETTINGS_BAR for x in range(60, 260, 4)) > 20]
     if len(bar) >= 8:
-        return "settings", (bar[0] + 3 - 74) // 22
+        return "settings", (bar[0] + 3 - 64) // 22
     border = sum(im.getpixel((56, y)) == PAUSE_WHITE and im.getpixel((262, y)) == PAUSE_WHITE
                  for y in range(60, 180))
     if border >= 100:

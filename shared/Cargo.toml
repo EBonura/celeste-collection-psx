@@ -12,6 +12,7 @@ edition = "2021"
 
 [dependencies]
 psx-gpu  = { path = "../.psoxide/sdk/crates/psx-gpu" }
+psx-display = { path = "../.psoxide/sdk/crates/psx-display" }
 psx-vram = { path = "../.psoxide/sdk/crates/psx-vram" }
 psx-io   = { path = "../.psoxide/sdk/crates/psx-io" }
 psx-hw   = { path = "../.psoxide/crates/psx-hw" }

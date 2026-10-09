@@ -428,7 +428,7 @@ fn classify(frame: &Frame) -> Screen {
         .map(|y| y as i64)
         .collect();
     if bar.len() >= 8 {
-        return ("settings", Some((bar[0] + 3 - 74).div_euclid(22)));
+        return ("settings", Some((bar[0] + 3 - 64).div_euclid(22)));
     }
     let border = (60..180)
         .filter(|&y| frame.pixel(56, y) == PAUSE_WHITE && frame.pixel(262, y) == PAUSE_WHITE)

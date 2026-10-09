@@ -1,7 +1,8 @@
 //! In-game pause menu (not in the original PICO-8 carts).
 //!
 //! Pressing Start opens an overlay with two volume sliders (SFX / music), a debug
-//! fly toggle, and a "quit to menu" item. Start or Circle resumes, Cross acts on
+//! fly toggle, the display rows (pixel scale, screen mode, borders, brightness),
+//! and a "quit to menu" item. Start or Circle resumes, Cross acts on
 //! the highlighted row, and Select+Start quits to the launcher from here too,
 //! exactly as it does during play. The panel/sliders draw through
 //! [`crate::backend`] (PICO-8 128-space rects), but the TEXT is rendered in the
@@ -114,9 +115,9 @@ impl Pause {
 
     fn row_count(&self) -> u8 {
         if self.fly {
-            7
+            8
         } else {
-            6
+            7
         }
     }
     fn pixel_row(&self) -> u8 {
@@ -131,6 +132,9 @@ impl Pause {
     }
     fn borders_row(&self) -> u8 {
         self.pixel_row() + 2
+    }
+    fn brightness_row(&self) -> u8 {
+        self.pixel_row() + 3
     }
     fn quit_row(&self) -> u8 {
         self.row_count() - 1
@@ -194,6 +198,11 @@ impl Pause {
                 let n = backend::side_preset_count() as i32;
                 let cur = backend::side_preset() as i32;
                 backend::set_side_preset((cur + dir).rem_euclid(n) as u8);
+                self.changed = true;
+                crate::menusfx::play(crate::menusfx::SFX_NAV);
+            } else if self.sel == self.brightness_row() {
+                // Clamped at DARKER 5 and BRIGHTER 5, never wraps.
+                backend::set_brightness(backend::brightness().stepped(dir as i8));
                 self.changed = true;
                 crate::menusfx::play(crate::menusfx::SFX_NAV);
             } else {
@@ -277,6 +286,7 @@ impl Pause {
         let pixel_y = row_y(self.pixel_row());
         let screen_y = row_y(self.screen_row());
         let borders_y = row_y(self.borders_row());
+        let brightness_y = row_y(self.brightness_row());
         let quit_y = row_y(self.quit_row());
         let footer_y = quit_y + FOOT_GAP;
 
@@ -295,6 +305,7 @@ impl Pause {
             r if r == self.pixel_row() => pixel_y,
             r if r == self.screen_row() => screen_y,
             r if r == self.borders_row() => borders_y,
+            r if r == self.brightness_row() => brightness_y,
             _ => quit_y,
         };
         backend::rectfill(15, sel_y - 2, 112, sel_y + 6, 1);
@@ -356,6 +367,17 @@ impl Pause {
             self.text(74, borders_y, name, if lit { T_WHITE } else { T_GREY });
         }
 
+        // picture brightness: DEFAULT, DARKER n, BRIGHTER n (right-aligned in the row)
+        {
+            let lit = self.sel == self.brightness_row();
+            let tint = if lit { T_WHITE } else { T_GREY };
+            self.text(28, brightness_y, "Brightness", tint);
+            let label = backend::brightness().label();
+            let value = label.as_str();
+            let vx = 255 - self.font.text_width(value) as i16; // screen px, bar ends at 256
+            self.text((vx - 32) / 2, brightness_y, value, tint);
+        }
+
         let quit_t = if self.sel == self.quit_row() {
             T_WHITE
         } else {
@@ -373,6 +395,9 @@ impl Pause {
         let tx = x0 + iw + gap;
         self.outline(tx, sy(footer_y), resume);
         self.font.draw_text(tx, sy(footer_y), resume, T_GREY);
+
+        // Last, so the dimmed or lifted picture includes this panel too.
+        backend::brightness_overlay();
 
         backend::set_pixel_scale(game_scale); // restore the game's scale
     }

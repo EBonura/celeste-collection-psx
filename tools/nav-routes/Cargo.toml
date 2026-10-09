@@ -1,0 +1,12 @@
+[package]
+name        = "nav-routes"
+version     = "0.1.0"
+edition     = "2021"
+publish     = false
+description = "Headless navigation routes for the Celeste Classic Collection disc."
+
+# Its own workspace: this is a host tool, the games build for the PS1.
+[workspace]
+
+[dependencies]
+png = "0.17"

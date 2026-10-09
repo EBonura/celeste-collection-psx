@@ -1,29 +1,14 @@
-#!/usr/bin/env python3
-"""Compare actual deferred circle packets with the frozen multiplication path.
+//! Compare actual deferred circle packets with the frozen multiplication path.
+//!
+//! Only the DMA sink is replaced. Both functions use the production circle
+//! table, clip predicate and GP0 packing contract; the legacy transform is a
+//! frozen source excerpt, not a reconstruction from the optimized
+//! implementation.
 
-Run from the repository root: python3 tools/test_disc_packets.py
-Only the DMA sink is replaced. Both functions use the production circle table,
-clip predicate and GP0 packing contract; the legacy transform is a frozen source
-excerpt, not a reconstruction from the optimized implementation.
-"""
-from pathlib import Path
-import subprocess
-import tempfile
+mod common;
+use common::{index, index_from};
 
-ROOT = Path(__file__).resolve().parents[1]
-source = (ROOT / "shared/src/backend.rs").read_text()
-
-
-def section(start, end):
-    return source[source.index(start):source.index(end, source.index(start))]
-
-
-common = section("fn disc_outside_view(", "/// The packed merged runs")
-common += section("unsafe fn disc_table(", "/// The immediate-mode disc")
-common += section("enum DiscRuns {", "/// PICO-8 `circ(x,y,r,c)`")
-legacy = (ROOT / "tools/fixtures/disc_fill_list-048a8.rs").read_text()
-current = section("unsafe fn disc_fill_list<", "/// Reject only discs")
-sink = r"""
+const SINK: &str = r####"
 static mut SCALE:i16=2;
 static mut CAM_X:i16=0;
 static mut CAM_Y:i16=0;
@@ -47,12 +32,9 @@ pub unsafe fn draw(cx:i16,cy:i16,r:i16,clip:ClipRect,scale:i16,
     }
     STREAM.0.clone()
 }
-"""
-unit = "#![allow(dead_code,static_mut_refs)]\ntype ClipRect=(i16,i16,i16,i16);\n"
-unit += "const NO_CLIP:ClipRect=(i16::MIN,i16::MIN,i16::MAX,i16::MAX);\n"
-for name, implementation in [("old", legacy), ("new", current)]:
-    unit += f"mod {name} {{ use super::*;" + sink + common + implementation + "}\n"
-unit += r"""
+"####;
+
+const TESTS: &str = r####"
 #[test]
 fn actual_renderer_packets_identical() { unsafe {
     let mut seed=0x12345678u32;
@@ -76,10 +58,37 @@ fn actual_renderer_packets_identical() { unsafe {
         }
     }
 }}
-"""
-with tempfile.TemporaryDirectory(prefix="pico8-disc-packets-") as directory:
-    path = Path(directory)
-    (path / "tests.rs").write_text(unit)
-    subprocess.run(["rustc", "--edition=2021", "--test", "-O", str(path / "tests.rs"),
-                    "-o", str(path / "tests")], check=True)
-    subprocess.run([str(path / "tests"), "--nocapture"], check=True)
+"####;
+
+#[test]
+fn deferred_circle_packets_match_frozen_transform() {
+    let source = common::read("shared/src/backend.rs");
+    let section = |start: &str, end: &str| -> String {
+        let from = index(&source, start);
+        source[from..index_from(&source, end, from)].to_string()
+    };
+    let mut shared = section("fn disc_outside_view(", "/// The packed merged runs");
+    shared += &section("unsafe fn disc_table(", "/// The immediate-mode disc");
+    shared += &section("enum DiscRuns {", "/// PICO-8 `circ(x,y,r,c)`");
+    let legacy = common::read("tools/fixtures/disc_fill_list-048a8.rs");
+    let current = section("unsafe fn disc_fill_list<", "/// Reject only discs");
+
+    let mut unit = String::from("#![allow(dead_code,static_mut_refs)]\ntype ClipRect=(i16,i16,i16,i16);\n");
+    unit += "const NO_CLIP:ClipRect=(i16::MIN,i16::MIN,i16::MAX,i16::MAX);\n";
+    for (name, implementation) in [("old", legacy.as_str()), ("new", current.as_str())] {
+        unit += &format!("mod {name} {{ use super::*;");
+        unit += SINK;
+        unit += &shared;
+        unit += implementation;
+        unit += "}\n";
+    }
+    unit += TESTS;
+    let scratch = common::Scratch::new("pico8-disc-packets-");
+    common::compile_and_run(
+        &scratch,
+        "tests",
+        &unit,
+        &["--edition=2021", "--test", "-O"],
+        &["--nocapture"],
+    );
+}

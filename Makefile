@@ -52,7 +52,7 @@ help:
 #
 # PSOXIDE_FROM=/path/to/tree overrides the lock with a working tree, which is
 # how the demo disc puts every program it presses on one SDK.
-COMPONENTS_REV := 1ecf28ae6ee9a391ea25a6f27afdb7e7278b5790
+COMPONENTS_REV := b73448b61f6fe79a9af2693728d84b3e7231ff76
 COMPONENTS     := $(ROOT)/target/psoxide-components/$(COMPONENTS_REV)
 PSOXIDE_FROM ?=
 psoxide:
@@ -73,7 +73,7 @@ verify-components: psoxide
 # benches need it (tools/psx-audio-capture path-deps into this tree), so it is
 # cloned on demand at a pinned revision and bootstrapped with its own
 # `make bootstrap` (materialising the SDK crates it builds against).
-EMULATOR_REV := af674794788385b54b76209a973e5c9a9e03e906
+EMULATOR_REV := 0868022e2bc1dd6d00b0a97a9697a153a6864430
 EMULATOR     := $(ROOT)/.psoxide-emulator
 emulator:
 	@if [ ! -d "$(EMULATOR)/.git" ]; then \

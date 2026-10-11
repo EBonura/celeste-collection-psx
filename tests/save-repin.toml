@@ -1,0 +1,188 @@
+# Change the collection's persisted SFX volume, save through the guest memory
+# card driver, cold boot from that card, and verify the loaded slider value.
+# The two carts' berry and death counters are per-run, not saved. The final
+# checkpoints also enter each game and exercise the CPU/hardware renderers.
+#
+# psoxide-gate run tests/save-repin.toml --disc dist/celeste-collection.cue \
+#   --out <private-report-dir> --strict
+name = "celeste-save-repin"
+title = "Celeste collection settings save and reboot"
+disc = ["dist/celeste-collection.cue"]
+max_ticks = 2500
+
+[[step]]
+label = "skip cover introduction"
+wait = 60
+
+[[step]]
+press = ["cross"]
+hold = 8
+wait = 100
+
+[[step]]
+label = "open collection settings"
+press = ["start"]
+hold = 8
+wait = 35
+
+[[step]]
+checkpoint = "settings-default"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+[[step.assert]]
+kind = "pixels"
+color = [48, 192, 64]
+color_tol = 8
+region = { x = 188, y = 66, w = 64, h = 4 }
+min_count = 250
+max_count = 256
+note = "default SFX slider occupies all eight segments"
+
+[[step]]
+label = "lower saved SFX volume by one step"
+press = ["left"]
+hold = 8
+wait = 30
+
+[[step]]
+checkpoint = "settings-edited"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+[[step.assert]]
+kind = "pixels"
+color = [48, 192, 64]
+color_tol = 8
+region = { x = 188, y = 66, w = 64, h = 4 }
+min_count = 215
+max_count = 230
+note = "one left press leaves seven of eight SFX segments"
+
+[[step]]
+label = "close settings and commit to card"
+press = ["circle"]
+hold = 8
+wait = 350
+
+[[step]]
+checkpoint = "menu-after-save"
+golden = false
+[[step.assert]]
+kind = "card_writes"
+min_count = 1
+[[step.assert]]
+kind = "not_flat"
+
+[[step]]
+card = { action = "snapshot" }
+
+[[step]]
+card = { action = "reboot" }
+
+[[step]]
+label = "skip cover introduction with saved card"
+wait = 60
+
+[[step]]
+press = ["cross"]
+hold = 8
+wait = 100
+
+[[step]]
+label = "reopen collection settings after cold boot"
+press = ["start"]
+hold = 8
+wait = 35
+
+[[step]]
+checkpoint = "settings-loaded"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+[[step.assert]]
+kind = "pixels"
+color = [48, 192, 64]
+color_tol = 8
+region = { x = 188, y = 66, w = 64, h = 4 }
+min_count = 215
+max_count = 230
+note = "cold boot loaded the seven-segment SFX setting"
+
+[[step]]
+card = { action = "snapshot" }
+
+[[step]]
+label = "leave settings after the loaded value is visible"
+press = ["circle"]
+hold = 8
+wait = 60
+
+[[step]]
+label = "launch Celeste from the collection menu"
+press = ["cross"]
+hold = 8
+wait = 230
+
+[[step]]
+label = "start Celeste at its title and wait through the start flash"
+press = ["cross"]
+hold = 8
+wait = 250
+
+[[step]]
+checkpoint = "celeste-game"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+[[step.assert]]
+kind = "presenting"
+window = 120
+min_changes = 5
+[[step.assert]]
+kind = "frame_diff"
+from = "settings-loaded"
+min_changed = 0.2
+
+[[step]]
+label = "return to the collection menu"
+press = ["select", "start"]
+hold = 30
+wait = 130
+
+[[step]]
+checkpoint = "menu-returned"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+
+[[step]]
+label = "select and launch Celeste 2"
+press = ["right"]
+hold = 8
+wait = 45
+
+[[step]]
+press = ["cross"]
+hold = 8
+wait = 250
+
+[[step]]
+label = "start Celeste 2 at its title and wait through the level intro"
+press = ["cross"]
+hold = 8
+wait = 380
+
+[[step]]
+checkpoint = "celeste2-game"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+[[step.assert]]
+kind = "presenting"
+window = 120
+min_changes = 5
+[[step.assert]]
+kind = "frame_diff"
+from = "menu-returned"
+min_changed = 0.2

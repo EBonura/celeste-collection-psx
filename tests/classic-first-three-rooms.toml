@@ -1,0 +1,644 @@
+name = "celeste-classic-rooms-0-through-2"
+title = "Classic title through normal room 2 exit"
+disc = ["dist/celeste-collection.cue"]
+symbols = ["dist/celeste-collection.map"]
+max_ticks = 2400
+
+[[step]]
+label = "skip collection introduction"
+wait = 60
+
+
+[[step]]
+press = ["cross"]
+hold = 8
+wait = 100
+
+
+[[step]]
+label = "launch Classic"
+press = ["cross"]
+hold = 8
+wait = 230
+
+
+[[step]]
+label = "start through Classic title"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 0 }
+timeout = 800
+
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 400
+
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "eq", value = 6291456 }
+timeout = 400
+
+
+[[step]]
+wait = 60
+
+
+[[step]]
+checkpoint = "room-0-entry"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+op = "eq"
+value = 1
+each = { count = 2, stride = 4 }
+note = "version 1 Classic observation ABI"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 24
+op = "eq"
+value = 1
+note = "active first-room player"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 80
+op = "eq"
+value = 1
+note = "payload publication completed"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 84
+op = "gt"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 20
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 76
+op = "eq"
+value = 0
+note = "fly mode disabled"
+[[step.assert]]
+kind = "not_flat"
+
+
+[[step]]
+label = "controller route action 1"
+press = ["right", "up", "cross", "circle"]
+hold = 9
+
+
+[[step]]
+label = "controller route action 2"
+wait = 8
+
+
+[[step]]
+label = "controller route action 3"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 4"
+press = ["right", "down", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 5"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 6"
+wait = 8
+
+
+[[step]]
+label = "controller route action 7"
+press = ["cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 8"
+wait = 8
+
+
+[[step]]
+label = "controller route action 9"
+press = ["left", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 10"
+press = ["cross"]
+hold = 16
+
+
+[[step]]
+label = "controller route action 11"
+press = ["right", "up", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 12"
+wait = 8
+
+
+[[step]]
+label = "controller route action 13"
+press = ["right", "circle"]
+hold = 8
+
+
+[[step]]
+label = "settle on the upper ledge before the exit jump"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "ge", value = 1572864 }
+timeout = 60
+
+
+[[step]]
+wait = 2
+
+
+[[step]]
+label = "controller route action 14"
+press = ["right", "cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 15"
+press = ["right", "up", "cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 16"
+wait = 8
+
+
+[[step]]
+label = "wait for normal top edge exit"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 1 }
+timeout = 500
+
+
+[[step]]
+wait = 20
+
+
+[[step]]
+checkpoint = "room-0-exit-room-1-entry"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 80
+op = "eq"
+value = 1
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 84
+op = "gt"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 20
+op = "eq"
+value = 1
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 48
+op = "eq"
+value = 0
+note = "normal no-death exit"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 76
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "not_flat"
+
+
+[[step]]
+label = "wait for room 1 normal player spawn"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 200
+
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "eq", value = 7340032 }
+timeout = 200
+
+
+[[step]]
+wait = 40
+
+
+[[step]]
+label = "controller route action 17"
+press = ["right", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 18"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 19"
+wait = 8
+
+
+[[step]]
+label = "controller route action 20"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 21"
+press = ["up", "cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 22"
+press = ["left"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 23"
+press = ["left", "cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 24"
+press = ["right", "cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 25"
+press = ["right"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 26"
+press = ["right", "cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 27"
+press = ["down", "cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 28"
+press = ["left", "circle"]
+hold = 16
+
+
+[[step]]
+label = "controller route action 29"
+press = ["cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 30"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 31"
+press = ["right", "cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 32"
+press = ["right"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 33"
+press = ["right", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 34"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 35"
+press = ["circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 36"
+press = ["cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 37"
+wait = 8
+
+
+[[step]]
+label = "controller route action 38"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 39"
+press = ["left"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 40"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 41"
+wait = 8
+
+
+[[step]]
+label = "wait for normal room 1 top exit"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 2 }
+timeout = 400
+
+
+[[step]]
+wait = 20
+
+
+[[step]]
+checkpoint = "room-1-exit-room-2-entry"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 80
+op = "eq"
+value = 1
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 84
+op = "gt"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 20
+op = "eq"
+value = 2
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 48
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 76
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "not_flat"
+
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 400
+
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "eq", value = 6815744 }
+timeout = 400
+
+
+[[step]]
+wait = 40
+
+
+[[step]]
+label = "controller route action 42"
+press = ["circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 43"
+press = ["cross", "circle"]
+hold = 16
+
+
+[[step]]
+label = "controller route action 44"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 45"
+press = ["right", "up", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 46"
+wait = 8
+
+
+[[step]]
+label = "controller route action 47"
+press = ["circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 48"
+press = ["right", "cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 49"
+press = ["right", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 50"
+press = ["right"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 51"
+wait = 8
+
+
+[[step]]
+label = "controller route action 52"
+press = ["up", "cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 53"
+press = ["circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 54"
+press = ["left", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 55"
+press = ["left"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 56"
+press = ["cross", "circle"]
+hold = 8
+
+
+[[step]]
+label = "release before the upper right wall jump"
+wait = 3
+
+
+[[step]]
+label = "controller route action 57"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 58"
+wait = 16
+
+
+[[step]]
+label = "controller route action 59"
+press = ["right", "circle"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 60"
+press = ["cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 61"
+wait = 16
+
+
+[[step]]
+label = "controller route action 62"
+press = ["left", "cross"]
+hold = 8
+
+
+[[step]]
+label = "controller route action 63"
+wait = 8
+
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, op = "eq", value = 3 }
+timeout = 400
+
+
+[[step]]
+wait = 20
+
+
+[[step]]
+checkpoint = "room-2-exit-room-3-entry"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 80
+op = "eq"
+value = 1
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 84
+op = "gt"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 20
+op = "eq"
+value = 3
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 48
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 76
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "not_flat"

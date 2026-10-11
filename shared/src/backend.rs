@@ -58,7 +58,10 @@ const SPRITE_CLUT_B: Clut = Clut::new(16, 480);
 /// Second sprite palette for `map()`: tiles carrying MAP_ALT_FLAG draw through
 /// it (a level-wide `pal()` swap without a second pass or a GPU flush).
 const MAP_ALT_CLUT: Clut = Clut::new(32, 480);
-const TEXT_CLUT: Clut = Clut::new(0, 481); // one row, re-uploaded per print colour
+// Each text colour has its own CLUT address. Rewriting one address between
+// strings leaves a cached palette active on the CPU rasterizer and PS1 GPU.
+// All sixteen slots fit in the reserved palette row, x 0 through 255.
+const TEXT_CLUT: Clut = Clut::new(0, 481);
 const FILLP_TPAGE: Tpage = Tpage::new(768, 0, TexDepth::Bit4); // 8x8 dither patterns side-by-side
                                                                // Two fillp CLUT slots (entry 0 = transparent, 1 = the fill colour), ping-ponged
                                                                // on every colour change: the GPU caches a CLUT by its clut word, so rewriting
@@ -1253,11 +1256,12 @@ pub fn circ(cx: i16, cy: i16, radius: i16, c: i32) {
 /// with a per-colour CLUT.
 pub fn print(s: &[u8], x: i16, y: i16, c: i32) {
     let clut_idx = (unsafe { PAL[(c as usize) & 15] }) as usize;
+    let clut = Clut::new(TEXT_CLUT.x() + ((clut_idx & 15) * 16) as u16, TEXT_CLUT.y());
     emit_upload(
-        VramRect::new(TEXT_CLUT.x(), TEXT_CLUT.y(), 16, 1),
+        VramRect::new(clut.x(), clut.y(), 16, 1),
         &TEXT_CLUTS[clut_idx & 15],
     );
-    let clut_word = TEXT_CLUT.uv_clut_word();
+    let clut_word = clut.uv_clut_word();
     emit([draw_mode_word(FONT_TPAGE)]);
 
     let mut cx = x;

@@ -32,6 +32,68 @@ const K_FLY: i32 = 6; // debug: hold to fly when debug::fly_enabled()
 
 pub fn set_input(mask: u8) {
     pico8::input::set_buttons(mask);
+    unsafe {
+        JOURNEY_INPUT_LATCHES = JOURNEY_INPUT_LATCHES.wrapping_add(1);
+        JOURNEY_INPUT_MASK = mask as i32;
+    }
+}
+
+/// Version 1 layout is shared with Lani. Coordinates and velocities are 16.16.
+/// Input latches count game input submissions, not physical controller polls.
+#[no_mangle]
+pub static mut CELESTE_JOURNEY: pico8::journey::JourneyState = pico8::journey::JourneyState::new(1);
+static mut JOURNEY_UPDATES: i32 = 0;
+static mut JOURNEY_INPUT_LATCHES: i32 = 0;
+static mut JOURNEY_INPUT_MASK: i32 = 0;
+static mut JOURNEY_SEQUENCE: i32 = 0;
+
+pub fn observe_update() {
+    unsafe {
+        JOURNEY_UPDATES = JOURNEY_UPDATES.wrapping_add(1);
+    }
+}
+
+pub fn observe() {
+    unsafe {
+        let mut s = pico8::journey::JourneyState::new(1);
+        s.updates = JOURNEY_UPDATES;
+        s.input_latches = JOURNEY_INPUT_LATCHES;
+        s.input_mask = JOURNEY_INPUT_MASK;
+        s.segment = level_index();
+        s.player_present = 0;
+        s.player_state = -1;
+        s.deaths = DEATHS;
+        s.berries = 0;
+        s.berry_bits = 0;
+        for i in 0..FRUIT_COUNT {
+            if GOT_FRUIT[i] {
+                s.berries += 1;
+                s.berry_bits |= 1 << i;
+            }
+        }
+        s.ending = 0;
+        s.final_score = -1;
+        s.ability = MAX_DJUMP;
+        s.debug_fly = debug::fly_enabled() as i32;
+        for o in OBJECTS.iter().filter(|o| o.active) {
+            if o.type_ == Player {
+                s.player_present = 1;
+                s.player_x = o.x.0;
+                s.player_y = o.y.0;
+                s.velocity_x = o.spd.x.0;
+                s.velocity_y = o.spd.y.0;
+                s.player_state = o.dash_time;
+            } else if o.type_ == Flag && o.show {
+                s.ending = 1;
+                s.final_score = o.score;
+            }
+        }
+        JOURNEY_SEQUENCE = JOURNEY_SEQUENCE.wrapping_add(1);
+        s.sequence = JOURNEY_SEQUENCE;
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(CELESTE_JOURNEY.published), 0);
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(CELESTE_JOURNEY), s);
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(CELESTE_JOURNEY.published), 1);
+    }
 }
 fn p8btn(b: i32) -> bool {
     pico8::input::btn(b)
@@ -1855,6 +1917,15 @@ pub fn start_at_room(x: i32, y: i32) {
 
 pub fn init() {
     unsafe {
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(CELESTE_JOURNEY.published), 0);
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(CELESTE_JOURNEY),
+            pico8::journey::JourneyState::new(1),
+        );
+        JOURNEY_UPDATES = 0;
+        JOURNEY_INPUT_LATCHES = 0;
+        JOURNEY_INPUT_MASK = 0;
+        JOURNEY_SEQUENCE = 0;
         prelude_init_clouds();
         prelude_init_particles();
         title_screen();

@@ -26,6 +26,7 @@ pub mod font;
 pub mod icons;
 mod icons_data;
 pub mod input;
+pub mod journey;
 pub mod menusfx;
 pub mod palette;
 pub mod pause;

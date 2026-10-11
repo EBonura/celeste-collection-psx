@@ -67,6 +67,59 @@ fn held(b: u8) -> bool {
 
 pub fn set_input(mask: u8) {
     unsafe { RAW = mask };
+    unsafe {
+        JOURNEY_INPUT_LATCHES = JOURNEY_INPUT_LATCHES.wrapping_add(1);
+        JOURNEY_INPUT_MASK = mask as i32;
+    }
+}
+
+/// Version 1 layout is shared with Classic. Coordinates and velocities are 16.16.
+/// Input latches count game input submissions, not physical controller polls.
+#[no_mangle]
+pub static mut LANI_JOURNEY: pico8::journey::JourneyState = pico8::journey::JourneyState::new(2);
+static mut JOURNEY_UPDATES: i32 = 0;
+static mut JOURNEY_INPUT_LATCHES: i32 = 0;
+static mut JOURNEY_INPUT_MASK: i32 = 0;
+static mut JOURNEY_SEQUENCE: i32 = 0;
+
+pub fn observe_update() {
+    unsafe {
+        JOURNEY_UPDATES = JOURNEY_UPDATES.wrapping_add(1);
+    }
+}
+
+pub fn observe() {
+    unsafe {
+        let mut s = pico8::journey::JourneyState::new(2);
+        s.updates = JOURNEY_UPDATES;
+        s.input_latches = JOURNEY_INPUT_LATCHES;
+        s.input_mask = JOURNEY_INPUT_MASK;
+        s.segment = LVL_INDEX;
+        s.player_present = (PLAYER < MAX_OBJ && OBJ[PLAYER].exists && !OBJ[PLAYER].destroyed) as i32;
+        s.player_state = -1;
+        if s.player_present != 0 {
+            let p = OBJ[PLAYER];
+            s.player_x = p.x.0;
+            s.player_y = p.y.0;
+            s.velocity_x = p.spd.x.0;
+            s.velocity_y = p.spd.y.0;
+            s.player_state = p.state;
+        }
+        s.deaths = DEATH_COUNT;
+        s.berries = BERRY_COUNT;
+        // Lani uses collected object IDs, rather than one berry bit per room.
+        s.berry_bits = 0;
+        s.checkpoint = LEVEL_CHECKPOINT;
+        s.ability = HAVE_GRAPPLE as i32;
+        s.ending = SHOW_SCORE;
+        s.final_score = if SHOW_SCORE > 0 { BERRY_COUNT } else { -1 };
+        s.debug_fly = debug::fly_enabled() as i32;
+        JOURNEY_SEQUENCE = JOURNEY_SEQUENCE.wrapping_add(1);
+        s.sequence = JOURNEY_SEQUENCE;
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY.published), 0);
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY), s);
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY.published), 1);
+    }
 }
 
 fn update_input() {
@@ -2179,6 +2232,15 @@ pub fn bg_rgb() -> (u8, u8, u8) {
 
 pub fn init() {
     unsafe {
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY.published), 0);
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(LANI_JOURNEY),
+            pico8::journey::JourneyState::new(2),
+        );
+        JOURNEY_UPDATES = 0;
+        JOURNEY_INPUT_LATCHES = 0;
+        JOURNEY_INPUT_MASK = 0;
+        JOURNEY_SEQUENCE = 0;
         rng::srand(42);
         init_particles();
         FRAMES = 0;

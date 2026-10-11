@@ -25,5 +25,9 @@ fn main() {
         println!("cargo:rustc-link-arg=--oformat=binary");
     }
     println!("cargo:rerun-if-env-changed=PSX_ELF");
+    if let Some(map) = std::env::var_os("PSX_LINK_MAP") {
+        println!("cargo:rustc-link-arg=-Map={}", PathBuf::from(map).display());
+    }
+    println!("cargo:rerun-if-env-changed=PSX_LINK_MAP");
     println!("cargo:rerun-if-changed={}", ld.display());
 }

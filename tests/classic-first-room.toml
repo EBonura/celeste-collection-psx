@@ -1,0 +1,214 @@
+name = "celeste-classic-first-room"
+title = "Classic title through normal room 0 exit"
+disc = ["dist/celeste-collection.cue"]
+symbols = ["dist/celeste-collection.map"]
+max_ticks = 2400
+
+[[step]]
+label = "skip collection introduction"
+wait = 60
+
+[[step]]
+press = ["cross"]
+hold = 8
+wait = 100
+
+[[step]]
+label = "launch Classic"
+press = ["cross"]
+hold = 8
+wait = 230
+
+[[step]]
+label = "start through Classic title"
+press = ["cross"]
+hold = 8
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 0 }
+timeout = 800
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 400
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "eq", value = 6291456 }
+timeout = 400
+
+[[step]]
+wait = 60
+
+[[step]]
+checkpoint = "room-0-entry"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+op = "eq"
+value = 1
+each = { count = 2, stride = 4 }
+note = "version 1 Classic observation ABI"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 24
+op = "eq"
+value = 1
+note = "active first-room player"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 80
+op = "eq"
+value = 1
+note = "payload publication completed"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 84
+op = "gt"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 20
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 76
+op = "eq"
+value = 0
+note = "fly mode disabled"
+[[step.assert]]
+kind = "not_flat"
+
+[[step]]
+label = "normal input frames 400 through 407"
+press = ["right", "up", "cross", "circle"]
+hold = 9
+
+[[step]]
+label = "normal input frames 408 through 415"
+wait = 8
+
+[[step]]
+label = "normal input frames 416 through 423"
+press = ["cross"]
+hold = 8
+
+[[step]]
+label = "normal input frames 424 through 431"
+press = ["right", "down", "circle"]
+hold = 8
+
+[[step]]
+label = "normal input frames 432 through 439"
+press = ["cross"]
+hold = 8
+
+[[step]]
+label = "normal input frames 440 through 447"
+wait = 8
+
+[[step]]
+label = "normal input frames 448 through 455"
+press = ["cross", "circle"]
+hold = 8
+
+[[step]]
+label = "normal input frames 456 through 463"
+wait = 8
+
+[[step]]
+label = "normal input frames 464 through 471"
+press = ["left", "circle"]
+hold = 8
+
+[[step]]
+label = "normal input frames 472 through 487"
+press = ["cross"]
+hold = 16
+
+[[step]]
+label = "normal input frames 488 through 495"
+press = ["right", "up", "circle"]
+hold = 8
+
+[[step]]
+label = "normal input frames 496 through 503"
+wait = 8
+
+[[step]]
+label = "normal input frames 504 through 511"
+press = ["right", "circle"]
+hold = 8
+
+[[step]]
+label = "settle on the upper ledge before the exit jump"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "ge", value = 1572864 }
+timeout = 60
+
+[[step]]
+wait = 2
+
+[[step]]
+label = "normal input frames 512 through 519"
+press = ["right", "cross"]
+hold = 8
+
+[[step]]
+label = "normal input frames 520 through 527"
+press = ["right", "up", "cross", "circle"]
+hold = 8
+
+[[step]]
+label = "normal input frames 528 through 535"
+wait = 8
+
+[[step]]
+label = "wait for normal top edge exit"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 1 }
+timeout = 500
+
+[[step]]
+wait = 20
+
+[[step]]
+checkpoint = "room-0-exit-room-1-entry"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 80
+op = "eq"
+value = 1
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 84
+op = "gt"
+value = 0
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 20
+op = "eq"
+value = 1
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 48
+op = "eq"
+value = 0
+note = "normal no-death exit"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 76
+op = "eq"
+value = 0
+[[step.assert]]
+kind = "not_flat"

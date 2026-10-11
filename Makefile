@@ -98,9 +98,11 @@ clean:
 # (mkisopsx packs exactly one).
 COLLECTION_DIR := $(ROOT)/games/celeste-collection
 COLLECTION_EXE := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.exe
+COLLECTION_MAP ?= $(DIST)/celeste-collection.map
 
 collection: psoxide
-	cd $(COLLECTION_DIR) && cargo build --release
+	@mkdir -p $(DIST)
+	cd $(COLLECTION_DIR) && PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
 collection-disc: collection

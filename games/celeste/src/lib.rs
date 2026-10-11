@@ -133,6 +133,7 @@ pub fn run() {
         let now = psx_rt::interrupts::vblank_count();
         while clock.due(now) {
             game::update();
+            game::observe_update();
         }
         clock.end_frame();
 
@@ -140,11 +141,13 @@ pub fn run() {
         // redrawing or swapping -- exactly the PICO-8 freeze effect (the cart's
         // `_draw` returns at once while `freeze > 0`).
         if game::freeze() > 0 {
+            game::observe();
             wait_vblank();
         } else {
             fb.clear(0, 0, 0);
             backend::set_deferred(true); // list the frame, draw it by DMA
             game::draw();
+            game::observe();
             backend::submit(); // the GPU draws while the VBlank wait renders audio
             wait_vblank();
             backend::set_deferred(false); // waits for the GPU

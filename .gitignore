@@ -8,6 +8,7 @@ target/
 *.bin
 *.cue
 *.toc
+/dist/*.map
 # Headless navigation route output (tools/nav-routes)
 /dist/nav-routes/
 

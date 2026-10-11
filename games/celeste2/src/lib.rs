@@ -116,6 +116,7 @@ pub fn run() {
         let now = psx_rt::interrupts::vblank_count();
         while clock.due(now) {
             game::update();
+            game::observe_update();
         }
         clock.end_frame();
 
@@ -123,6 +124,7 @@ pub fn run() {
         fb.clear(r, g, b); // cls(level.bg); the side bars repaint the margins
         backend::set_deferred(true); // list the frame, draw it by DMA
         game::draw();
+        game::observe();
         backend::submit(); // the GPU draws while the VBlank wait renders audio
         wait_vblank();
         backend::set_deferred(false); // waits for the GPU

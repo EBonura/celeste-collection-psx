@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.2.7 | 2026-10-16
+## 0.2.8 | 2026-10-16
+
+0.2.7 was built and pressed but never published, so its changes ship here
+with the ones after it. The last version on itch.io is 0.2.6.
 
 - The pause menu has a Brightness row between Borders and Quit: DEFAULT in the
   middle, DARKER 1 to 5 to the left, BRIGHTER 1 to 5 to the right, from the
@@ -15,9 +18,25 @@
 - Each text colour has its own palette address. Rewriting one address between
   strings left a cached palette active on the CPU rasterizer and the PS1 GPU.
 - Memory-card saves use the SDK's repinned card driver.
-- The SDK pin moves to 1ecf28ae6. The controller transport is the SDK's shared
-  SIO0 engine now (the 0.2.6 ACK-paced fix lives on in it), so this needs a
-  console run before it ships.
+- The controller transport is the SDK's shared SIO0 engine (the 0.2.6
+  ACK-paced fix lives on in it). A neGcon is read like a digital pad.
+- The PICO-8 sound synth and the fixed-point maths (multiply, divide, square
+  root) no longer use 64-bit integers, which the PS1's CPU has to emulate in
+  software. The synth's sequencer clock is a pair of 32-bit words. Checked
+  against the previous implementation in lock step: every sound effect of both
+  games, every music pattern, fades and volume sweeps give the same PCM and
+  the same ADPCM blocks, and the maths match the 64-bit forms on millions of
+  random inputs. The games link with no 64-bit or soft-float helper, and a
+  host check (`make no64`) now fails the build if one comes back.
+- Replay tests for the first three rooms of Celeste Classic (spawn, reach room
+  2, reach room 3) were added. The room 2 settle was re-recorded because the
+  new synth clock moves frame timing slightly; the game's physics is
+  unchanged.
+- The SDK pin moves to b5365b18. This has not been run on a console yet.
+
+## 0.2.7 | 2026-10-16
+
+Pressed but never published. Everything in it is listed under 0.2.8.
 
 ## 0.2.6 | 2026-10-01
 

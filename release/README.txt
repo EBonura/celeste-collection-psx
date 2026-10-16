@@ -1,4 +1,4 @@
-Celeste Classic Collection (PSX)  -  v0.2.7
+Celeste Classic Collection (PSX)  -  v0.2.8
 ===========================================
 
 Two PICO-8 Celeste Classic games, the original Celeste and Celeste 2: Lani's
@@ -15,7 +15,7 @@ together, or pick Quit to Menu in the pause menu, to return to the launcher
 with the game you were playing still selected. On a DualShock in analog mode
 the left stick works as the D-pad everywhere.
 
-v0.2.7:
+v0.2.8 (v0.2.7 was never published; its changes are included):
   - The pause menu has a Brightness row: DEFAULT in the middle, DARKER 1 to
     5 to the left, BRIGHTER 1 to 5 to the right. The launcher's Settings
     screen has the same row and shares the saved value; the intro, menu,
@@ -24,6 +24,11 @@ v0.2.7:
   - Each text colour has its own palette address, so a cached palette can no
     longer show the wrong colour.
   - Memory-card saves use the repinned SDK card driver.
+  - Controller reads go through the SDK's shared pad engine. A neGcon is read
+    like a digital pad.
+  - The PICO-8 sound synth and the fixed-point maths no longer use 64-bit
+    integers. Sound output was compared against the previous version and is
+    the same.
   - Not yet confirmed on a console; tested in the emulator.
 
 v0.2.6:
@@ -58,7 +63,7 @@ The tested gameplay route preserved matched checkpoint images and game
 state. In the measured emulator route, Classic had no unexplained missed
 presentation deadlines; Celeste 2 still had occasional misses. This release
 does not claim locked 60 fps in every scene. The latest build was also
-reported working on original PlayStation hardware; v0.2.7 has not
+reported working on original PlayStation hardware; v0.2.8 has not
 yet been run on one.
 
 Bonnie Studios  -  https://bonnie-studios.itch.io

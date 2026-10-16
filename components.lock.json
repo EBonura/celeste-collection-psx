@@ -3,7 +3,7 @@
   "components": {
     "sdk": {
       "repository": "EBonura/PSoXide",
-      "revision": "448bd58be8204e2fae851a64b8cd30ba461707ee",
+      "revision": "5219afbe2ee84c8fedcae1dfab22488564083094",
       "paths": [
         "sdk",
         "crates",
@@ -30,7 +30,7 @@
     },
     "editor": {
       "repository": "EBonura/PSoXide-editor",
-      "revision": "fb2a9ab476d19faa0ccfc84b767fbead9a370bb5",
+      "revision": "ca3891b5c954f7ba0cda9f3cae67a7fe3e6c038f",
       "paths": [
         "Cargo.toml",
         "Cargo.lock",

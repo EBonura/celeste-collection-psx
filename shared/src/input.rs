@@ -47,7 +47,7 @@ pub fn poll_buttons() -> ButtonState {
     let clean = match pad.mode {
         PadMode::Unknown => return unsafe { LAST_CLEAN },
         PadMode::Analog | PadMode::Config => with_stick(pad),
-        PadMode::Digital | PadMode::Disconnected => pad.buttons,
+        PadMode::Digital | PadMode::Negcon | PadMode::Disconnected => pad.buttons,
     };
     unsafe { LAST_CLEAN = clean };
     clean

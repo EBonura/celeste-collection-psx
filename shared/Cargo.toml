@@ -16,6 +16,7 @@ psx-display = { path = "../.psoxide/sdk/crates/psx-display" }
 psx-vram = { path = "../.psoxide/sdk/crates/psx-vram" }
 psx-io   = { path = "../.psoxide/sdk/crates/psx-io" }
 psx-hw   = { path = "../.psoxide/crates/psx-hw" }
+psx-math = { path = "../.psoxide/sdk/crates/psx-math" }
 psx-spu  = { path = "../.psoxide/sdk/crates/psx-spu" }
 psx-sfx  = { path = "../.psoxide/sdk/crates/psx-sfx" }
 psx-font = { path = "../.psoxide/sdk/crates/psx-font" }

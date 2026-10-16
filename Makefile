@@ -20,11 +20,12 @@ DIST     := $(ROOT)/dist
 PSOXIDE_LIB     ?= $(HOME)/Downloads/ps1 games
 COLLECTION_NAME := Celeste Classic Collection
 
-.PHONY: help psoxide verify-components emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
+.PHONY: help no64 psoxide verify-components emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
 
 help:
 	@echo "pico8-psx targets:"
 	@echo "  make psoxide            - import the components.lock.json revisions into .psoxide"
+	@echo "  make no64               - fail if guest source names a 64-bit integer or a float type"
 	@echo "  make collection         - build the Celeste Classic Collection launcher PSX-EXE (both games + menu)"
 	@echo "  make collection-disc    - build the collection + pack dist/celeste-collection.{bin,cue}  [headline artifact]"
 	@echo "  make collection-install - build the collection + install into PSoXide's library as 'Celeste Classic Collection'"
@@ -99,6 +100,10 @@ clean:
 COLLECTION_DIR := $(ROOT)/games/celeste-collection
 COLLECTION_EXE := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.exe
 COLLECTION_MAP ?= $(DIST)/celeste-collection.map
+
+# Guest source names no 64/128-bit integer or float type (CI runs the same script).
+no64:
+	sh tools/check-no64.sh
 
 collection: psoxide
 	@mkdir -p $(DIST)

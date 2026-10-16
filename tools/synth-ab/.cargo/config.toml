@@ -1,0 +1,3 @@
+# Both synthesisers keep their state in statics, so the tests must not overlap.
+[env]
+RUST_TEST_THREADS = "1"

@@ -4,10 +4,17 @@
 //! 22050 Hz PCM in 28-sample blocks, plus the SPU ADPCM encoder for them.
 //!
 //! Pure: no hardware access, so it also compiles on the host for the tests at
-//! the bottom (`rustc --test shared/src/synth.rs`), which render the games'
-//! SFX to WAV for comparison with PICO-8 recordings.
+//! the bottom (`cargo test --release --manifest-path tools/synth-ab/Cargo.toml`),
+//! which render the games' SFX to WAV for comparison with PICO-8 recordings and
+//! check every sample against the former 64-bit implementation.
+//!
+//! No 64-bit integer arithmetic and no float: the sequencer clock is a pair of
+//! 32-bit words (`Clock`), and the few products that need 64 bits go through
+//! the SDK's `psx_math::int32` primitives or `mul_shr32`.
 
 #![allow(static_mut_refs)]
+
+use psx_math::int32::{div_u64_by_u32, mul_div_i32, mul_div_u32, mul_shr_i32};
 
 pub const SAMPLE_RATE: u32 = 22_050;
 pub const BLOCK_SAMPLES: usize = 28;
@@ -45,15 +52,14 @@ const KEY_FREQ: [i32; 64] = [
     601425, 637188,
 ];
 /// 2^32 / 22050: Hz -> phase increment per sample (Q32 turns).
-const HZ_TO_INC: u64 = 194_783;
-/// One note row in the Q32 sequencer offset.
-const ROW: i64 = 1 << 32;
-/// Rows advanced per block at speed 1: 28 samples / 183 samples-per-unit, Q32.
-const ROWS_PER_BLOCK_Q32: i64 = 657_153_466;
+const HZ_TO_INC: i32 = 194_783;
+/// Rows advanced per block at speed 1: 28 samples / 183 samples-per-unit, as a
+/// fraction of a row in 1/2^32 (below one row, so it fits one word).
+const ROWS_PER_BLOCK_Q32: u32 = 657_153_466;
 /// 7.5 * 183 / 22050 in Q16: vibrato/arpeggio clock per (row * speed).
-const VIB_RATE_Q16: i64 = 4079;
+const VIB_RATE_Q16: u32 = 4079;
 /// pow(2, 1/12) - 1 in Q16: vibrato depth (half a semitone each way).
-const SEMITONE_Q16: i64 = 3897;
+const SEMITONE_Q16: i32 = 3897;
 /// Crossfade rate on a harsh parameter change: 130/s, per sample, Q16.
 const FADE_STEP_Q16: i32 = 386;
 /// Noise lowpass "scale" per key, Q16 (the one-pole coefficient is
@@ -68,7 +74,7 @@ const NOISE_SCALE_Q16: [i32; 64] = [
     81356, 88209, 95638, 103694, 112428, 121897,
 ];
 /// Q16 fade-volume step per block for a 1 ms music fade (65536 * 28000 / 22050).
-const MUSIC_FADE_Q16_PER_MS_BLOCK: i64 = 83_220;
+const MUSIC_FADE_Q16_PER_MS_BLOCK: u32 = 83_220;
 
 const FX_SLIDE: u8 = 1;
 const FX_VIBRATO: u8 = 2;
@@ -83,6 +89,44 @@ const INST_NOISE: u8 = 6;
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
+
+/// A position on the sequencer clock: whole rows and the fraction of a row in
+/// 1/2^32, the two halves of the Q32.32 value the sequencer used to keep in
+/// one 64-bit integer. Ordering is the 64-bit value's ordering (rows first).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Clock {
+    rows: u32,
+    frac: u32,
+}
+impl Clock {
+    const ZERO: Clock = Clock { rows: 0, frac: 0 };
+    const fn whole(rows: u32) -> Clock {
+        Clock { rows, frac: 0 }
+    }
+    /// This position plus a fraction of a row, carrying into the rows.
+    #[inline]
+    fn advance(self, step: u32) -> Clock {
+        let (frac, carry) = self.frac.overflowing_add(step);
+        Clock {
+            rows: self.rows + carry as u32,
+            frac,
+        }
+    }
+    /// Strictly past `rows` whole rows.
+    #[inline]
+    fn past(self, rows: u32) -> bool {
+        self.rows > rows || (self.rows == rows && self.frac > 0)
+    }
+    /// Wrap into the loop `[start, start + range)` rows when at or past `start`
+    /// (the fraction is untouched: the loop is a whole number of rows).
+    #[inline]
+    fn wrap_loop(self, start: u32, range: u32) -> Clock {
+        Clock {
+            rows: (self.rows - start) % range + start,
+            frac: self.frac,
+        }
+    }
+}
 
 /// Oscillator parameters for one channel (zepto8's synth_param).
 #[derive(Clone, Copy)]
@@ -114,16 +158,16 @@ const SYNTH0: Synth = Synth {
 /// A playing SFX (main note track or a custom-instrument macro).
 #[derive(Clone, Copy)]
 struct SfxState {
-    sfx: i32,     // -1 = idle
-    offset: i64,  // rows, Q32
-    time: i64,    // rows since launch, Q32
-    prev_key: u8, // for slide
+    sfx: i32,      // -1 = idle
+    offset: Clock, // rows
+    time: Clock,   // rows since launch
+    prev_key: u8,  // for slide
     prev_vol: i32,
 }
 const SFX0: SfxState = SfxState {
     sfx: -1,
-    offset: 0,
-    time: 0,
+    offset: Clock::ZERO,
+    time: Clock::ZERO,
     prev_key: 24,
     prev_vol: 0,
 };
@@ -132,7 +176,7 @@ const SFX0: SfxState = SfxState {
 struct Channel {
     main: SfxState,
     custom: SfxState,
-    length: i64, // rows (Q32) to play, 0 = whole sfx
+    length: u32, // whole rows to play, 0 = whole sfx
     can_loop: bool,
     is_music: bool,
     sfx_music: i32, // music sfx parked while an sfx() borrows the channel
@@ -142,8 +186,8 @@ struct Channel {
     last: Synth,
     fade: i32, // Q16 crossfade weight of fade_synth, 0 = none
     fade_synth: Synth,
-    ident: i64, // which note rows (main, custom) the last block played
-    ramp: bool, // same note continuing: interpolate freq/vol across the block
+    ident: (i32, i32), // which note rows (main, custom) the last block played
+    ramp: bool,        // same note continuing: interpolate freq/vol across the block
     prev_freq: i32,
     prev_vol: i32,
 }
@@ -160,7 +204,7 @@ const CH0: Channel = Channel {
     last: SYNTH0,
     fade: 0,
     fade_synth: SYNTH0,
-    ident: -1,
+    ident: (-1, -1),
     ramp: false,
     prev_freq: 0,
     prev_vol: 0,
@@ -168,8 +212,8 @@ const CH0: Channel = Channel {
 
 struct Music {
     pattern: i32,
-    offset: i64, // row*speed units, Q32
-    length: i64,
+    offset: Clock,  // row*speed units
+    length: u32,    // whole row*speed units
     fade_vol: i32,  // Q16
     fade_step: i32, // Q16 per block (negative = fading out)
     mask: u8,
@@ -189,7 +233,7 @@ const STATE0: State = State {
     channels: [CH0; 4],
     music: Music {
         pattern: -1,
-        offset: 0,
+        offset: Clock::ZERO,
         length: 0,
         fade_vol: 65536,
         fade_step: 0,
@@ -221,9 +265,10 @@ unsafe fn MUSIC() -> &'static mut Music {
 }
 /// Index just past the last audible note of each sfx (0 = all silent).
 static mut LAST_NOTE: [u8; 64] = [0; 64];
-/// Rows (Q32) one block advances at each SFX speed: 28 * ROW / (183 * speed).
-/// Tabulated at load; the 64-bit division cost more than a note's rendering.
-static mut ROWS_PER_BLOCK_AT_SPEED: [i64; 256] = [0; 256];
+/// The fraction of a row one block advances at each SFX speed (1/2^32 units):
+/// 28 * 2^32 / (183 * speed). Tabulated at load; the division cost more than a
+/// note's rendering.
+static mut ROWS_PER_BLOCK_AT_SPEED: [u32; 256] = [0; 256];
 /// Pause-menu gains in eighths (8 = unity).
 static mut MUSIC_GAIN: i32 = 8;
 static mut SFX_GAIN: i32 = 8;
@@ -280,7 +325,25 @@ unsafe fn sfx_loop(sfx: usize) -> (i32, i32) {
 
 #[inline]
 fn mix_q16(a: i32, b: i32, t: i32) -> i32 {
-    a + (((b - a) as i64 * t as i64) >> 16) as i32
+    a + mul_shr_i32(b - a, t, 16)
+}
+
+/// `a * b >> 32` (arithmetic, flooring) for every `a` and `b`: the high word of
+/// the signed 64-bit product, formed from 16-bit halves so it needs nothing
+/// wider than 32 bits.
+fn mul_shr32(a: i32, b: i32) -> i32 {
+    let (x, y) = (a.unsigned_abs(), b.unsigned_abs());
+    let (x0, x1, y0, y1) = (x & 0xFFFF, x >> 16, y & 0xFFFF, y >> 16);
+    let (p00, p01, p10, p11) = (x0 * y0, x0 * y1, x1 * y0, x1 * y1);
+    let mid = (p00 >> 16) + (p01 & 0xFFFF) + (p10 & 0xFFFF);
+    let lo = (p00 & 0xFFFF) | (mid << 16);
+    let hi = p11 + (p01 >> 16) + (p10 >> 16) + (mid >> 16);
+    if (a < 0) != (b < 0) {
+        // Negate the two-word magnitude; the high word of the negation floors.
+        (!hi).wrapping_add((lo == 0) as u32) as i32
+    } else {
+        hi as i32
+    }
 }
 
 /// Advance one SFX track by a block and, if it is sounding, fill `out` with the
@@ -290,7 +353,7 @@ unsafe fn update_sfx(
     st: &mut SfxState,
     out: &mut Synth,
     freq_factor: i32,
-    length: i64,
+    length: u32,
     is_music: bool,
     can_loop: bool,
 ) -> i32 {
@@ -302,54 +365,52 @@ unsafe fn update_sfx(
     let (loop_start, loop_end) = sfx_loop(index);
     let per_block = ROWS_PER_BLOCK_AT_SPEED[speed as usize];
     let offset = st.offset;
-    let mut next_offset = offset + per_block;
-    let next_time = st.time + per_block;
+    let mut next_offset = offset.advance(per_block);
+    let next_time = st.time.advance(per_block);
 
     let loop_range = loop_end - loop_start;
-    if loop_range > 0 && next_offset >= (loop_end as i64) * ROW && can_loop {
-        let ls = (loop_start as i64) * ROW;
-        next_offset = (next_offset - ls) % ((loop_range as i64) * ROW) + ls;
+    if loop_range > 0 && next_offset.rows >= loop_end as u32 && can_loop {
+        next_offset = next_offset.wrap_loop(loop_start as u32, loop_range as u32);
     }
 
     let mut has_end = false;
-    let mut end_time = 32 * ROW;
+    let mut end_rows = 32u32;
     if length > 0 {
         has_end = true;
-        end_time = length;
+        end_rows = length;
     }
     // PICO-8 quirk: a loop-start without loop-end is a LENGTH marker, but only
     // outside music (music only uses it for the pattern length).
     if !is_music && loop_end == 0 && loop_start > 0 {
         has_end = true;
-        end_time = end_time.min((loop_start as i64) * ROW);
+        end_rows = end_rows.min(loop_start as u32);
     }
     if loop_range <= 0 {
         has_end = true;
         if !is_music {
-            end_time = end_time.min((LAST_NOTE[index] as i64) * ROW);
+            end_rows = end_rows.min(LAST_NOTE[index] as u32);
         }
     }
 
     let mut played = -1;
-    if offset < 32 * ROW {
-        let note_id = (offset >> 32) as usize;
-        let next_note_id = (next_offset >> 32) as usize;
+    if offset.rows < 32 {
+        let note_id = offset.rows as usize;
+        let next_note_id = next_offset.rows as usize;
         let w = note(index, note_id);
         let key = note_key(w);
         let vol7 = note_vol(w);
         let mut volume = vol7 * 4096 / 7;
-        let mut freq = ((KEY_FREQ[key as usize] as i64 * freq_factor as i64) >> 16) as i32;
+        let mut freq = mul_shr_i32(KEY_FREQ[key as usize], freq_factor, 16);
 
         if volume > 0 {
-            let frac = ((offset >> 16) & 0xFFFF) as i32; // Q16 position within the row
+            let frac = (offset.frac >> 16) as i32; // Q16 position within the row
             match note_effect(w) {
                 FX_SLIDE => {
                     // Documented as "slide to the next note", actually FROM the
                     // previous one. (zepto8 mixes from the unscaled previous key;
                     // for a custom-instrument macro that would glide from the wrong
                     // octave, so the previous key is scaled the same as this one.)
-                    let from =
-                        ((KEY_FREQ[st.prev_key as usize] as i64 * freq_factor as i64) >> 16) as i32;
+                    let from = mul_shr_i32(KEY_FREQ[st.prev_key as usize], freq_factor, 16);
                     freq = mix_q16(from, freq, frac);
                     if st.prev_vol > 0 {
                         volume = mix_q16(st.prev_vol, volume, frac);
@@ -357,24 +418,26 @@ unsafe fn update_sfx(
                 }
                 FX_VIBRATO => {
                     // 7.5 Hz, half a semitone: t = |frac(7.5 * offset / ops) - 0.5| - 0.25
-                    let v = ((offset >> 16) * speed as i64 * VIB_RATE_Q16) >> 16;
+                    let v = vibrato_clock(offset, speed);
                     let t = ((v & 0xFFFF) as i32 - 32768).abs() - 16384;
-                    freq += ((freq as i64 * SEMITONE_Q16 * t as i64) >> 32) as i32;
+                    freq += mul_shr32(freq, SEMITONE_Q16 * t);
                 }
-                FX_DROP => freq -= ((freq as i64 * frac as i64) >> 16) as i32,
-                FX_FADE_IN => volume = ((volume as i64 * frac as i64) >> 16) as i32,
-                FX_FADE_OUT => volume = ((volume as i64 * (65536 - frac) as i64) >> 16) as i32,
+                FX_DROP => freq -= mul_shr_i32(freq, frac, 16),
+                FX_FADE_IN => volume = mul_shr_i32(volume, frac, 16),
+                FX_FADE_OUT => volume = mul_shr_i32(volume, 65536 - frac, 16),
                 FX_ARP_FAST | FX_ARP_SLOW => {
                     // Cycle the 4-note group at a fixed real-time rate (halved
                     // for speed <= 8).
                     let m = (if speed <= 8 { 32 } else { 16 })
                         / (if note_effect(w) == FX_ARP_FAST { 4 } else { 8 });
-                    let v = ((offset >> 16) * speed as i64 * VIB_RATE_Q16) >> 16;
-                    let n = ((m as i64 * v) >> 16) as usize;
+                    let v = vibrato_clock(offset, speed);
+                    let n = ((m as u32 * v) >> 16) as usize;
                     let arp = (note_id & !3) | (n & 3);
-                    freq = ((KEY_FREQ[note_key(note(index, arp)) as usize] as i64
-                        * freq_factor as i64)
-                        >> 16) as i32;
+                    freq = mul_shr_i32(
+                        KEY_FREQ[note_key(note(index, arp)) as usize],
+                        freq_factor,
+                        16,
+                    );
                 }
                 _ => {}
             }
@@ -396,17 +459,28 @@ unsafe fn update_sfx(
 
     st.offset = next_offset;
     st.time = next_time;
-    if has_end && next_time >= end_time {
+    if has_end && next_time.rows >= end_rows {
         st.sfx = -1;
     }
     played
 }
 
+/// The vibrato/arpeggio clock: `(offset >> 16) * speed * VIB_RATE_Q16 >> 16`,
+/// with `offset` in Q32 rows. With `rows * 2^16 + a` for `offset >> 16` (`a` the
+/// top 16 bits of the fraction) the shifted product is exactly
+/// `rows * B + (a * B >> 16)` where `B = speed * VIB_RATE_Q16`; the rows are
+/// below 32 here, so every term fits 32 bits (the second as a 32 by 32
+/// product over 2^16 in `mul_div_u32`).
+fn vibrato_clock(offset: Clock, speed: i32) -> u32 {
+    let b = speed as u32 * VIB_RATE_Q16;
+    offset.rows * b + mul_div_u32(offset.frac >> 16, b, 1 << 16)
+}
+
 /// Pattern length in row*speed units: the first non-looping channel decides,
 /// else the slowest looping one.
-unsafe fn pattern_duration(pattern: usize) -> i64 {
-    let mut dur_loop: i64 = -1;
-    let mut dur_noloop: i64 = -1;
+unsafe fn pattern_duration(pattern: usize) -> i32 {
+    let mut dur_loop: i32 = -1;
+    let mut dur_noloop: i32 = -1;
     for c in 0..4 {
         let b = AUDIO.music[pattern][c];
         if b & 0x40 != 0 {
@@ -414,13 +488,13 @@ unsafe fn pattern_duration(pattern: usize) -> i64 {
         }
         let n = (b & 0x3F) as usize;
         let (ls, le) = sfx_loop(n);
-        let speed = AUDIO.sfx[n][65] as i64;
+        let speed = AUDIO.sfx[n][65] as i32;
         if le > 0 && le > ls {
             dur_loop = dur_loop.max(32 * speed);
         } else {
-            let mut end = 32i64;
+            let mut end = 32i32;
             if le == 0 && ls > 0 {
-                end = end.min(ls as i64);
+                end = end.min(ls);
             }
             dur_noloop = end * speed;
             break;
@@ -433,12 +507,12 @@ unsafe fn pattern_duration(pattern: usize) -> i64 {
     }
 }
 
-unsafe fn launch_sfx(sfx: i32, chan: usize, offset: i64, length: i64, is_music: bool) {
+unsafe fn launch_sfx(sfx: i32, chan: usize, offset: Clock, length: u32, is_music: bool) {
     let ch = &mut CHANNELS()[chan];
     ch.main.sfx = sfx;
-    ch.main.offset = offset.max(0);
-    ch.main.time = 0;
-    ch.length = length.max(0);
+    ch.main.offset = offset;
+    ch.main.time = Clock::ZERO;
+    ch.length = length;
     ch.can_loop = true;
     ch.is_music = is_music;
     ch.last_instr = 0xFF;
@@ -457,7 +531,7 @@ unsafe fn set_music_pattern(pattern: i32) {
     }
     if !(0..64).contains(&pattern) {
         MUSIC().pattern = -1;
-        MUSIC().offset = 0;
+        MUSIC().offset = Clock::ZERO;
         MUSIC().mask = 0;
         MUSIC().length = 0;
         return;
@@ -465,14 +539,14 @@ unsafe fn set_music_pattern(pattern: i32) {
     let duration = pattern_duration(pattern as usize);
     if duration <= 0 {
         MUSIC().pattern = -1;
-        MUSIC().offset = 0;
+        MUSIC().offset = Clock::ZERO;
         MUSIC().mask = 0;
         MUSIC().length = 0;
         return;
     }
     MUSIC().pattern = pattern;
-    MUSIC().offset = 0;
-    MUSIC().length = duration * ROW;
+    MUSIC().offset = Clock::ZERO;
+    MUSIC().length = duration as u32;
     for c in 0..4 {
         let b = AUDIO.music[pattern as usize][c];
         if b & 0x40 != 0 {
@@ -480,7 +554,7 @@ unsafe fn set_music_pattern(pattern: i32) {
         }
         let n = (b & 0x3F) as i32;
         if CHANNELS()[c].main.sfx == -1 {
-            launch_sfx(n, c, 0, 0, true);
+            launch_sfx(n, c, Clock::ZERO, 0, true);
         } else {
             // An sfx() is borrowing the channel: the music resumes when it ends.
             CHANNELS()[c].sfx_music = n;
@@ -493,11 +567,11 @@ unsafe fn advance_music() {
     if MUSIC().pattern < 0 {
         return;
     }
-    MUSIC().offset += ROWS_PER_BLOCK_Q32;
+    MUSIC().offset = MUSIC().offset.advance(ROWS_PER_BLOCK_Q32);
     MUSIC().fade_vol = (MUSIC().fade_vol + MUSIC().fade_step).clamp(0, 65536);
     if MUSIC().fade_step < 0 && MUSIC().fade_vol <= 0 {
         set_music_pattern(-1);
-    } else if MUSIC().offset >= MUSIC().length {
+    } else if MUSIC().offset.rows >= MUSIC().length {
         let pat = MUSIC().pattern as usize;
         let mut next = MUSIC().pattern + 1;
         if AUDIO.music[pat][2] & 0x80 != 0 {
@@ -520,16 +594,22 @@ unsafe fn resume_music_sfx(c: usize) {
         return;
     }
     let index = ch.sfx_music as usize;
-    let speed = sfx_speed(index) as i64;
-    let mut new_offset = MUSIC().offset / speed;
+    let speed = sfx_speed(index) as u32;
+    // The music clock divided by the speed: the rows divide, and the remainder
+    // (below the speed) carries into the fraction's long division.
+    let clock = MUSIC().offset;
+    let mut new_offset = Clock {
+        rows: clock.rows / speed,
+        frac: div_u64_by_u32(clock.rows % speed, clock.frac, speed),
+    };
     let (ls, le) = sfx_loop(index);
-    let loop_range = (le - ls) as i64;
+    let loop_range = le - ls;
     let mut want_play = true;
     if loop_range > 0 && ch.can_loop {
-        if new_offset > (ls as i64) * ROW {
-            new_offset = (new_offset - (ls as i64) * ROW) % (loop_range * ROW) + (ls as i64) * ROW;
+        if new_offset.past(ls as u32) {
+            new_offset = new_offset.wrap_loop(ls as u32, loop_range as u32);
         }
-    } else if new_offset > 32 * ROW {
+    } else if new_offset.past(32) {
         want_play = false;
     }
     let sfx = ch.sfx_music;
@@ -583,14 +663,14 @@ unsafe fn sequence_channel(c: usize) {
             };
         }
         // Custom instruments transpose around C2: inner pitch * outer / C2.
-        let ff = ((new.freq as i64) << 16) / KEY_FREQ[24] as i64;
+        let ff = mul_div_i32(new.freq, 65536, KEY_FREQ[24]);
         let main_vol = new.vol;
         // A rest inside the instrument, or a one-shot instrument that has already
         // finished, is silence (zepto8 falls through to the main note's parameters
         // there and plays the instrument index as a plain waveform).
         new.vol = 0;
         if ch.custom.sfx >= 0 {
-            row_custom = update_sfx(&mut ch.custom, &mut new, ff as i32, 0, false, true);
+            row_custom = update_sfx(&mut ch.custom, &mut new, ff, 0, false, true);
             new.vol = new.vol * main_vol >> 12;
         }
     }
@@ -600,7 +680,7 @@ unsafe fn sequence_channel(c: usize) {
     // the old parameters over ~8 ms instead of clicking (zepto8 tests this per
     // sample; per block, a smooth slide/drop/fade would trip the thresholds, so
     // it only applies on a change of note, and a continuing note ramps instead).
-    let ident = ((row_main as i64) << 32) | (row_custom as i64 & 0xFFFF_FFFF);
+    let ident = (row_main, row_custom);
     let changed = ident != ch.ident
         || new.key != last.key
         || new.instr != last.instr
@@ -618,7 +698,7 @@ unsafe fn sequence_channel(c: usize) {
         ch.fade = 65536;
         // The phaser's second triangle is re-derived from the phase on a note
         // change (zepto8 re-folds phi), which restarts its beat.
-        new.phase2 = ((new.phase as u64) * 109 / 110) as u32;
+        new.phase2 = mul_div_u32(new.phase, 109, 110);
     }
     ch.ramp = !harsh && last.vol > 0 && new.vol > 0;
     ch.prev_freq = last.freq;
@@ -650,10 +730,10 @@ fn rand_q16() -> i32 {
 /// zepto8's 1.5 is ~20% hot).
 #[inline]
 fn noise_coefs(freq: i32, key: u8) -> (i32, i32) {
-    let scale: i64 = if freq <= KEY_FREQ[0] {
-        NOISE_SCALE_Q16[0] as i64 * freq as i64 / KEY_FREQ[0] as i64
+    let scale = if freq <= KEY_FREQ[0] {
+        mul_div_i32(NOISE_SCALE_Q16[0], freq, KEY_FREQ[0])
     } else if freq >= KEY_FREQ[63] {
-        NOISE_SCALE_Q16[63] as i64 * freq as i64 / KEY_FREQ[63] as i64
+        mul_div_i32(NOISE_SCALE_Q16[63], freq, KEY_FREQ[63])
     } else {
         let mut k = 0usize;
         let mut step = 32;
@@ -663,14 +743,14 @@ fn noise_coefs(freq: i32, key: u8) -> (i32, i32) {
             }
             step >>= 1;
         }
-        let (f0, f1) = (KEY_FREQ[k] as i64, KEY_FREQ[k + 1] as i64);
-        let (s0, s1) = (NOISE_SCALE_Q16[k] as i64, NOISE_SCALE_Q16[k + 1] as i64);
-        s0 + (s1 - s0) * (freq as i64 - f0) / (f1 - f0)
+        let (f0, f1) = (KEY_FREQ[k], KEY_FREQ[k + 1]);
+        let (s0, s1) = (NOISE_SCALE_Q16[k], NOISE_SCALE_Q16[k + 1]);
+        s0 + mul_div_i32(s1 - s0, freq - f0, f1 - f0)
     };
-    let a = (scale << 16) / (65536 + scale);
-    let f = 65536 - key as i64 * 1040;
-    let gain = (81264 * (65536 + ((f * f) >> 16))) >> 16;
-    (a as i32, gain as i32)
+    let a = mul_div_i32(scale, 65536, 65536 + scale);
+    let f = 65536 - key as i32 * 1040;
+    let gain = mul_shr_i32(81264, 65536 + mul_shr_i32(f, f, 16), 16);
+    (a, gain)
 }
 
 /// One oscillator sample in Q15 (32768 = 1.0). PICO-8's waveforms are the raw
@@ -751,7 +831,7 @@ unsafe fn synth_gain(s: &Synth, c: usize) -> i32 {
         if MUSIC_MUTE & (1 << c) != 0 {
             return 0;
         }
-        ((s.vol as i64 * MUSIC().fade_vol as i64 * MUSIC_GAIN as i64) >> 19) as i32
+        mul_shr_i32(s.vol * MUSIC_GAIN, MUSIC().fade_vol, 19)
     } else {
         s.vol * SFX_GAIN / 8
     }
@@ -763,7 +843,7 @@ const GAIN_SHIFT: u32 = 13;
 
 #[inline]
 fn hz_to_inc(freq: i32) -> u32 {
-    ((freq.max(0) as u64 * HZ_TO_INC) >> 8) as u32
+    mul_shr_i32(freq.max(0), HZ_TO_INC, 8) as u32
 }
 
 /// Render one block of one channel into `mix` (i32 accumulator).
@@ -824,7 +904,7 @@ unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
     // was most of the synth's cost.
     let mut inc = hz_to_inc(f);
     let mut inc2 = inc / 110 * 109;
-    let dinc = ((df as i64 * HZ_TO_INC as i64) >> 8) as i32;
+    let dinc = mul_shr_i32(df, HZ_TO_INC, 8);
     let dinc2 = dinc / 110 * 109;
 
     if ch.fade > 0 {
@@ -852,8 +932,7 @@ unsafe fn render_channel(c: usize, mix: &mut [i32; BLOCK_SAMPLES]) {
                 * fade_gain
                 >> GAIN_SHIFT)
                 .clamp(-32767, 32767);
-            let w = fade.max(0) as i64;
-            *m += v + (((fv - v) as i64 * w) >> 16) as i32;
+            *m += v + mul_shr_i32(fv - v, fade.max(0), 16);
             fade -= FADE_STEP_Q16;
         }
         ch.fade = fade.max(0);
@@ -1064,7 +1143,8 @@ pub fn load(audio: AudioData) {
             LAST_NOTE[i] = last;
         }
         for (speed, rows) in ROWS_PER_BLOCK_AT_SPEED.iter_mut().enumerate() {
-            *rows = (BLOCK_SAMPLES as i64) * ROW / (183 * speed.max(1) as i64);
+            // 28 * 2^32 / (183 * speed): the numerator's high word is 28, below the divisor.
+            *rows = div_u64_by_u32(BLOCK_SAMPLES as u32, 0, 183 * speed.max(1) as u32);
         }
         *state() = STATE0;
         MUSIC().pattern = -1;
@@ -1193,8 +1273,8 @@ pub fn play_ch(id: i32, channel: i32, offset: i32, length: i32) {
         launch_sfx(
             id,
             c,
-            (offset.max(0) as i64) * ROW,
-            (length as i64) * ROW,
+            Clock::whole(offset.max(0) as u32),
+            length.max(0) as u32,
             false,
         );
     }
@@ -1212,9 +1292,11 @@ pub fn music(pattern: i32, fade_len: i32, mask: i32) {
             if fade_len <= 0 {
                 set_music_pattern(-1);
             } else {
-                MUSIC().fade_step = -((MUSIC().fade_vol as i64 * MUSIC_FADE_Q16_PER_MS_BLOCK
-                    / (fade_len as i64 * 65536))
-                    .max(1)) as i32;
+                // fade_vol * step / (fade_len * 65536), as nested floors: the
+                // product over 65536 first, then the divide by the length.
+                let per_ms =
+                    mul_div_u32(MUSIC().fade_vol as u32, MUSIC_FADE_Q16_PER_MS_BLOCK, 65536);
+                MUSIC().fade_step = -((per_ms / fade_len as u32).max(1) as i32);
             }
             return;
         }
@@ -1223,7 +1305,7 @@ pub fn music(pattern: i32, fade_len: i32, mask: i32) {
         MUSIC().fade_step = 0;
         if fade_len > 0 {
             MUSIC().fade_vol = 0;
-            MUSIC().fade_step = (MUSIC_FADE_Q16_PER_MS_BLOCK / fade_len as i64).max(1) as i32;
+            MUSIC().fade_step = (MUSIC_FADE_Q16_PER_MS_BLOCK / fade_len as u32).max(1) as i32;
         }
         set_music_pattern(pattern);
     }
@@ -1266,6 +1348,134 @@ mod tests {
     }
     mod c2 {
         include!("../../games/celeste2/src/assets/audio_data.rs");
+    }
+
+    #[test]
+    fn mul_shr32_is_the_high_word_of_the_signed_product() {
+        let wide = |a: i32, b: i32| ((a as i64 * b as i64) >> 32) as i32;
+        let edges = [
+            i32::MIN,
+            i32::MIN + 1,
+            -65_536,
+            -65_535,
+            -3897 * 16_384,
+            -1,
+            0,
+            1,
+            2,
+            3897,
+            65_535,
+            65_536,
+            6_060_000,
+            3897 * 16_384,
+            i32::MAX - 1,
+            i32::MAX,
+        ];
+        for &a in &edges {
+            for &b in &edges {
+                assert_eq!(mul_shr32(a, b), wide(a, b), "{a} {b}");
+            }
+        }
+        let mut state = 0x1234_5679u32;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state
+        };
+        for _ in 0..2_000_000 {
+            let (a, b) = (
+                next() as i32 >> (next() % 32),
+                next() as i32 >> (next() % 32),
+            );
+            assert_eq!(mul_shr32(a, b), wide(a, b), "{a} {b}");
+        }
+    }
+
+    #[test]
+    fn vibrato_clock_is_the_wide_shifted_product() {
+        let wide = |offset: Clock, speed: i32| {
+            let q32 = ((offset.rows as i64) << 32) | offset.frac as i64;
+            (((q32 >> 16) * speed as i64 * VIB_RATE_Q16 as i64) >> 16) as u32
+        };
+        let mut state = 0x9876_5431u32;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state
+        };
+        for speed in 1..=255 {
+            for rows in [0, 1, 15, 31] {
+                for frac in [0, 1, 0xFFFF, 0x1_0000, 0x8000_0000, u32::MAX] {
+                    let c = Clock { rows, frac };
+                    assert_eq!(
+                        vibrato_clock(c, speed),
+                        wide(c, speed),
+                        "{rows} {frac} {speed}"
+                    );
+                }
+            }
+        }
+        for _ in 0..1_000_000 {
+            let c = Clock {
+                rows: next() % 32,
+                frac: next(),
+            };
+            let speed = 1 + (next() % 255) as i32;
+            assert_eq!(vibrato_clock(c, speed), wide(c, speed));
+        }
+    }
+
+    #[test]
+    fn clock_arithmetic_is_the_q32_integer_arithmetic() {
+        let wide = |c: Clock| ((c.rows as u64) << 32) | c.frac as u64;
+        let mut state = 0x0f0f_1e1eu32;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state
+        };
+        for _ in 0..1_000_000 {
+            let c = Clock {
+                rows: next() % 5000,
+                frac: next(),
+            };
+            let step = next();
+            assert_eq!(wide(c.advance(step)), wide(c) + step as u64);
+            let start = next() % 300;
+            let range = 1 + next() % 40;
+            let rows = start + next() % 3000;
+            let c = Clock { rows, frac: next() };
+            let lo = (start as u64) << 32;
+            let want = (wide(c) - lo) % ((range as u64) << 32) + lo;
+            assert_eq!(wide(c.wrap_loop(start, range)), want);
+            assert_eq!(c.past(start), wide(c) > lo);
+            let on_start = Clock {
+                rows: start,
+                frac: 0,
+            };
+            assert!(
+                !on_start.past(start)
+                    && Clock {
+                        rows: start,
+                        frac: 1
+                    }
+                    .past(start)
+            );
+            let d = 1 + next() % 255;
+            let q = Clock {
+                rows: c.rows / d,
+                frac: div_u64_by_u32(c.rows % d, c.frac, d),
+            };
+            assert_eq!(wide(q), wide(c) / d as u64);
+        }
+        for speed in 1u32..=255 {
+            let want = (28u64 << 32) / (183 * speed as u64);
+            assert_eq!(div_u64_by_u32(28, 0, 183 * speed) as u64, want);
+        }
+        assert_eq!(ROWS_PER_BLOCK_Q32 as u64, (28u64 << 32) / 183);
     }
 
     /// Decode one ADPCM block exactly like the SPU (for a codec round trip).

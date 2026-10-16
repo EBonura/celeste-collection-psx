@@ -250,9 +250,12 @@ fn blank_test_items(code: &str) -> String {
         // a `;` for brace-less items like `#[cfg(test)] use super::*;`.
         let mut cursor = start;
         let mut depth = 0usize;
+        let mut nested = 0usize; // ( and [ : the `;` in `[i32; 3]` does not end the item
         let mut end = bytes.len();
         while cursor < bytes.len() {
             match bytes[cursor] {
+                b'(' | b'[' => nested += 1,
+                b')' | b']' => nested = nested.saturating_sub(1),
                 b'{' => depth += 1,
                 b'}' => {
                     depth = depth.saturating_sub(1);
@@ -261,7 +264,7 @@ fn blank_test_items(code: &str) -> String {
                         break;
                     }
                 }
-                b';' if depth == 0 => {
+                b';' if depth == 0 && nested == 0 => {
                     end = cursor + 1;
                     break;
                 }
@@ -323,7 +326,18 @@ fn scan_forbidden_types(
                 .checked_sub(1)
                 .and_then(|i| code.as_bytes().get(i).copied());
             let after = code.as_bytes().get(offset + token.len()).copied();
-            if before.is_none_or(|b| !is_ident_byte(b)) && after.is_none_or(|b| !is_ident_byte(b)) {
+            // `0u64` and `1_i64`: the type is a literal suffix, so what precedes it is a
+            // run of identifier bytes that starts with a digit.
+            let suffix_of_literal = before.is_some_and(is_ident_byte) && {
+                let mut start = offset;
+                while start > 0 && is_ident_byte(code.as_bytes()[start - 1]) {
+                    start -= 1;
+                }
+                code.as_bytes()[start].is_ascii_digit()
+            };
+            if (before.is_none_or(|b| !is_ident_byte(b)) || suffix_of_literal)
+                && after.is_none_or(|b| !is_ident_byte(b))
+            {
                 let (line, col) = line_col(code, offset);
                 if allowed.contains(&line) {
                     *allowed_hits += 1;

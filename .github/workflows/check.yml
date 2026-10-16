@@ -12,12 +12,12 @@ jobs:
         run: |
           rustup toolchain install nightly-2026-03-25 --component rust-src
           rustup default nightly-2026-03-25
+      - name: Import the locked PSoXide components
+        run: make psoxide
       - name: Check the source contracts (GPU list packing, object lifecycle, grapple queries, audio wait budget, pixel and circle packets)
         run: cargo test --manifest-path tools/source-contracts/Cargo.toml
       - name: Keep guest code free of 64-bit integers and floats
         run: sh tools/check-no64.sh
-      - name: Import the locked PSoXide components
-        run: make psoxide
       - name: Check the imported components against the lock
         run: make verify-components
       - name: Check shared/ for the host target

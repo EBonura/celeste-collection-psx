@@ -5,6 +5,7 @@
 //! leaving due work idle before the very next post-swap update.
 
 mod common;
+use common::{index, index_from};
 
 const TESTS: &str = r####"
 #[test]
@@ -55,13 +56,25 @@ fn elapsed_clock_wait_budget() {
                 "const LEAD_BLOCKS:",
                 "const MAX_BLOCKS_PER_UPDATE:",
                 "const RING_BLOCKS:",
-                "const BLOCKS_PER_FRAME_Q16:",
             ]
             .iter()
             .any(|prefix| line.starts_with(prefix))
         })
         .collect();
-    let unit = format!("{}\n{}{}", constants.join("\n"), &source[start..end], TESTS);
+    // The per-frame block rate and the rounding helper live in playhead.rs.
+    let playhead = common::read("shared/src/playhead.rs");
+    let rate = index(&playhead, "pub const BLOCKS_PER_FRAME_Q16:");
+    let rate = &playhead[rate..index_from(&playhead, "\n", rate) + 1];
+    let helper = index(&playhead, "pub fn blocks_for_frames(");
+    let helper = &playhead[helper..index_from(&playhead, "\n}\n", helper) + 3];
+    let unit = format!(
+        "{}\n{}{}\n{}{}",
+        constants.join("\n"),
+        rate,
+        helper,
+        &source[start..end],
+        TESTS
+    );
     let scratch = common::Scratch::new("celeste-audio-wait-");
     common::compile_and_run(
         &scratch,

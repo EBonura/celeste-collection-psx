@@ -60,11 +60,14 @@ fn ordered_grapple_candidate_queries() {
         unit += "}\n";
     }
     unit += TESTS;
+    let math = common::psx_math_args(&scratch);
+    let mut args = vec!["--edition=2021", "--test", "-O"];
+    args.extend(math.iter().map(String::as_str));
     common::compile_and_run(
         &scratch,
         "grapple",
         &unit,
-        &["--edition=2021", "--test", "-O"],
+        &args,
         &["--test-threads=1", "--nocapture"],
     );
 }

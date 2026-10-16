@@ -62,11 +62,14 @@ fn packed_live_object_lifecycle() {
         unit += INSERT_REMOVE;
     }
     unit += COMPARE;
+    let math = common::psx_math_args(&scratch);
+    let mut args = vec!["--edition=2021", "--test", "-O"];
+    args.extend(math.iter().map(String::as_str));
     common::compile_and_run(
         &scratch,
         "prefix",
         &unit,
-        &["--edition=2021", "--test", "-O"],
+        &args,
         &["--test-threads=1", "--nocapture"],
     );
 }

@@ -53,6 +53,43 @@ impl Drop for Scratch {
     }
 }
 
+/// Build the SDK's psx-math for the host into `scratch` and return the rustc
+/// arguments that make `psx_math` visible to a generated program. The shared
+/// fixed-point code uses its 64-bit-free helpers, so any test that includes
+/// `shared/src/fixed.rs` needs it. The crate comes from the imported
+/// components (`make psoxide`).
+pub fn psx_math_args(scratch: &Scratch) -> Vec<String> {
+    let lib = root().join(".psoxide/sdk/crates/psx-math/src/lib.rs");
+    assert!(
+        lib.exists(),
+        "{} is missing: run `make psoxide` first",
+        lib.display()
+    );
+    let built = Command::new("rustc")
+        .args([
+            "--edition=2021",
+            "--crate-type=rlib",
+            "--crate-name=psx_math",
+        ])
+        .args(["-O", "--cap-lints=allow", "--out-dir"])
+        .arg(&scratch.0)
+        .arg(&lib)
+        .output()
+        .expect("run rustc for psx-math");
+    assert!(
+        built.status.success(),
+        "psx-math failed to build:\n{}{}",
+        String::from_utf8_lossy(&built.stdout),
+        String::from_utf8_lossy(&built.stderr)
+    );
+    vec![
+        "-L".to_string(),
+        scratch.0.display().to_string(),
+        "--extern".to_string(),
+        format!("psx_math={}", scratch.0.join("libpsx_math.rlib").display()),
+    ]
+}
+
 /// Write `source` as `<name>.rs` in `scratch`, compile it with `rustc` and run
 /// the binary with `run_args`; panic with the output if either step fails.
 pub fn compile_and_run(

@@ -24,6 +24,7 @@
 
 #![allow(static_mut_refs)]
 
+use crate::playhead::{blocks_for_frames, PlayHead};
 use crate::synth::{self, BLOCK_BYTES, BLOCK_SAMPLES, SAMPLE_RATE};
 use psx_hw::spu::{SPUCNT, SPUSTAT};
 use psx_spu as spu;
@@ -49,9 +50,6 @@ const STREAM_VOICE: u8 = 0;
 /// frame eats 13 blocks, so this survives a ~3-frame hitch before the play head
 /// catches the writer.
 const LEAD_BLOCKS: u32 = 40;
-/// Blocks the play head consumes per 60 Hz frame, Q16 (22050 / 60 / 28). The
-/// IRQ latch corrects the real ratio; this only extrapolates between polls.
-const BLOCKS_PER_FRAME_Q16: i64 = 860_160;
 /// IRQ marker distance ahead of the estimate: more than a frame's consumption
 /// so a lagging estimate is pulled forward by every latch.
 const MARK_AHEAD: u32 = 16;
@@ -66,7 +64,7 @@ const SPUSTAT_IRQ_FLAG: u16 = 1 << 6;
 // ---------------------------------------------------------------------------
 // Stream state (block units; monotonic counters, ring index = n % RING_BLOCKS).
 static mut STARTED: bool = false;
-static mut PLAY_Q16: i64 = 0; // estimated play head
+static mut PLAY: PlayHead = PlayHead::ZERO; // estimated play head
 static mut WRITE: u32 = 0; // next block to render
 static mut UPLOADED: u32 = 0; // next block to DMA: [UPLOADED, WRITE) is staged only
 static mut TARGET: u32 = 0; // where the last update wanted WRITE
@@ -174,7 +172,7 @@ fn wait_fill_target(target: u32, last_vblank: u32, now: u32) -> u32 {
     const _: () = assert!(LEAD_BLOCKS + MAX_BLOCKS_PER_UPDATE < RING_BLOCKS);
     // Match update's bounded elapsed-clock policy, including counter wrapping.
     let frames = now.wrapping_sub(last_vblank).min(7) + 1;
-    let blocks = ((BLOCKS_PER_FRAME_Q16 as u64 * frames as u64 + 65535) >> 16) as u32;
+    let blocks = blocks_for_frames(frames);
     target.saturating_add(blocks.min(MAX_BLOCKS_PER_UPDATE))
 }
 
@@ -217,7 +215,7 @@ unsafe fn start_stream() {
     v.set_start_addr(SpuAddr::new(RING_BASE));
     v.set_loop_addr(SpuAddr::new(RING_BASE));
     Voice::key_on(1 << STREAM_VOICE);
-    PLAY_Q16 = 0;
+    PLAY = PlayHead::ZERO;
     MARK = MARK_AHEAD;
     arm_mark();
     LAST_VBLANK = vblank_count();
@@ -264,21 +262,20 @@ pub fn update() {
         // consumed two frames of audio), then correct it from the IRQ latch: the
         // flag means the head is at or past MARK; no flag means it is not yet.
         let vb = vblank_count();
-        let elapsed = vb.wrapping_sub(LAST_VBLANK).clamp(1, 8) as i64;
+        let elapsed = vb.wrapping_sub(LAST_VBLANK).clamp(1, 8);
         LAST_VBLANK = vb;
-        PLAY_Q16 += BLOCKS_PER_FRAME_Q16 * elapsed;
-        let mark_q16 = (MARK as i64) << 16;
+        PLAY.advance(elapsed);
         if reg_read(SPUSTAT) & SPUSTAT_IRQ_FLAG != 0 {
-            if PLAY_Q16 < mark_q16 {
-                PLAY_Q16 = mark_q16;
+            if PLAY.before(MARK) {
+                PLAY = PlayHead::at(MARK);
             }
-            MARK = (PLAY_Q16 >> 16) as u32 + MARK_AHEAD;
+            MARK = PLAY.blocks() + MARK_AHEAD;
             arm_mark();
-        } else if PLAY_Q16 >= mark_q16 {
-            PLAY_Q16 = mark_q16 - 32768;
+        } else if !PLAY.before(MARK) {
+            PLAY = PlayHead::half_before(MARK);
         }
 
-        let play = (PLAY_Q16 >> 16) as u32;
+        let play = PLAY.blocks();
         if WRITE < play + 2 {
             // The head overran the writer (a long stall): skip ahead. The ring's
             // stale lap plays for the gap; the decoder history is stale too.

@@ -20,11 +20,12 @@ DIST     := $(ROOT)/dist
 PSOXIDE_LIB     ?= $(HOME)/Downloads/ps1 games
 COLLECTION_NAME := Celeste Classic Collection
 
-.PHONY: help no64 psoxide verify-components emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
+.PHONY: help no64 psoxide psoxide-prime verify-components emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
 
 help:
 	@echo "pico8-psx targets:"
 	@echo "  make psoxide            - import the components.lock.json revisions into .psoxide"
+	@echo "  make psoxide-prime      - fill the cargo registry for the offline import (fresh CI runners)"
 	@echo "  make no64               - fail if guest source names a 64-bit integer or a float type"
 	@echo "  make collection         - build the Celeste Classic Collection launcher PSX-EXE (both games + menu)"
 	@echo "  make collection-disc    - build the collection + pack dist/celeste-collection.{bin,cue}  [headline artifact]"
@@ -65,6 +66,27 @@ psoxide:
 			--git https://github.com/EBonura/PSoXide --rev $(COMPONENTS_REV) --root "$(COMPONENTS)" psoxide-link; \
 		"$(COMPONENTS)/bin/psoxide-components" --root "$(PSOXIDE)" --lock "$(ROOT)/components.lock.json"; \
 	fi
+
+# psoxide-components resolves a compound workspace's root Cargo.lock with
+# `cargo metadata --offline`, so every registry crate it needs must already be
+# in CARGO_HOME. A developer machine has them; a fresh CI runner does not, and
+# the import fails with "no matching package named ...". This target fills the
+# registry first: it imports the locked components into a scratch tree without
+# the editor's Cargo.lock (no offline resolve runs), puts the editor's locked
+# Cargo.lock back from the pinned revision, and runs an online `cargo fetch`.
+# Starting from that lock keeps the fetched versions the ones the offline
+# resolve then asks for. CI runs this before `make psoxide`.
+PRIME := $(ROOT)/target/psoxide-registry-prime
+psoxide-prime:
+	@[ -x "$(COMPONENTS)/bin/psoxide-components" ] || cargo install -q --locked \
+		--git https://github.com/EBonura/PSoXide --rev $(COMPONENTS_REV) --root "$(COMPONENTS)" psoxide-link
+	rm -rf "$(PRIME)" && mkdir -p "$(PRIME)"
+	jq 'del(.components.editor.paths[] | select(. == "Cargo.lock"))' "$(ROOT)/components.lock.json" > "$(PRIME)/components.lock.json"
+	"$(COMPONENTS)/bin/psoxide-components" --root "$(PRIME)/tree" --lock "$(PRIME)/components.lock.json"
+	curl --fail --silent --show-error --location --retry 3 -o "$(PRIME)/tree/Cargo.lock" \
+		"https://raw.githubusercontent.com/$$(jq -r .components.editor.repository "$(ROOT)/components.lock.json")/$$(jq -r .components.editor.revision "$(ROOT)/components.lock.json")/Cargo.lock"
+	cd "$(PRIME)/tree" && cargo fetch
+	rm -rf "$(PRIME)"
 
 # Verify the imported tree against the lock without fetching (CI runs this).
 verify-components: psoxide

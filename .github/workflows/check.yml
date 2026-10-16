@@ -12,6 +12,8 @@ jobs:
         run: |
           rustup toolchain install nightly-2026-03-25 --component rust-src
           rustup default nightly-2026-03-25
+      - name: Fill the cargo registry for the offline component resolve
+        run: make psoxide-prime
       - name: Import the locked PSoXide components
         run: make psoxide
       - name: Check the source contracts (GPU list packing, object lifecycle, grapple queries, audio wait budget, pixel and circle packets)

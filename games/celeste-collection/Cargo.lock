@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "celeste-collection"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "celeste",
  "celeste2",

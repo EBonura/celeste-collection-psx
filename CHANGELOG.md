@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.7 | 2026-10-16
 
 - The pause menu has a Brightness row between Borders and Quit: DEFAULT in the
   middle, DARKER 1 to 5 to the left, BRIGHTER 1 to 5 to the right, from the
@@ -12,6 +12,9 @@
   (between Borders and Fly, sharing the saved value), and the intro, cover
   menu, credits and settings are dimmed or lifted too; the fades still end
   black.
+- Each text colour has its own palette address. Rewriting one address between
+  strings left a cached palette active on the CPU rasterizer and the PS1 GPU.
+- Memory-card saves use the SDK's repinned card driver.
 - The SDK pin moves to 1ecf28ae6. The controller transport is the SDK's shared
   SIO0 engine now (the 0.2.6 ACK-paced fix lives on in it), so this needs a
   console run before it ships.

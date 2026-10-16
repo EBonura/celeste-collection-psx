@@ -464,7 +464,7 @@ timeout = 400
 
 [[step]]
 label = "settle after the room 2 spawn"
-wait = 59
+wait = 39
 
 
 [[step]]

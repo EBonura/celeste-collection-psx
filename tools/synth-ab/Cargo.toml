@@ -1,0 +1,17 @@
+[package]
+name = "synth-ab"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Host check that the PICO-8 synthesiser's 32-bit sequencer clock renders the
+# same samples as the 64-bit implementation it replaced (kept verbatim in
+# src/synth_old.rs, with its host tests cut off). Run with
+#   cargo test --release --manifest-path tools/synth-ab/Cargo.toml
+[workspace]
+
+[dependencies]
+psx-math = { path = "../../.psoxide/sdk/crates/psx-math" }
+
+[lib]
+path = "src/lib.rs"

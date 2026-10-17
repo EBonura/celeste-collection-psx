@@ -127,9 +127,15 @@ COLLECTION_MAP ?= $(DIST)/celeste-collection.map
 no64:
 	sh tools/check-no64.sh
 
+# A panic is a BREAK at the faulting instruction (-Cpanic=immediate-abort): core::fmt, the panic Location records and
+# their file names stay out of the image, and psx-rt's exception handler records Cause/EPC/BadVAddr
+# (__psx_rt_fault_*; `psoxide-size faults` reads them from a RAM dump). PSOXIDE_PANIC_MESSAGES=1 restores the
+# formatted panic. `--config` appends to the rustflags in the game's .cargo/config.toml.
+PANIC_CONFIG = $(if $(filter-out 0,$(PSOXIDE_PANIC_MESSAGES)),,--config 'target.mipsel-sony-psx.rustflags=["-Zunstable-options","-Cpanic=immediate-abort"]')
+
 collection: psoxide
 	@mkdir -p $(DIST)
-	cd $(COLLECTION_DIR) && PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
+	cd $(COLLECTION_DIR) && PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release $(PANIC_CONFIG)
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
 collection-disc: collection
@@ -173,7 +179,7 @@ CELESTE_DIR := $(ROOT)/games/celeste
 CELESTE_EXE := $(CELESTE_DIR)/target/$(TARGET)/release/celeste.exe
 
 celeste: psoxide
-	cd $(CELESTE_DIR) && cargo build --release
+	cd $(CELESTE_DIR) && cargo build --release $(PANIC_CONFIG)
 	@echo "EXE  -> $(CELESTE_EXE)"
 
 celeste-disc: celeste
@@ -189,7 +195,7 @@ CELESTE2_DIR := $(ROOT)/games/celeste2
 CELESTE2_EXE := $(CELESTE2_DIR)/target/$(TARGET)/release/celeste2.exe
 
 celeste2: psoxide
-	cd $(CELESTE2_DIR) && cargo build --release
+	cd $(CELESTE2_DIR) && cargo build --release $(PANIC_CONFIG)
 	@echo "EXE  -> $(CELESTE2_EXE)"
 
 celeste2-disc: celeste2

@@ -269,7 +269,7 @@ pub fn draw_sync() {
 /// `Tpage::apply_as_draw_mode` writes).
 #[inline]
 fn draw_mode_word(tpage: Tpage) -> u32 {
-    0xE100_0000
+    0xe100_0000
         | (tpage.x() as u32 / 64)
         | (if tpage.y() == 256 { 1 } else { 0 }) << 4
         | (tpage.depth() as u32) << 7
@@ -405,7 +405,7 @@ fn draw_cell(
     let (vt, vb) = if flip_y { (v_hi, v0) } else { (v0, v_hi) };
     let tp = tpage.uv_tpage_word(0);
     emit([
-        0x2C00_0000 | pack_color(0x80, 0x80, 0x80),
+        0x2c00_0000 | pack_color(0x80, 0x80, 0x80),
         pack_vertex(x, y),
         pack_texcoord(ul, vt, clut_word),
         pack_vertex(x + sz, y),
@@ -578,7 +578,7 @@ fn build_pattern(p: u16, scale: usize) -> [u16; 16] {
 /// match the pixel scale. Called from [`upload_assets`]; re-run per game boot
 /// since VRAM is shared.
 fn upload_fillp() {
-    unsafe { FILL_CLUT_COL = 0xFFFF };
+    unsafe { FILL_CLUT_COL = 0xffff };
     let mut i = 0;
     while i < FILLP_VALUES.len() {
         let doubled = build_pattern(FILLP_VALUES[i], 2);
@@ -598,17 +598,17 @@ fn upload_fillp() {
 /// Set the GPU texture window (GP0 0xE2). Masks/offsets are in 8-pixel units.
 #[inline]
 unsafe fn set_tex_window(mask_x: u32, mask_y: u32, off_x: u32, off_y: u32) {
-    emit([0xE200_0000
-        | (mask_x & 0x1F)
-        | ((mask_y & 0x1F) << 5)
-        | ((off_x & 0x1F) << 10)
-        | ((off_y & 0x1F) << 15)]);
+    emit([0xe200_0000
+        | (mask_x & 0x1f)
+        | ((mask_y & 0x1f) << 5)
+        | ((off_x & 0x1f) << 10)
+        | ((off_y & 0x1f) << 15)]);
 }
 
 /// Colour currently in the active fillp CLUT slot (so a run of same-colour
 /// dithered fills, e.g. a level's columns or fog clouds, uploads it once, not per
 /// primitive) and which slot holds it.
-static mut FILL_CLUT_COL: u16 = 0xFFFF;
+static mut FILL_CLUT_COL: u16 = 0xffff;
 static mut FILL_CLUT_SLOT: bool = false;
 
 #[inline]
@@ -715,7 +715,7 @@ pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize
             clip.2.min(cam_x + 128),
             clip.3.min(cam_y + 128),
         );
-        let tex = pack_texcoord(0, 0, fill_clut().uv_clut_word()) & 0xFFFF_0000;
+        let tex = pack_texcoord(0, 0, fill_clut().uv_clut_word()) & 0xffff_0000;
         disc_fill(
             cx,
             cy,
@@ -913,7 +913,7 @@ unsafe fn disc_fill_list<const DITHER: bool>(
     while p != end {
         let run = *p;
         p = p.add(1);
-        let dx = (run & 0xFF) as i32;
+        let dx = (run & 0xff) as i32;
         let lx = (cx - dx).max(clx);
         let rx = (cx + dx + 1).min(crx);
         if rx <= lx {
@@ -921,7 +921,7 @@ unsafe fn disc_fill_list<const DITHER: bool>(
         }
         let x = (lx << scale_shift) + sx_off;
         let w = (rx - lx) << scale_shift;
-        let dy0 = ((run >> 8) & 0xFF) as i32;
+        let dy0 = ((run >> 8) & 0xff) as i32;
         let dy1 = (run >> 16) as i32;
         // The run below the centre (or straddling it), then its mirror above.
         let mut ty = if dy0 == 0 { cy - dy1 } else { cy + dy0 };
@@ -935,7 +935,7 @@ unsafe fn disc_fill_list<const DITHER: bool>(
                 let vertex = pack_vertex(x as i16, y as i16);
                 let size = pack_xy(w as u16, ((b - t) << scale_shift) as u16);
                 if DITHER {
-                    let uv = tex | (((y - oy) as u32 & 0xFF) << 8) | ((x - ox) as u32 & 0xFF);
+                    let uv = tex | (((y - oy) as u32 & 0xff) << 8) | ((x - ox) as u32 & 0xff);
                     list.push_packet([cmd, vertex, uv, size]);
                 } else {
                     list.push_packet([cmd, vertex, size]);
@@ -1068,8 +1068,8 @@ unsafe fn disc_fill_immediate(
 #[inline(always)]
 fn uv_word(tex: u32, x: i16, y: i16) -> u32 {
     let (u, v) = (
-        (x - ofs_x()) as u32 & 0xFF,
-        (y - unsafe { V_OFS }) as u32 & 0xFF,
+        (x - ofs_x()) as u32 & 0xff,
+        (y - unsafe { V_OFS }) as u32 & 0xff,
     );
     tex | (v << 8) | u
 }
@@ -1145,8 +1145,8 @@ impl DiscRuns {
                 let w = unsafe { **next };
                 *next = unsafe { next.add(1) };
                 Some((
-                    (w & 0xFF) as i32,
-                    ((w >> 8) & 0xFF) as i32,
+                    (w & 0xff) as i32,
+                    ((w >> 8) & 0xff) as i32,
                     (w >> 16) as i32,
                 ))
             }
@@ -1266,7 +1266,7 @@ pub fn print(s: &[u8], x: i16, y: i16, c: i32) {
 
     let mut cx = x;
     for &ch in s {
-        let ci = (ch & 0x7F) as i32;
+        let ci = (ch & 0x7f) as i32;
         let u0 = ((ci % 16) * 16) as u8;
         let v0 = ((ci / 16) * 16) as u8;
         draw_cell(sx(cx), sy(y), u0, v0, clut_word, FONT_TPAGE, false, false);

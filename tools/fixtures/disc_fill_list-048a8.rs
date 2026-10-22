@@ -24,7 +24,7 @@ unsafe fn disc_fill_list<const DITHER: bool>(
     while p != end {
         let run = *p;
         p = p.add(1);
-        let dx = (run & 0xFF) as i32;
+        let dx = (run & 0xff) as i32;
         let lx = (cx - dx).max(clx);
         let rx = (cx + dx + 1).min(crx);
         if rx <= lx {
@@ -32,7 +32,7 @@ unsafe fn disc_fill_list<const DITHER: bool>(
         }
         let x = lx * scale + sx_off;
         let w = (rx - lx) * scale;
-        let dy0 = ((run >> 8) & 0xFF) as i32;
+        let dy0 = ((run >> 8) & 0xff) as i32;
         let dy1 = (run >> 16) as i32;
         // The run below the centre (or straddling it), then its mirror above.
         let mut ty = if dy0 == 0 { cy - dy1 } else { cy + dy0 };
@@ -46,7 +46,7 @@ unsafe fn disc_fill_list<const DITHER: bool>(
                 let vertex = pack_vertex(x as i16, y as i16);
                 let size = pack_xy(w as u16, ((b - t) * scale) as u16);
                 if DITHER {
-                    let uv = tex | (((y - oy) as u32 & 0xFF) << 8) | ((x - ox) as u32 & 0xFF);
+                    let uv = tex | (((y - oy) as u32 & 0xff) << 8) | ((x - ox) as u32 & 0xff);
                     list.push_packet([cmd, vertex, uv, size]);
                 } else {
                     list.push_packet([cmd, vertex, size]);
@@ -61,4 +61,3 @@ unsafe fn disc_fill_list<const DITHER: bool>(
         }
     }
 }
-

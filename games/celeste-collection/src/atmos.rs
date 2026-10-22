@@ -9,9 +9,8 @@
 //! - The selection "tracer": a bright comet (×2, opposite) that runs around the
 //!   chosen cover's border with a fading tail, drawn in screen space.
 
-use pico8::backend;
 use pico8::fixed::{fx, Fix32};
-use pico8::rng;
+use pico8::{backend, rng};
 use psx_gpu as gpu;
 
 const HALF: Fix32 = fx(0.5);
@@ -249,7 +248,7 @@ pub fn draw_tracer(cx: i16, cy: i16, size: i16, frame: i32) {
             let f = TAIL - k; // 1..TAIL, brightest at the head
             let r = (0x28 * f / TAIL) as u8;
             let g = (0x80 * f / TAIL) as u8;
-            let b = (0xFF * f / TAIL) as u8;
+            let b = (0xff * f / TAIL) as u8;
             let sz = if k == 0 { 2 } else { 1 };
             gpu::draw_quad_flat(
                 [

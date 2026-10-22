@@ -38,8 +38,10 @@ use assets::cover_celeste2::COVER_CELESTE2;
 use assets::palette::PICO8_CLUT;
 
 use pico8::{backend, debug, icons, menusfx, sfx};
-use psx_font::{fonts::BASIC, FontAtlas};
-use psx_gpu::{self as gpu, framebuf::FrameBuffer, Resolution, VideoMode};
+use psx_font::fonts::BASIC;
+use psx_font::FontAtlas;
+use psx_gpu::framebuf::FrameBuffer;
+use psx_gpu::{self as gpu, Resolution, VideoMode};
 use psx_pad::{button, ButtonState};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display; the VBlank IRQ counter waits for the real blank.
@@ -577,7 +579,15 @@ fn show_settings() {
             0x80,
         );
 
-        const ROWS: [&str; N] = ["SFX", "Music", "Pixel", "Screen", "Borders", "Brightness", "Fly"];
+        const ROWS: [&str; N] = [
+            "SFX",
+            "Music",
+            "Pixel",
+            "Screen",
+            "Borders",
+            "Brightness",
+            "Fly",
+        ];
         const Y0: i16 = 64; // seven rows: start higher so the last clears the Back hint
         const RH: i16 = 22;
         let (lx, vx) = (84i16, 188i16);

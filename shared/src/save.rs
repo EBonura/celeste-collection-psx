@@ -67,7 +67,7 @@ pub fn load() {
     sfx::set_music_volume(buf[5] as u16); // clamps to 0..=8
     backend::set_pixel_scale(buf[6] as i16); // clamps to 1|2
     backend::set_side_preset(buf[7]); // wraps % preset count
-    // A file from before brightness has no ninth byte: DEFAULT.
+                                      // A file from before brightness has no ninth byte: DEFAULT.
     backend::set_brightness(if len >= PAYLOAD_LEN {
         Brightness::from_byte(buf[8]) // clamps to -5..=5
     } else {

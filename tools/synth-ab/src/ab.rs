@@ -179,7 +179,7 @@ fn scripted_calls_on_the_games_match() {
 /// instrument and music flag combination, far beyond what a cart authors.
 #[test]
 fn arbitrary_sound_ram_matches() {
-    let mut rng = Rng(0xC0FF_EE11);
+    let mut rng = Rng(0xc0ff_ee11);
     for round in 0..400u32 {
         let mut sfx = Box::new([[0u8; 68]; 64]);
         let mut music = Box::new([[0u8; 4]; 64]);
@@ -207,7 +207,7 @@ fn arbitrary_sound_ram_matches() {
             for b in m.iter_mut() {
                 *b = rng.next() as u8;
                 if rng.below(3) == 0 {
-                    *b &= 0x3F | 0x80; // keep more channels active
+                    *b &= 0x3f | 0x80; // keep more channels active
                 }
             }
         }

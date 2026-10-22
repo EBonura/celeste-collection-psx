@@ -14,4 +14,3 @@ unsafe fn grapple_check(i: usize, x: Fix32, y: Fix32) -> i32 {
     }
     0
 }
-

@@ -57,7 +57,7 @@ pub fn play(id: usize) {
             // Instant attack, full sustain, fastest release the hardware
             // encodes.
             .with_adsr(Adsr {
-                lower: 0x000F,
+                lower: 0x000f,
                 upper: 0x0000,
             })
             .play(Voice::new(v));

@@ -42,7 +42,7 @@ impl Fix32 {
     /// `_fix32_floor`: arithmetic floor, as Fix32.
     #[inline]
     pub fn floor(self) -> Fix32 {
-        Fix32(self.0 & !0xFFFF)
+        Fix32(self.0 & !0xffff)
     }
     /// floor as an integer.
     #[inline]
@@ -80,8 +80,8 @@ impl Fix32 {
     }
     /// PICO-8 `sin` (note: turns, and negated — matches `_fix32_sin`).
     pub fn sin(self) -> Fix32 {
-        let mut index = ((self.0.wrapping_add(0x4002) >> 2) & 0x3FFF) as i32;
-        if index > 0x1FFF {
+        let mut index = ((self.0.wrapping_add(0x4002) >> 2) & 0x3fff) as i32;
+        if index > 0x1fff {
             index = 0x4000 - index;
         }
         if index < 0x1000 {
@@ -112,7 +112,7 @@ impl Fix32 {
         while step > 0 {
             let c = y + step;
             let high = mul_shr_i32(c as i32, c as i32, 16) as u32;
-            let low = c.wrapping_mul(c) & 0xFFFF;
+            let low = c.wrapping_mul(c) & 0xffff;
             if high < raw || (high == raw && low == 0) {
                 y = c;
             }
@@ -192,8 +192,19 @@ mod tests {
     }
 
     fn edges() -> Vec<i32> {
-        let mut v = vec![i32::MIN, i32::MIN + 1, -65_537, -65_536, -65_535, -1, 0, 1, 2, 3];
-        v.extend([65_535, 65_536, 65_537, 0x7FFF_0000, i32::MAX - 1, i32::MAX]);
+        let mut v = vec![
+            i32::MIN,
+            i32::MIN + 1,
+            -65_537,
+            -65_536,
+            -65_535,
+            -1,
+            0,
+            1,
+            2,
+            3,
+        ];
+        v.extend([65_535, 65_536, 65_537, 0x7fff_0000, i32::MAX - 1, i32::MAX]);
         v.extend((-40..40).map(|n| n * 3277));
         v
     }
@@ -208,7 +219,10 @@ mod tests {
         }
         let mut next = rng(0x1357_9bdf);
         for _ in 0..3_000_000 {
-            let (a, b) = (next() as i32 >> (next() % 32), next() as i32 >> (next() % 32));
+            let (a, b) = (
+                next() as i32 >> (next() % 32),
+                next() as i32 >> (next() % 32),
+            );
             assert_eq!((Fix32(a) * Fix32(b)).0, wide(a, b), "{a} {b}");
         }
     }
@@ -232,9 +246,12 @@ mod tests {
         }
         let mut next = rng(0x2468_ace1);
         for _ in 0..3_000_000 {
-            let (a, mut b) = (next() as i32 >> (next() % 32), next() as i32 >> (next() % 32));
+            let (a, mut b) = (
+                next() as i32 >> (next() % 32),
+                next() as i32 >> (next() % 32),
+            );
             if next() % 4 == 0 {
-                b &= !0xFFFF; // whole-number divisors take the other path
+                b &= !0xffff; // whole-number divisors take the other path
             }
             assert_eq!((Fix32(a) / Fix32(b)).0, wide(a, b), "{a} {b}");
         }

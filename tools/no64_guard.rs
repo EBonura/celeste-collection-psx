@@ -76,13 +76,31 @@ fn main() {
         let src = fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let code = blank_test_items(&blank_comments_and_literals(&src));
         let allowed = allowed_lines(&src);
-        scan_forbidden_types(path, &src, &code, &allowed, &mut allowed_hits, &mut violations);
+        scan_forbidden_types(
+            path,
+            &src,
+            &code,
+            &allowed,
+            &mut allowed_hits,
+            &mut violations,
+        );
         if floats {
-            scan_float_literals(path, &src, &code, &allowed, &mut allowed_hits, &mut violations);
+            scan_float_literals(
+                path,
+                &src,
+                &code,
+                &allowed,
+                &mut allowed_hits,
+                &mut violations,
+            );
         }
     }
     if violations.is_empty() {
-        println!("no64 guard: ok ({} files, {} allowed lines)", files.len(), allowed_hits);
+        println!(
+            "no64 guard: ok ({} files, {} allowed lines)",
+            files.len(),
+            allowed_hits
+        );
         return;
     }
     eprintln!("no64 guard failed: guest code names a wide integer or a float.");
@@ -431,4 +449,3 @@ fn scan_float_literals(
         idx = idx.max(start + 1);
     }
 }
-

@@ -303,9 +303,9 @@ fn button(name: &str) -> Option<u16> {
 fn stick(name: &str) -> (Option<u8>, Option<u8>) {
     match name {
         "stick_left" => (Some(0x00), None),
-        "stick_right" => (Some(0xFF), None),
+        "stick_right" => (Some(0xff), None),
         "stick_up" => (None, Some(0x00)),
-        "stick_down" => (None, Some(0xFF)),
+        "stick_down" => (None, Some(0xff)),
         other => panic!("unknown input {other:?}"),
     }
 }
@@ -684,9 +684,9 @@ mod tests {
         let sample = |tick: usize| &tape[12 + tick * 6..12 + tick * 6 + 6];
         assert_eq!(sample(0), [0, 0, 0x80, 0x80, 0x80, 0x80]);
         // tick 1: cross held (0x4000), stick pushed right
-        assert_eq!(sample(1), [0x00, 0x40, 0x80, 0x80, 0xFF, 0x80]);
+        assert_eq!(sample(1), [0x00, 0x40, 0x80, 0x80, 0xff, 0x80]);
         // tick 2: cross still held, stick right still held, stick down added
-        assert_eq!(sample(2), [0x00, 0x40, 0x80, 0x80, 0xFF, 0xFF]);
+        assert_eq!(sample(2), [0x00, 0x40, 0x80, 0x80, 0xff, 0xff]);
         assert_eq!(sample(3), [0, 0, 0x80, 0x80, 0x80, 0x80]);
     }
 

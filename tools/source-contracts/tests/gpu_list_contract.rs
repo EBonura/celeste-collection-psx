@@ -19,7 +19,7 @@ fn packets(words: &[u32]) -> Result<Vec<Packet>, String> {
     while at < words.len() {
         let opcode = words[at] >> 24;
         let size = match opcode {
-            0xA0 => {
+            0xa0 => {
                 let wh = i64::from(
                     *words
                         .get(at + 2)
@@ -29,15 +29,15 @@ fn packets(words: &[u32]) -> Result<Vec<Packet>, String> {
                 let height = (((wh >> 16) - 1) & 511) + 1;
                 3 + ((width * height + 1) / 2) as usize
             }
-            0x00 | 0x01 | 0x1F | 0xE1..=0xE6 => 1,
+            0x00 | 0x01 | 0x1f | 0xe1..=0xe6 => 1,
             0x02 => 3,
-            0x20..=0x3F => {
+            0x20..=0x3f => {
                 let vertices = if opcode & 8 != 0 { 4 } else { 3 };
                 let mut size = 1 + vertices + if opcode & 4 != 0 { vertices } else { 0 };
                 size += if opcode & 16 != 0 { vertices - 1 } else { 0 };
                 size as usize
             }
-            0x60..=0x7F => (2 + usize::from(opcode & 4 != 0) + usize::from(opcode & 0x18 == 0)),
+            0x60..=0x7f => (2 + usize::from(opcode & 4 != 0) + usize::from(opcode & 0x18 == 0)),
             _ => return Err(format!("Unsupported fixture opcode {opcode:02x}")),
         };
         if at + size > words.len() {
@@ -152,7 +152,7 @@ fn upload_cannot_be_split() {
     let upload = f
         .commands
         .iter()
-        .find(|p| p[0] >> 24 == 0xA0)
+        .find(|p| p[0] >> 24 == 0xa0)
         .unwrap()
         .clone();
     assert_eq!(upload.len(), 11);

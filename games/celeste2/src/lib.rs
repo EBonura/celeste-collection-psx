@@ -24,7 +24,8 @@ use assets::tilemap::{MAP_W, TILEMAP_DATA, TILE_FLAGS};
 use pico8::backend::{self, Cart};
 use pico8::pause::{self, Exit, Pause};
 use pico8::sfx::{self, AudioData};
-use psx_gpu::{self as gpu, framebuf::FrameBuffer, Resolution, VideoMode};
+use psx_gpu::framebuf::FrameBuffer;
+use psx_gpu::{self as gpu, Resolution, VideoMode};
 use psx_pad::button;
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display, leaving almost no per-frame compute budget; the
@@ -61,9 +62,9 @@ pub fn run() {
     // hold 60fps (see celeste1).
     psx_rt::interrupts::install_vblank_counter();
     let mut prev_start = true; // require a fresh press before the first pause
-    // Cart logic runs on the shared psx-tick clock, one update per VBlank. A
-    // frame that missed VBlanks catches up (up to four updates before it draws,
-    // the rest over the next frames) instead of slowing the game down.
+                               // Cart logic runs on the shared psx-tick clock, one update per VBlank. A
+                               // frame that missed VBlanks catches up (up to four updates before it draws,
+                               // the rest over the next frames) instead of slowing the game down.
     let mut clock = psx_tick::FixedClock::new(
         psx_tick::TickConfig::new(psx_tick::TickRate::HZ60).with_interleave(4),
         psx_rt::interrupts::vblank_count(),
@@ -82,7 +83,7 @@ pub fn run() {
                 return; // player chose "quit to menu"
             }
             prev_start = true; // wait for release before it can pause again
-            // The game was frozen behind the menu; do not catch its time up.
+                               // The game was frozen behind the menu; do not catch its time up.
             clock.realign(psx_rt::interrupts::vblank_count());
             continue;
         }
@@ -230,7 +231,7 @@ pub fn run_music_iso(pattern: i32) {
     sfx::init(AUDIO);
     psx_rt::interrupts::install_vblank_counter();
     // mute masks: 0=full, then solo ch0/1/2/3 (mute the other three of the low 4).
-    let masks = [0u8, 0x0E, 0x0D, 0x0B, 0x07];
+    let masks = [0u8, 0x0e, 0x0d, 0x0b, 0x07];
     let mut i = 0;
     loop {
         sfx::set_music_mute(masks[i]);

@@ -20,11 +20,9 @@ use crate::assets::gfx::GFX_DATA;
 use crate::assets::levels::{LevelMeta, LEVELS};
 use crate::assets::tilemap::TILE_FLAGS;
 use pico8::backend::{self, Cart};
-use pico8::debug;
 use pico8::fixed::{fx, Fix32};
-use pico8::rng;
-use pico8::sfx;
 use pico8::util::{approach, clamp, sign};
+use pico8::{debug, rng, sfx};
 
 #[inline]
 fn fi(n: i32) -> Fix32 {
@@ -95,7 +93,8 @@ pub fn observe() {
         s.input_latches = JOURNEY_INPUT_LATCHES;
         s.input_mask = JOURNEY_INPUT_MASK;
         s.segment = LVL_INDEX;
-        s.player_present = (PLAYER < MAX_OBJ && OBJ[PLAYER].exists && !OBJ[PLAYER].destroyed) as i32;
+        s.player_present =
+            (PLAYER < MAX_OBJ && OBJ[PLAYER].exists && !OBJ[PLAYER].destroyed) as i32;
         s.player_state = -1;
         if s.player_present != 0 {
             let p = OBJ[PLAYER];
@@ -1005,7 +1004,10 @@ struct GrappleCandidates {
 impl GrappleCandidates {
     fn new() -> Self {
         const _: () = assert!(MAX_OBJ <= 256);
-        Self { slots: [0; MAX_OBJ], count: MAX_OBJ + 1 }
+        Self {
+            slots: [0; MAX_OBJ],
+            count: MAX_OBJ + 1,
+        }
     }
     unsafe fn indices(&mut self) -> &[u8] {
         if self.count > MAX_OBJ {
@@ -1259,12 +1261,23 @@ unsafe fn player_update(i: usize) {
             let dir = fi(OBJ[i].grapple_dir);
             let mut candidates = GrappleCandidates::new();
             for _ in 0..amount {
-                let mut hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y, &mut candidates);
+                let mut hit =
+                    grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y, &mut candidates);
                 if hit == 0 {
-                    hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y - fi(1), &mut candidates);
+                    hit = grapple_check(
+                        i,
+                        OBJ[i].grapple_x + dir,
+                        OBJ[i].grapple_y - fi(1),
+                        &mut candidates,
+                    );
                 }
                 if hit == 0 {
-                    hit = grapple_check(i, OBJ[i].grapple_x + dir, OBJ[i].grapple_y + fi(1), &mut candidates);
+                    hit = grapple_check(
+                        i,
+                        OBJ[i].grapple_x + dir,
+                        OBJ[i].grapple_y + fi(1),
+                        &mut candidates,
+                    );
                 }
                 let mode = if OBJ[i].grapple_hit != NONE {
                     OBJ[OBJ[i].grapple_hit].grapple_mode

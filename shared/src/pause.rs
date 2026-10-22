@@ -15,9 +15,9 @@
 //! 4 confirm (X), 5 start, 6 back (Circle), 7 select. [`mask`] builds it from the
 //! pad.
 
-use crate::backend;
-use crate::sfx;
-use psx_font::{fonts::BASIC, FontAtlas};
+use crate::{backend, sfx};
+use psx_font::fonts::BASIC;
+use psx_font::FontAtlas;
 use psx_pad::{button, ButtonState};
 use psx_vram::{Clut, TexDepth, Tpage};
 
@@ -104,7 +104,7 @@ impl Pause {
         crate::icons::upload();
         Pause {
             sel: ROW_SFX,
-            prev: 0xFF,
+            prev: 0xff,
             blip,
             fly,
             changed: false,

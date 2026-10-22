@@ -9,4 +9,3 @@ unsafe fn destroy_object(o: *mut Obj) {
     }
     (*base.add(MAX_OBJECTS - 1)).active = false;
 }
-

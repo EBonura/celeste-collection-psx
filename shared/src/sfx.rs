@@ -55,7 +55,7 @@ const LEAD_BLOCKS: u32 = 40;
 const MARK_AHEAD: u32 = 16;
 /// Most blocks rendered in one update (bounds the CPU spike after a stall).
 const MAX_BLOCKS_PER_UPDATE: u32 = 64;
-const SPU_IRQ_ADDR: u32 = 0x1F80_1DA4;
+const SPU_IRQ_ADDR: u32 = 0x1f80_1da4;
 const SPUCNT_IRQ_ENABLE: u16 = 1 << 6;
 const SPUSTAT_IRQ_FLAG: u16 = 1 << 6;
 
@@ -140,7 +140,7 @@ unsafe fn render_one() {
 /// console (after the synth's mix accumulator), a static on the host.
 #[cfg(target_arch = "mips")]
 unsafe fn pcm_buf() -> &'static mut [i16; BLOCK_SAMPLES] {
-    &mut *(0x1F80_0080 as *mut [i16; BLOCK_SAMPLES])
+    &mut *(0x1f80_0080 as *mut [i16; BLOCK_SAMPLES])
 }
 #[cfg(not(target_arch = "mips"))]
 unsafe fn pcm_buf() -> &'static mut [i16; BLOCK_SAMPLES] {
@@ -209,7 +209,7 @@ unsafe fn start_stream() {
     v.set_volume(Volume::MAX, Volume::MAX);
     v.set_pitch(Pitch::for_sample_rate(SAMPLE_RATE));
     v.set_adsr(Adsr {
-        lower: 0x000F, // instant attack, full sustain
+        lower: 0x000f, // instant attack, full sustain
         upper: 0x0000,
     });
     v.set_start_addr(SpuAddr::new(RING_BASE));

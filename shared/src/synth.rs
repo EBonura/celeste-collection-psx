@@ -198,8 +198,8 @@ const CH0: Channel = Channel {
     can_loop: true,
     is_music: false,
     sfx_music: -1,
-    last_instr: 0xFF,
-    last_key: 0xFF,
+    last_instr: 0xff,
+    last_key: 0xff,
     last_effect: 0,
     last: SYNTH0,
     fade: 0,
@@ -243,10 +243,10 @@ const STATE0: State = State {
 #[cfg(target_arch = "mips")]
 unsafe fn state() -> &'static mut State {
     const _: () = assert!(
-        0xC0 + core::mem::size_of::<State>() <= 1024,
+        0xc0 + core::mem::size_of::<State>() <= 1024,
         "synth state overflows the scratchpad"
     );
-    &mut *(0x1F80_00C0 as *mut State)
+    &mut *(0x1f80_00c0 as *mut State)
 }
 #[cfg(not(target_arch = "mips"))]
 unsafe fn state() -> &'static mut State {
@@ -274,7 +274,7 @@ static mut MUSIC_GAIN: i32 = 8;
 static mut SFX_GAIN: i32 = 8;
 /// Test harness: bit c silences music on channel c.
 static mut MUSIC_MUTE: u8 = 0;
-static mut RNG: u32 = 0x9E37_79B9;
+static mut RNG: u32 = 0x9e37_79b9;
 
 static mut ENC_S1: i32 = 0;
 static mut ENC_FILTER: usize = 0; // last predictor picked by the search
@@ -292,7 +292,7 @@ unsafe fn note(sfx: usize, n: usize) -> u16 {
 }
 #[inline]
 fn note_key(w: u16) -> u8 {
-    (w & 0x3F) as u8
+    (w & 0x3f) as u8
 }
 #[inline]
 fn note_instr(w: u16) -> u8 {
@@ -333,10 +333,10 @@ fn mix_q16(a: i32, b: i32, t: i32) -> i32 {
 /// wider than 32 bits.
 fn mul_shr32(a: i32, b: i32) -> i32 {
     let (x, y) = (a.unsigned_abs(), b.unsigned_abs());
-    let (x0, x1, y0, y1) = (x & 0xFFFF, x >> 16, y & 0xFFFF, y >> 16);
+    let (x0, x1, y0, y1) = (x & 0xffff, x >> 16, y & 0xffff, y >> 16);
     let (p00, p01, p10, p11) = (x0 * y0, x0 * y1, x1 * y0, x1 * y1);
-    let mid = (p00 >> 16) + (p01 & 0xFFFF) + (p10 & 0xFFFF);
-    let lo = (p00 & 0xFFFF) | (mid << 16);
+    let mid = (p00 >> 16) + (p01 & 0xffff) + (p10 & 0xffff);
+    let lo = (p00 & 0xffff) | (mid << 16);
     let hi = p11 + (p01 >> 16) + (p10 >> 16) + (mid >> 16);
     if (a < 0) != (b < 0) {
         // Negate the two-word magnitude; the high word of the negation floors.
@@ -419,7 +419,7 @@ unsafe fn update_sfx(
                 FX_VIBRATO => {
                     // 7.5 Hz, half a semitone: t = |frac(7.5 * offset / ops) - 0.5| - 0.25
                     let v = vibrato_clock(offset, speed);
-                    let t = ((v & 0xFFFF) as i32 - 32768).abs() - 16384;
+                    let t = ((v & 0xffff) as i32 - 32768).abs() - 16384;
                     freq += mul_shr32(freq, SEMITONE_Q16 * t);
                 }
                 FX_DROP => freq -= mul_shr_i32(freq, frac, 16),
@@ -486,7 +486,7 @@ unsafe fn pattern_duration(pattern: usize) -> i32 {
         if b & 0x40 != 0 {
             continue;
         }
-        let n = (b & 0x3F) as usize;
+        let n = (b & 0x3f) as usize;
         let (ls, le) = sfx_loop(n);
         let speed = AUDIO.sfx[n][65] as i32;
         if le > 0 && le > ls {
@@ -515,8 +515,8 @@ unsafe fn launch_sfx(sfx: i32, chan: usize, offset: Clock, length: u32, is_music
     ch.length = length;
     ch.can_loop = true;
     ch.is_music = is_music;
-    ch.last_instr = 0xFF;
-    ch.last_key = 0xFF;
+    ch.last_instr = 0xff;
+    ch.last_key = 0xff;
     // C2 is the "previous key" a fresh slide starts from (no audible glide).
     ch.main.prev_key = 24;
     ch.main.prev_vol = 0;
@@ -552,7 +552,7 @@ unsafe fn set_music_pattern(pattern: i32) {
         if b & 0x40 != 0 {
             continue;
         }
-        let n = (b & 0x3F) as i32;
+        let n = (b & 0x3f) as i32;
         if CHANNELS()[c].main.sfx == -1 {
             launch_sfx(n, c, Clock::ZERO, 0, true);
         } else {
@@ -1100,10 +1100,10 @@ fn quantize(
             r
         })
         .clamp(-8, 7);
-        let dec = (((q << 12) >> shift) + pred).clamp(-0x8000, 0x7FFF);
+        let dec = (((q << 12) >> shift) + pred).clamp(-0x8000, 0x7fff);
         p2 = p1;
         p1 = dec;
-        let n = (q & 0xF) as u8;
+        let n = (q & 0xf) as u8;
         if i & 1 == 0 {
             out[2 + i / 2] = n;
         } else {
@@ -1163,7 +1163,7 @@ pub fn load(audio: AudioData) {
 /// would stall every one of the ~450 accesses a block makes.
 #[cfg(target_arch = "mips")]
 unsafe fn mix_buf() -> &'static mut [i32; BLOCK_SAMPLES] {
-    &mut *(0x1F80_0000 as *mut [i32; BLOCK_SAMPLES])
+    &mut *(0x1f80_0000 as *mut [i32; BLOCK_SAMPLES])
 }
 #[cfg(not(target_arch = "mips"))]
 unsafe fn mix_buf() -> &'static mut [i32; BLOCK_SAMPLES] {
@@ -1300,7 +1300,7 @@ pub fn music(pattern: i32, fade_len: i32, mask: i32) {
             }
             return;
         }
-        MUSIC().mask = (mask & 0xF) as u8;
+        MUSIC().mask = (mask & 0xf) as u8;
         MUSIC().fade_vol = 65536;
         MUSIC().fade_step = 0;
         if fade_len > 0 {
@@ -1407,7 +1407,7 @@ mod tests {
         };
         for speed in 1..=255 {
             for rows in [0, 1, 15, 31] {
-                for frac in [0, 1, 0xFFFF, 0x1_0000, 0x8000_0000, u32::MAX] {
+                for frac in [0, 1, 0xffff, 0x1_0000, 0x8000_0000, u32::MAX] {
                     let c = Clock { rows, frac };
                     assert_eq!(
                         vibrato_clock(c, speed),
@@ -1486,7 +1486,7 @@ mod tests {
             let b = blk[2 + i / 2] as i32;
             let n = if i & 1 == 0 { b & 15 } else { b >> 4 };
             let raw = (((n << 28) >> 28) << 12) >> shift;
-            let v = (raw + ((s.0 * k0) >> 6) + ((s.1 * k1) >> 6)).clamp(-0x8000, 0x7FFF);
+            let v = (raw + ((s.0 * k0) >> 6) + ((s.1 * k1) >> 6)).clamp(-0x8000, 0x7fff);
             s.1 = s.0;
             s.0 = v;
             out[i] = v as i16;

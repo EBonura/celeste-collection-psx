@@ -24,7 +24,7 @@ impl PlayHead {
     pub fn advance(&mut self, frames: u32) {
         let frac = self.frac + BLOCKS_PER_FRAME_Q16 * frames;
         self.blocks = self.blocks.wrapping_add(frac >> 16);
-        self.frac = frac & 0xFFFF;
+        self.frac = frac & 0xffff;
     }
 
     /// Whole blocks played (`head >> 16`).

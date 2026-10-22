@@ -7,11 +7,8 @@
 #![allow(clippy::needless_return)]
 
 use core::ptr::addr_of_mut;
-use pico8::backend;
-use pico8::debug;
 use pico8::fixed::{fx, Fix32};
-use pico8::rng;
-use pico8::sfx;
+use pico8::{backend, debug, rng, sfx};
 
 const MAX_OBJECTS: usize = 30;
 const FRUIT_COUNT: usize = 30;

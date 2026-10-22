@@ -199,3 +199,9 @@ celeste2-disc: celeste2
 		--out $(DIST)/celeste2.bin \
 		--volume PICO8PSX
 	@echo "DISC -> $(DIST)/celeste2.cue"
+
+.PHONY: fmt fmt-check
+fmt:
+	tools/style-fmt.sh
+fmt-check:
+	tools/style-fmt.sh --check

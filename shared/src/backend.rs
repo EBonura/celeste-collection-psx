@@ -19,9 +19,9 @@ use psx_display::Brightness;
 use psx_gpu::display::Resolution;
 use psx_gpu::{self as gpu};
 use psx_hw::gpu::{pack_color, pack_texcoord, pack_vertex, pack_xy};
-use psx_io::gpu::{wait_cmd_ready, write_gp0};
+use psx_io::gpu::{wait_command_ready, write_command};
 use psx_io::periph::GpuDma;
-use psx_vram::{upload_16bpp, Clut, TexDepth, Tpage, VramRect};
+use psx_vram::{upload_16bpp, Clut, TextureDepth, TexturePage, VramRect};
 
 /// A game's PICO-8 graphics data: the doubled 256x256 4bpp spritesheet and the
 /// tilemap (cells + per-sprite flags). Registered once via [`set_cart`]; the
@@ -46,13 +46,13 @@ const EMPTY_CART: Cart = Cart {
 };
 
 // ---- VRAM layout (off-screen, right of the framebuffers) ----
-const GFX_TPAGE: Tpage = Tpage::new(640, 0, TexDepth::Bit4); // 256x256 4bpp -> 64 halfwords wide
-const FONT_TPAGE: Tpage = Tpage::new(704, 0, TexDepth::Bit4); // 256x170 4bpp
-                                                              // Two ping-pong slots for the sprite palette. The PS1 GPU caches the CLUT and
-                                                              // reloads it only when the clut *word* changes -- NOT when its VRAM is
-                                                              // overwritten -- so a pal() recolour must land in the OTHER slot to force a
-                                                              // reload, else the sprite keeps the stale palette on hardware (Madeline's hair
-                                                              // stuck red). Both 16 entries, side by side on the free row below the framebuffers.
+const GFX_TPAGE: TexturePage = TexturePage::new(640, 0, TextureDepth::Bit4); // 256x256 4bpp -> 64 halfwords wide
+const FONT_TPAGE: TexturePage = TexturePage::new(704, 0, TextureDepth::Bit4); // 256x170 4bpp
+                                                                              // Two ping-pong slots for the sprite palette. The PS1 GPU caches the CLUT and
+                                                                              // reloads it only when the clut *word* changes -- NOT when its VRAM is
+                                                                              // overwritten -- so a pal() recolour must land in the OTHER slot to force a
+                                                                              // reload, else the sprite keeps the stale palette on hardware (Madeline's hair
+                                                                              // stuck red). Both 16 entries, side by side on the free row below the framebuffers.
 const SPRITE_CLUT_A: Clut = Clut::new(0, 480);
 const SPRITE_CLUT_B: Clut = Clut::new(16, 480);
 /// Second sprite palette for `map()`: tiles carrying MAP_ALT_FLAG draw through
@@ -62,11 +62,11 @@ const MAP_ALT_CLUT: Clut = Clut::new(32, 480);
 // strings leaves a cached palette active on the CPU rasterizer and PS1 GPU.
 // All sixteen slots fit in the reserved palette row, x 0 through 255.
 const TEXT_CLUT: Clut = Clut::new(0, 481);
-const FILLP_TPAGE: Tpage = Tpage::new(768, 0, TexDepth::Bit4); // 8x8 dither patterns side-by-side
-                                                               // Two fillp CLUT slots (entry 0 = transparent, 1 = the fill colour), ping-ponged
-                                                               // on every colour change: the GPU caches a CLUT by its clut word, so rewriting
-                                                               // one slot in place mid-frame (fog in white, then columns in dark blue) left the
-                                                               // columns drawn in the fog's white.
+const FILLP_TPAGE: TexturePage = TexturePage::new(768, 0, TextureDepth::Bit4); // 8x8 dither patterns side-by-side
+                                                                               // Two fillp CLUT slots (entry 0 = transparent, 1 = the fill colour), ping-ponged
+                                                                               // on every colour change: the GPU caches a CLUT by its clut word, so rewriting
+                                                                               // one slot in place mid-frame (fog in white, then columns in dark blue) left the
+                                                                               // columns drawn in the fog's white.
 const FILL_CLUT_A: Clut = Clut::new(0, 482);
 const FILL_CLUT_B: Clut = Clut::new(16, 482);
 
@@ -194,9 +194,9 @@ fn emit<const N: usize>(words: [u32; N]) {
         if DEFERRED {
             stream().push_packet(words);
         } else {
-            wait_cmd_ready();
+            wait_command_ready();
             for word in words {
-                write_gp0(word);
+                write_command(word);
             }
         }
     }
@@ -268,7 +268,7 @@ pub fn draw_sync() {
 /// The GP0(E1h) draw-mode word for a texture page (what
 /// `Tpage::apply_as_draw_mode` writes).
 #[inline]
-fn draw_mode_word(tpage: Tpage) -> u32 {
+fn draw_mode_word(tpage: TexturePage) -> u32 {
     0xe100_0000
         | (tpage.x() as u32 / 64)
         | (if tpage.y() == 256 { 1 } else { 0 }) << 4
@@ -380,7 +380,7 @@ fn draw_cell(
     u0: u8,
     v0: u8,
     clut_word: u16,
-    tpage: Tpage,
+    tpage: TexturePage,
     flip_x: bool,
     flip_y: bool,
 ) {
@@ -403,7 +403,7 @@ fn draw_cell(
     let v_hi = (v0 as u16 + 16).min(255) as u8;
     let (ul, ur) = if flip_x { (u_hi, u0) } else { (u0, u_hi) };
     let (vt, vb) = if flip_y { (v_hi, v0) } else { (v0, v_hi) };
-    let tp = tpage.uv_tpage_word(0);
+    let tp = tpage.uv_word(0);
     emit([
         0x2c00_0000 | pack_color(0x80, 0x80, 0x80),
         pack_vertex(x, y),
@@ -430,7 +430,7 @@ pub fn spr(n: i32, x: i16, y: i16, flip_x: bool, flip_y: bool) {
         sy(y),
         u0,
         v0,
-        sprite_clut().uv_clut_word(),
+        sprite_clut().uv_word(),
         GFX_TPAGE,
         flip_x,
         flip_y,
@@ -466,8 +466,8 @@ pub fn fget(t: i32, f: i32) -> bool {
 /// `mask-1`. PICO-8 `map()` never draws sprite 0 (treated as empty).
 pub fn map(mx: i32, my: i32, tx: i16, ty: i16, mw: i32, mh: i32, mask: i32) {
     begin_sprite_pass();
-    let clut_word = sprite_clut().uv_clut_word();
-    let alt_word = MAP_ALT_CLUT.uv_clut_word();
+    let clut_word = sprite_clut().uv_word();
+    let alt_word = MAP_ALT_CLUT.uv_word();
     let alt_flag = unsafe { MAP_ALT_FLAG };
     let cart = unsafe { CART };
     for j in 0..mh {
@@ -653,7 +653,7 @@ unsafe fn fillp_prim(x: i16, y: i16, w: u16, h: u16, u: u8, v: u8) {
     emit([
         0x6400_0000 | pack_color(0x80, 0x80, 0x80),
         pack_vertex(x, y),
-        pack_texcoord(u, v, fill_clut().uv_clut_word()),
+        pack_texcoord(u, v, fill_clut().uv_word()),
         pack_xy(w, h),
     ]);
 }
@@ -715,7 +715,7 @@ pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize
             clip.2.min(cam_x + 128),
             clip.3.min(cam_y + 128),
         );
-        let tex = pack_texcoord(0, 0, fill_clut().uv_clut_word()) & 0xffff_0000;
+        let tex = pack_texcoord(0, 0, fill_clut().uv_word()) & 0xffff_0000;
         disc_fill(
             cx,
             cy,
@@ -1051,13 +1051,13 @@ unsafe fn disc_fill_immediate(
             }
             let y = (t * scale + sy_off) as i16;
             let h = ((b - t) * scale) as u16;
-            wait_cmd_ready();
-            write_gp0(cmd);
-            write_gp0(pack_vertex(x, y));
+            wait_command_ready();
+            write_command(cmd);
+            write_command(pack_vertex(x, y));
             if let Some(t) = tex {
-                write_gp0(uv_word(t, x, y));
+                write_command(uv_word(t, x, y));
             }
-            write_gp0(pack_xy(w, h));
+            write_command(pack_xy(w, h));
         }
     }
 }
@@ -1261,7 +1261,7 @@ pub fn print(s: &[u8], x: i16, y: i16, c: i32) {
         VramRect::new(clut.x(), clut.y(), 16, 1),
         &TEXT_CLUTS[clut_idx & 15],
     );
-    let clut_word = clut.uv_clut_word();
+    let clut_word = clut.uv_word();
     emit([draw_mode_word(FONT_TPAGE)]);
 
     let mut cx = x;

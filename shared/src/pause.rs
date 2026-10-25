@@ -19,7 +19,7 @@ use crate::{backend, sfx};
 use psx_font::fonts::BASIC;
 use psx_font::FontAtlas;
 use psx_pad::{button, ButtonState};
-use psx_vram::{Clut, TexDepth, Tpage};
+use psx_vram::{Clut, TextureDepth, TexturePage};
 
 pub const UP: u8 = 1 << 0;
 pub const DOWN: u8 = 1 << 1;
@@ -57,7 +57,7 @@ const ROW_FLY: u8 = 2; // debug fly toggle; present only when `fly` is set
 
 // PSX font VRAM (x320, clear of the framebuffers and the games' own tpages;
 // re-uploaded each pause-open since the game owns VRAM while it runs).
-const FONT_TPAGE: Tpage = Tpage::new(320, 0, TexDepth::Bit4);
+const FONT_TPAGE: TexturePage = TexturePage::new(320, 0, TextureDepth::Bit4);
 const FONT_CLUT: Clut = Clut::new(320, 256);
 
 // psx-font tints (0x80 = full brightness; the glyphs are white, modulated by this).

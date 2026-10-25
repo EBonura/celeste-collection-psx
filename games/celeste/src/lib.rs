@@ -22,8 +22,9 @@ use assets::tilemap::{MAP_W, TILEMAP_DATA, TILE_FLAGS};
 use pico8::backend::{self, Cart};
 use pico8::pause::{self, Exit, Pause};
 use pico8::sfx::{self, AudioData};
+use psx_gpu as gpu;
+use psx_gpu::display::{Resolution, VideoMode};
 use psx_gpu::framebuf::FrameBuffer;
-use psx_gpu::{self as gpu, Resolution, VideoMode};
 use psx_pad::button;
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) from when
 // it's called instead of syncing to the display, which left only ~1.3ms of

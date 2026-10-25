@@ -40,13 +40,14 @@ use assets::palette::PICO8_CLUT;
 use pico8::{backend, debug, icons, menusfx, sfx};
 use psx_font::fonts::BASIC;
 use psx_font::FontAtlas;
+use psx_gpu as gpu;
+use psx_gpu::display::{Resolution, VideoMode};
 use psx_gpu::framebuf::FrameBuffer;
-use psx_gpu::{self as gpu, Resolution, VideoMode};
 use psx_pad::{button, ButtonState};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display; the VBlank IRQ counter waits for the real blank.
 use pico8::sfx::wait_vblank; // renders audio ahead while it waits
-use psx_vram::{upload_16bpp, Clut, TexDepth, Tpage, VramRect};
+use psx_vram::{upload_16bpp, Clut, TextureDepth, TexturePage, VramRect};
 
 // Menu SFX are dedicated CC0 one-shot samples (see pico8::menusfx), NOT in-game
 // sounds: SFX_NAV (cursor), SFX_CONFIRM (launch), SFX_TRANSITION (intro -> menu).
@@ -62,10 +63,10 @@ use psx_vram::{upload_16bpp, Clut, TexDepth, Tpage, VramRect};
 // past that reserved strip, at 768 / 832. Tpage X must be a multiple of
 // 64; Y is 0. (Games re-upload their own VRAM, so sharing these columns
 // with the in-game tpages is fine -- only one runs at a time.)
-const FONT_TPAGE: Tpage = Tpage::new(320, 0, TexDepth::Bit4); // reserves x 320..576
-const COVER1_TPAGE: Tpage = Tpage::new(768, 0, TexDepth::Bit4); // celeste, x 768..800
-const COVER2_TPAGE: Tpage = Tpage::new(832, 0, TexDepth::Bit4); // celeste2, x 832..864
-const BONNIE_TPAGE: Tpage = Tpage::new(896, 0, TexDepth::Bit4); // intro logo, x 896..928
+const FONT_TPAGE: TexturePage = TexturePage::new(320, 0, TextureDepth::Bit4); // reserves x 320..576
+const COVER1_TPAGE: TexturePage = TexturePage::new(768, 0, TextureDepth::Bit4); // celeste, x 768..800
+const COVER2_TPAGE: TexturePage = TexturePage::new(832, 0, TextureDepth::Bit4); // celeste2, x 832..864
+const BONNIE_TPAGE: TexturePage = TexturePage::new(896, 0, TextureDepth::Bit4); // intro logo, x 896..928
 const FONT_CLUT: Clut = Clut::new(320, 256); // psx-font's 2-entry CLUT
 const COVER_CLUT: Clut = Clut::new(768, 256); // 16 entries, opaque-black variant
 
@@ -746,7 +747,7 @@ fn upload_menu_vram() -> FontAtlas {
 }
 
 /// Blit a 128x128 cover, scaled to COVER_W x COVER_H, at screen (x, y).
-fn draw_cover(tpage: Tpage, x: i16, y: i16, tint: (u8, u8, u8)) {
+fn draw_cover(tpage: TexturePage, x: i16, y: i16, tint: (u8, u8, u8)) {
     let verts = [
         (x, y),
         (x + COVER_W, y),
@@ -759,13 +760,7 @@ fn draw_cover(tpage: Tpage, x: i16, y: i16, tint: (u8, u8, u8)) {
         (0, COVER_SRC),
         (COVER_SRC, COVER_SRC),
     ];
-    gpu::draw_quad_textured(
-        verts,
-        uvs,
-        COVER_CLUT.uv_clut_word(),
-        tpage.uv_tpage_word(0),
-        tint,
-    );
+    gpu::draw_quad_textured(verts, uvs, COVER_CLUT.uv_word(), tpage.uv_word(0), tint);
 }
 
 /// Half the pixel width of `s` in the BASIC font, for horizontal centring.

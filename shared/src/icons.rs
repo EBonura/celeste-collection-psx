@@ -9,12 +9,12 @@
 //! (the running game owns VRAM), exactly like the fonts.
 
 use psx_gpu::{self as gpu};
-use psx_vram::{upload_16bpp, TexDepth, Tpage, VramRect};
+use psx_vram::{upload_16bpp, TextureDepth, TexturePage, VramRect};
 
 pub use crate::icons_data::{Cell, CIRCLE, CROSS, SELECT, START, TRIANGLE};
 use crate::icons_data::{ATLAS, ATLAS_H, ATLAS_W};
 
-const ICON_TPAGE: Tpage = Tpage::new(576, 0, TexDepth::Bit15);
+const ICON_TPAGE: TexturePage = TexturePage::new(576, 0, TextureDepth::Bit15);
 
 /// Upload the icon atlas to VRAM (call once per menu/pause open).
 pub fn upload() {
@@ -35,13 +35,7 @@ pub fn draw(cell: &Cell, x: i16, y: i16) -> i16 {
     ];
     let uvs = [(u, v), (u + w, v), (u, v + h), (u + w, v + h)];
     // 15bpp: clut word ignored; texel 0x0000 is transparent.
-    gpu::draw_quad_textured(
-        verts,
-        uvs,
-        0,
-        ICON_TPAGE.uv_tpage_word(0),
-        (0x80, 0x80, 0x80),
-    );
+    gpu::draw_quad_textured(verts, uvs, 0, ICON_TPAGE.uv_word(0), (0x80, 0x80, 0x80));
     w as i16
 }
 

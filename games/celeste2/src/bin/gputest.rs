@@ -11,8 +11,9 @@
 extern crate psx_rt;
 
 use pico8::{backend, sfx};
+use psx_gpu as gpu;
+use psx_gpu::display::{Resolution, VideoMode};
 use psx_gpu::framebuf::FrameBuffer;
-use psx_gpu::{self as gpu, Resolution, VideoMode};
 use psx_rt::interrupts::wait_vblank;
 
 #[no_mangle]

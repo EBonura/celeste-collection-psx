@@ -214,7 +214,7 @@ unsafe fn start_stream() {
     });
     v.set_start_addr(SpuAddr::new(RING_BASE));
     v.set_loop_addr(SpuAddr::new(RING_BASE));
-    Voice::key_on(1 << STREAM_VOICE);
+    Voice::start(1 << STREAM_VOICE);
     PLAY = PlayHead::ZERO;
     MARK = MARK_AHEAD;
     arm_mark();

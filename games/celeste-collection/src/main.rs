@@ -87,6 +87,8 @@ const SCREEN_CX: i16 = 160;
 #[no_mangle]
 fn main() {
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     // Apply saved settings (volumes, pixel scale, borders) from the memory
     // card, once, before anything renders. No card / no save = defaults.
     pico8::save::load();

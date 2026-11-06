@@ -62,6 +62,8 @@ pub fn run() {
     // Drive audio off real VBlanks so the music keeps tempo when rendering can't
     // hold 60fps (see celeste1).
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     let mut prev_start = true; // require a fresh press before the first pause
                                // Cart logic runs on the shared psx-tick clock, one update per VBlank. A
                                // frame that missed VBlanks catches up (up to four updates before it draws,
@@ -163,6 +165,8 @@ fn run_pause(fb: &mut FrameBuffer) -> bool {
 pub fn run_sfx_test(id: i32) {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     sfx::init(AUDIO);
     loop {
         sfx::play(id);
@@ -187,6 +191,8 @@ pub fn run_sfx_soundtest(frames: &[u16]) {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
     sfx::init(AUDIO);
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     let mut n: usize = 0;
     loop {
         sfx::play(-1);
@@ -216,6 +222,8 @@ pub fn run_music_test(pattern: i32) {
     // Advance one sequencer step per REAL vblank (60Hz) like the game -- gpu::vsync()
     // busy-waits 242 hblanks (~65fps), which played the music ~8% fast vs PICO-8.
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     sfx::music(pattern, 0, 0);
     loop {
         sfx::update();
@@ -231,6 +239,8 @@ pub fn run_music_iso(pattern: i32) {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
     sfx::init(AUDIO);
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     // mute masks: 0=full, then solo ch0/1/2/3 (mute the other three of the low 4).
     let masks = [0u8, 0x0e, 0x0d, 0x0b, 0x07];
     let mut i = 0;
@@ -269,6 +279,8 @@ pub fn run_scene(level: i32) {
     pico8::rng::srand(42);
     game::start_at_level(level);
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     loop {
         game::set_input(0);
         game::update();

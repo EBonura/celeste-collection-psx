@@ -23,6 +23,8 @@ fn main() {
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
     psx_rt::interrupts::install_vblank_counter();
+    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+    psx_rt::interrupts::set_min_flip_vblanks(1);
     backend::upload_assets(celeste2::CART);
     backend::set_side_preset(1); // Dusk gradient (the one missing on hardware)
 

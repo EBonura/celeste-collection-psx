@@ -67,7 +67,7 @@ jobs:
           retention-days: 30
 
       - name: Validate destination and optionally publish
-        uses: EBonura/PSoXide/.github/actions/itch-publish@3dc940c62fd012edd0862b19e9705b8cd789313b
+        uses: EBonura/PSoXide/.github/actions/itch-publish@31c3149b755790ad37fd4ead132c66cd2821c9f3
         with:
           source-dir: release
           target: bonnie-studios/celeste-classic-collection-psx:psx

@@ -20,7 +20,7 @@ DIST     := $(ROOT)/dist
 PSOXIDE_LIB     ?= $(HOME)/Downloads/ps1 games
 COLLECTION_NAME := Celeste Classic Collection
 
-.PHONY: help no64 psoxide psoxide-prime verify-components emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
+.PHONY: help no64 psoxide repro-rustc psoxide-prime verify-components emulator capture-tools nav-routes clean collection collection-disc collection-install collection-release celeste celeste-disc celeste2 celeste2-disc
 
 help:
 	@echo "pico8-psx targets:"
@@ -66,6 +66,13 @@ psoxide:
 			--git https://github.com/EBonura/PSoXide --rev $(COMPONENTS_REV) --root "$(COMPONENTS)" psoxide-link; \
 		"$(COMPONENTS)/bin/psoxide-components" --root "$(PSOXIDE)" --lock "$(ROOT)/components.lock.json"; \
 	fi
+
+# Guest builds run under the SDK's psoxide-rustc, so the checkout directory does not reach
+# the crate hashes: the same commit gives the same executables from any directory.
+REPRO_RUSTC := $(PSOXIDE)/target/release/psoxide-rustc
+REPRO := RUSTC_WRAPPER=$(REPRO_RUSTC) PSOXIDE_REPRO_ROOT=$(ROOT)
+repro-rustc: psoxide
+	cargo build -q --release --locked --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-pgo --bin psoxide-rustc
 
 # psoxide-components resolves a compound workspace's root Cargo.lock with
 # `cargo metadata --offline`, so every registry crate it needs must already be
@@ -127,9 +134,9 @@ COLLECTION_MAP ?= $(DIST)/celeste-collection.map
 no64:
 	sh tools/check-no64.sh
 
-collection: psoxide
+collection: repro-rustc
 	@mkdir -p $(DIST)
-	cd $(COLLECTION_DIR) && PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
+	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
 collection-disc: collection
@@ -172,8 +179,8 @@ nav-routes: collection-disc
 CELESTE_DIR := $(ROOT)/games/celeste
 CELESTE_EXE := $(CELESTE_DIR)/target/$(TARGET)/release/celeste.exe
 
-celeste: psoxide
-	cd $(CELESTE_DIR) && cargo build --release
+celeste: repro-rustc
+	cd $(CELESTE_DIR) && $(REPRO) cargo build --release
 	@echo "EXE  -> $(CELESTE_EXE)"
 
 celeste-disc: celeste
@@ -188,8 +195,8 @@ celeste-disc: celeste
 CELESTE2_DIR := $(ROOT)/games/celeste2
 CELESTE2_EXE := $(CELESTE2_DIR)/target/$(TARGET)/release/celeste2.exe
 
-celeste2: psoxide
-	cd $(CELESTE2_DIR) && cargo build --release
+celeste2: repro-rustc
+	cd $(CELESTE2_DIR) && $(REPRO) cargo build --release
 	@echo "EXE  -> $(CELESTE2_EXE)"
 
 celeste2-disc: celeste2

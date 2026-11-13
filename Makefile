@@ -54,12 +54,12 @@ help:
 #
 # PSOXIDE_FROM=/path/to/tree overrides the lock with a working tree, which is
 # how the demo disc puts every program it presses on one SDK.
-COMPONENTS_REV := 686303a7ab51b084af238efcc78557a82319027c
+COMPONENTS_REV := 3b7ef12561fb3e1472f4422b8893d000d2d807fa
 COMPONENTS     := $(ROOT)/target/psoxide-components/$(COMPONENTS_REV)
 PSOXIDE_FROM ?=
 psoxide:
 	@if [ -n "$(PSOXIDE_FROM)" ]; then \
-		cargo run -q --manifest-path $(PSOXIDE_FROM)/tools/psoxide-link/Cargo.toml -- \
+		cargo run -q --manifest-path $(PSOXIDE_FROM)/tools/psoxide-link/Cargo.toml --bin psoxide-link -- \
 			--from "$(PSOXIDE_FROM)" --into $(PSOXIDE); \
 	else \
 		[ -x "$(COMPONENTS)/bin/psoxide-components" ] || cargo install -q --locked \
@@ -94,6 +94,14 @@ psoxide-prime:
 		"https://raw.githubusercontent.com/$$(jq -r .components.editor.repository "$(ROOT)/components.lock.json")/$$(jq -r .components.editor.revision "$(ROOT)/components.lock.json")/Cargo.lock"
 	cd "$(PRIME)/tree" && cargo fetch
 	rm -rf "$(PRIME)"
+
+# The SDK's architecture gate (sdk/docs/GATE.md) over one program, before it compiles:
+# `make gate-celeste`, `gate-celeste2`, `gate-celeste-collection`. The exceptions it
+# tolerates are in psx-gate.toml, which also reaches the cargo build (games/*/.cargo/config.toml)
+# and the disc press (--gate-file).
+gate-%: psoxide
+	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
+		--sdk $(PSOXIDE) --crate games/$* -- build --release
 
 # Verify the imported tree against the lock without fetching (CI runs this).
 verify-components: psoxide
@@ -134,7 +142,7 @@ COLLECTION_MAP ?= $(DIST)/celeste-collection.map
 no64:
 	sh tools/check-no64.sh
 
-collection: repro-rustc
+collection: repro-rustc gate-celeste-collection
 	@mkdir -p $(DIST)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
 	@echo "EXE  -> $(COLLECTION_EXE)"
@@ -143,6 +151,7 @@ collection-disc: collection
 	@mkdir -p $(DIST)
 	cd $(MKISOPSX) && cargo run --release -- \
 		--exe $(COLLECTION_EXE) \
+		--gate-file $(ROOT)/psx-gate.toml \
 		--out $(DIST)/celeste-collection.bin \
 		--volume CELESTECOLL
 	@echo "DISC -> $(DIST)/celeste-collection.cue"
@@ -155,6 +164,7 @@ collection-install: collection
 	@mkdir -p "$(PSOXIDE_LIB)/$(COLLECTION_NAME)"
 	cd $(MKISOPSX) && cargo run --release -- \
 		--exe $(COLLECTION_EXE) \
+		--gate-file $(ROOT)/psx-gate.toml \
 		--out "$(PSOXIDE_LIB)/$(COLLECTION_NAME)/$(COLLECTION_NAME).bin" \
 		--volume CELESTECOLL
 	@echo "INSTALLED -> $(PSOXIDE_LIB)/$(COLLECTION_NAME)/$(COLLECTION_NAME).cue"
@@ -179,7 +189,7 @@ nav-routes: collection-disc
 CELESTE_DIR := $(ROOT)/games/celeste
 CELESTE_EXE := $(CELESTE_DIR)/target/$(TARGET)/release/celeste.exe
 
-celeste: repro-rustc
+celeste: repro-rustc gate-celeste
 	cd $(CELESTE_DIR) && $(REPRO) cargo build --release
 	@echo "EXE  -> $(CELESTE_EXE)"
 
@@ -187,6 +197,7 @@ celeste-disc: celeste
 	@mkdir -p $(DIST)
 	cd $(MKISOPSX) && cargo run --release -- \
 		--exe $(CELESTE_EXE) \
+		--gate-file $(ROOT)/psx-gate.toml \
 		--out $(DIST)/celeste.bin \
 		--volume PICO8PSX
 	@echo "DISC -> $(DIST)/celeste.cue"
@@ -195,7 +206,7 @@ celeste-disc: celeste
 CELESTE2_DIR := $(ROOT)/games/celeste2
 CELESTE2_EXE := $(CELESTE2_DIR)/target/$(TARGET)/release/celeste2.exe
 
-celeste2: repro-rustc
+celeste2: repro-rustc gate-celeste2
 	cd $(CELESTE2_DIR) && $(REPRO) cargo build --release
 	@echo "EXE  -> $(CELESTE2_EXE)"
 
@@ -203,6 +214,7 @@ celeste2-disc: celeste2
 	@mkdir -p $(DIST)
 	cd $(MKISOPSX) && cargo run --release -- \
 		--exe $(CELESTE2_EXE) \
+		--gate-file $(ROOT)/psx-gate.toml \
 		--out $(DIST)/celeste2.bin \
 		--volume PICO8PSX
 	@echo "DISC -> $(DIST)/celeste2.cue"

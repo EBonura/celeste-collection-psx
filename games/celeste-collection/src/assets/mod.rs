@@ -5,7 +5,6 @@
 //! 4bpp, PICO8_CLUT palette), extracted from the published cart PNGs by
 //! `tools/png_to_cover.py`.
 
-pub mod cover_bonnie;
 pub mod cover_celeste;
 pub mod cover_celeste2;
 pub mod palette;

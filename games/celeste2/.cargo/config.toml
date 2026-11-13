@@ -17,3 +17,6 @@ build-std-features = ["compiler-builtins-mem"]
 # LLVM's MIPS delay-slot filler hoists loads into branch delay slots without
 # re-checking the R3000 load-delay hazard; PSoXide's guest build carries the same flag.
 rustflags = ["-C", "llvm-args=-disable-mips-df-backward-search"]
+
+[env]
+PSX_GATE_FILE = { value = "../../psx-gate.toml", relative = true }

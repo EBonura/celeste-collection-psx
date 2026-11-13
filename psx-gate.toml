@@ -1,0 +1,46 @@
+# This program's exceptions to the SDK's architecture gate (`psx-gate`, the SDK's
+# sdk/docs/GATE.md). A ratchet: nothing is added, an entry that no longer matches the tree
+# fails (delete it), a count only goes down. `remove` is a short tag: a workstream (W3),
+# `unscheduled` or `decision`.
+
+# The three deprecated-use entries stay: moving the games to `Controllers` (nine-byte analog polls)
+# measured slower on this game's journeys (see the repin notes), so the legacy poll is kept.
+
+[[exception]]
+program = "celeste"
+kind = "deprecated-use"
+item = "shared/src/input.rs"
+count = 2
+remove = "W2"
+
+[[exception]]
+program = "celeste2"
+kind = "deprecated-use"
+item = "shared/src/input.rs"
+count = 2
+remove = "W2"
+
+[[exception]]
+program = "celeste-collection"
+kind = "deprecated-use"
+item = "shared/src/input.rs"
+count = 2
+remove = "W2"
+
+[[exception]]
+program = "celeste"
+kind = "no-receipt"
+item = "-"
+remove = "W9"
+
+[[exception]]
+program = "celeste2"
+kind = "no-receipt"
+item = "-"
+remove = "W9"
+
+[[exception]]
+program = "celeste-collection"
+kind = "no-receipt"
+item = "-"
+remove = "W9"

@@ -28,8 +28,10 @@ dependencies = [
  "pico8",
  "psx-font",
  "psx-gpu",
+ "psx-io",
  "psx-pad",
  "psx-rt",
+ "psx-splash",
  "psx-vram",
 ]
 
@@ -164,6 +166,18 @@ dependencies = [
  "psx-asset",
  "psx-math",
  "psx-spu",
+]
+
+[[package]]
+name = "psx-splash"
+version = "0.1.0"
+dependencies = [
+ "psx-display",
+ "psx-font",
+ "psx-gpu",
+ "psx-pad",
+ "psx-rt",
+ "psx-vram",
 ]
 
 [[package]]

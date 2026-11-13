@@ -55,7 +55,6 @@ const LEAD_BLOCKS: u32 = 40;
 const MARK_AHEAD: u32 = 16;
 /// Most blocks rendered in one update (bounds the CPU spike after a stall).
 const MAX_BLOCKS_PER_UPDATE: u32 = 64;
-const SPU_IRQ_ADDR: u32 = 0x1f80_1da4;
 const SPUCNT_IRQ_ENABLE: u16 = 1 << 6;
 const SPUSTAT_IRQ_FLAG: u16 = 1 << 6;
 
@@ -118,7 +117,7 @@ fn vblank_count() -> u32 {
 
 /// Arm the SPU IRQ latch on ring block `MARK` (and clear a stale latch).
 unsafe fn arm_mark() {
-    reg_write(SPU_IRQ_ADDR, (ring_addr(MARK) >> 3) as u16);
+    spu::set_irq_address(SpuAddr::new(ring_addr(MARK)));
     let cnt = reg_read(SPUCNT);
     reg_write(SPUCNT, cnt & !SPUCNT_IRQ_ENABLE); // clearing the enable acks the flag
     reg_write(SPUCNT, cnt | SPUCNT_IRQ_ENABLE);
@@ -140,7 +139,7 @@ unsafe fn render_one() {
 /// console (after the synth's mix accumulator), a static on the host.
 #[cfg(target_arch = "mips")]
 unsafe fn pcm_buf() -> &'static mut [i16; BLOCK_SAMPLES] {
-    &mut *(0x1f80_0080 as *mut [i16; BLOCK_SAMPLES])
+    &mut *((psx_rt::scratchpad::BASE + 0x80) as *mut [i16; BLOCK_SAMPLES])
 }
 #[cfg(not(target_arch = "mips"))]
 unsafe fn pcm_buf() -> &'static mut [i16; BLOCK_SAMPLES] {

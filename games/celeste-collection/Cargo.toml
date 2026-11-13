@@ -44,6 +44,8 @@ pico8 = { path = "../../shared" }
 # PSoXide SDK, pulled from the pinned submodule via path deps.
 psx-rt   = { path = "../../.psoxide/sdk/crates/psx-rt" }
 psx-gpu  = { path = "../../.psoxide/sdk/crates/psx-gpu" }
+psx-io   = { path = "../../.psoxide/sdk/crates/psx-io" }
+psx-splash = { path = "../../.psoxide/sdk/crates/psx-splash" }
 psx-vram = { path = "../../.psoxide/sdk/crates/psx-vram" }
 psx-pad  = { path = "../../.psoxide/sdk/crates/psx-pad" }
 psx-font = { path = "../../.psoxide/sdk/crates/psx-font" }

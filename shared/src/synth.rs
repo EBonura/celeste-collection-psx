@@ -246,7 +246,7 @@ unsafe fn state() -> &'static mut State {
         0xc0 + core::mem::size_of::<State>() <= 1024,
         "synth state overflows the scratchpad"
     );
-    &mut *(0x1f80_00c0 as *mut State)
+    &mut *((psx_rt::scratchpad::BASE + 0xc0) as *mut State)
 }
 #[cfg(not(target_arch = "mips"))]
 unsafe fn state() -> &'static mut State {
@@ -1163,7 +1163,7 @@ pub fn load(audio: AudioData) {
 /// would stall every one of the ~450 accesses a block makes.
 #[cfg(target_arch = "mips")]
 unsafe fn mix_buf() -> &'static mut [i32; BLOCK_SAMPLES] {
-    &mut *(0x1f80_0000 as *mut [i32; BLOCK_SAMPLES])
+    &mut *(psx_rt::scratchpad::BASE as *mut [i32; BLOCK_SAMPLES])
 }
 #[cfg(not(target_arch = "mips"))]
 unsafe fn mix_buf() -> &'static mut [i32; BLOCK_SAMPLES] {

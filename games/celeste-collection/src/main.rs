@@ -32,7 +32,6 @@ extern crate psx_rt;
 mod assets;
 mod atmos;
 
-use assets::cover_bonnie::COVER_BONNIE;
 use assets::cover_celeste::COVER_CELESTE;
 use assets::cover_celeste2::COVER_CELESTE2;
 use assets::palette::PICO8_CLUT;
@@ -41,7 +40,9 @@ use pico8::{backend, debug, icons, menusfx, sfx};
 use psx_font::fonts::BASIC;
 use psx_font::FontAtlas;
 use psx_gpu as gpu;
-use psx_gpu::display::{Resolution, VideoMode};
+use psx_gpu::display::{DisplayConfig, DoubleBuffer, Resolution, VideoMode};
+use psx_gpu::Gpu;
+use psx_io::periph::GpuDma;
 use psx_gpu::framebuf::FrameBuffer;
 use psx_pad::{button, ButtonState};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
@@ -66,7 +67,6 @@ use psx_vram::{upload_16bpp, Clut, TextureDepth, TexturePage, VramRect};
 const FONT_TPAGE: TexturePage = TexturePage::new(320, 0, TextureDepth::Bit4); // reserves x 320..576
 const COVER1_TPAGE: TexturePage = TexturePage::new(768, 0, TextureDepth::Bit4); // celeste, x 768..800
 const COVER2_TPAGE: TexturePage = TexturePage::new(832, 0, TextureDepth::Bit4); // celeste2, x 832..864
-const BONNIE_TPAGE: TexturePage = TexturePage::new(896, 0, TextureDepth::Bit4); // intro logo, x 896..928
 const FONT_CLUT: Clut = Clut::new(320, 256); // psx-font's 2-entry CLUT
 const COVER_CLUT: Clut = Clut::new(768, 256); // 16 entries, opaque-black variant
 
@@ -114,8 +114,6 @@ fn main() {
     }
 }
 
-/// Boot intro: fade the Bonnie Studios logo (with "Built with PSoXide") in, hold,
-/// fade out, then return to the menu. Any face button skips it.
 /// Buttons in `mask` that went down between `prev` and `now`. Each button is
 /// edge-detected on its own, so one held button never masks another's press.
 #[inline]
@@ -126,65 +124,23 @@ fn pressed(now: ButtonState, prev: ButtonState, mask: u16) -> bool {
 /// Cross, Circle or Start: what skips the intro and closes the credits.
 const ANY_FACE: u16 = button::CROSS | button::CIRCLE | button::START;
 
+/// Boot splash: the SDK's, with the studio mark above the line. Any face button skips it.
 fn show_intro() {
-    gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    let mut fb = FrameBuffer::new(320, 240);
-    gpu::set_draw_area(0, 0, 319, 239);
-    gpu::set_draw_offset(0, 0);
-
-    upload_16bpp(
-        VramRect::new(BONNIE_TPAGE.x(), BONNIE_TPAGE.y(), 32, 128),
-        &COVER_BONNIE,
+    // SAFETY: the one place the collection takes the GPU DMA token; nothing else holds it while
+    // the splash runs, and it is zero-sized. Later screens reset the GPU through `gpu::init`.
+    let mut gpu = Gpu::new(
+        unsafe { GpuDma::steal() },
+        DisplayConfig::new(VideoMode::Ntsc, Resolution::R320X240),
     );
-    upload_cover_clut();
-    let font = FontAtlas::upload(&BASIC, FONT_TPAGE, FONT_CLUT);
-
-    const FADE_IN: i32 = 32;
-    const HOLD: i32 = 74;
-    const TOTAL: i32 = 150;
-    const FADE_OUT: i32 = TOTAL - FADE_IN - HOLD;
-
-    let mut prev = pico8::input::poll_buttons();
-    let mut frame = 0i32;
-    while frame < TOTAL {
-        let b = pico8::input::poll_buttons();
-        if frame > 8 && pressed(b, prev, ANY_FACE) {
-            break; // fresh press skips
-        }
-        prev = b;
-
-        // brightness 0..0x80 over fade-in / hold / fade-out (0x80 == full / neutral
-        // texture modulation, so the logo art reads pure white at the peak).
-        let lvl = if frame < FADE_IN {
-            frame * 0x80 / FADE_IN
-        } else if frame < FADE_IN + HOLD {
-            0x80
-        } else {
-            (TOTAL - frame) * 0x80 / FADE_OUT
-        }
-        .clamp(0, 0x80) as u8;
-
-        fb.clear(0, 0, 0);
-        draw_cover(BONNIE_TPAGE, 112, 34, (lvl, lvl, lvl));
-        // "Built with PSoXide" -- cyan->blue gradient with a sweeping sheen, faded by `lvl`.
-        let tag = "Built with PSoXide";
-        draw_sheen(
-            &font,
-            SCREEN_CX - text_half(&font, tag),
-            150,
-            tag,
-            (0x68, 0x80, 0x80),
-            (0x38, 0x58, 0x80),
-            frame,
-            lvl as i32,
-        );
-
-        backend::brightness_overlay_faded(lvl);
-        gpu::draw_sync();
-        wait_vblank();
-        fb.swap();
-        frame += 1;
-    }
+    let mut buffers = DoubleBuffer::new(Resolution::R320X240);
+    buffers.apply_draw_target(&mut gpu);
+    psx_splash::show(
+        &mut gpu,
+        &mut buffers,
+        "Built with PSoXide",
+        backend::brightness(),
+        pico8::input::poll_buttons,
+    );
 }
 
 /// Scrolling credits screen (reached with Select from the menu). Default font,

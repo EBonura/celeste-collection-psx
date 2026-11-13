@@ -95,107 +95,127 @@ kind = "not_flat"
 
 
 [[step]]
-label = "controller route action 1"
+label = "room 0, first part: input mask 0x36 for updates 492 to 500 (game update clock)"
+sync = "poll"
 press = ["right", "up", "cross", "circle"]
-hold = 9
-
-
-[[step]]
-label = "controller route action 2"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 500 }
+timeout = 600
 
 [[step]]
-label = "controller route action 3"
+label = "room 0, first part: input mask 0x00 for updates 501 to 508 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 508 }
+timeout = 600
+
+[[step]]
+label = "room 0, first part: input mask 0x10 for updates 509 to 516 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 516 }
+timeout = 600
 
 [[step]]
-label = "controller route action 4"
+label = "room 0, first part: input mask 0x2a for updates 517 to 524 (game update clock)"
+sync = "poll"
 press = ["right", "down", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 524 }
+timeout = 600
 
 [[step]]
-label = "controller route action 5"
+label = "room 0, first part: input mask 0x10 for updates 525 to 532 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 6"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 532 }
+timeout = 600
 
 [[step]]
-label = "controller route action 7"
+label = "room 0, first part: input mask 0x00 for updates 533 to 540 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 540 }
+timeout = 600
+
+[[step]]
+label = "room 0, first part: input mask 0x30 for updates 541 to 548 (game update clock)"
+sync = "poll"
 press = ["cross", "circle"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 8"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 548 }
+timeout = 600
 
 [[step]]
-label = "controller route action 9"
+label = "room 0, first part: input mask 0x00 for updates 549 to 557 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 557 }
+timeout = 600
+
+[[step]]
+label = "room 0, first part: input mask 0x21 for updates 558 to 564 (game update clock)"
+sync = "poll"
 press = ["left", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 564 }
+timeout = 600
 
 [[step]]
-label = "controller route action 10"
+label = "room 0, first part: input mask 0x10 for updates 565 to 581 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 16
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 581 }
+timeout = 600
 
 [[step]]
-label = "controller route action 11"
+label = "room 0, first part: input mask 0x26 for updates 582 to 588 (game update clock)"
+sync = "poll"
 press = ["right", "up", "circle"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 12"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 588 }
+timeout = 600
 
 [[step]]
-label = "controller route action 13"
+label = "room 0, first part: input mask 0x00 for updates 589 to 595 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 595 }
+timeout = 600
+
+[[step]]
+label = "room 0, first part: input mask 0x22 for updates 596 to 604 (game update clock)"
+sync = "poll"
 press = ["right", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 604 }
+timeout = 600
 
 [[step]]
+sync = "poll"
 label = "settle on the upper ledge before the exit jump"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "ge", value = 1572864 }
 timeout = 60
 
 
 [[step]]
-wait = 2
-
+label = "room 0, exit: input mask 0x00 for updates 618 to 620 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 620 }
+timeout = 600
 
 [[step]]
-label = "controller route action 14"
+label = "room 0, exit: input mask 0x12 for updates 621 to 628 (game update clock)"
+sync = "poll"
 press = ["right", "cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 628 }
+timeout = 600
 
 [[step]]
-label = "controller route action 15"
+label = "room 0, exit: input mask 0x36 for updates 629 to 636 (game update clock)"
+sync = "poll"
 press = ["right", "up", "cross", "circle"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 16"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 636 }
+timeout = 600
 
 [[step]]
+label = "room 0, exit: input mask 0x00 for updates 637 to 644 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 644 }
+timeout = 600
+
+[[step]]
+sync = "poll"
 label = "wait for normal top edge exit"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 1 }
 timeout = 500
@@ -244,168 +264,198 @@ kind = "not_flat"
 
 
 [[step]]
+sync = "poll"
 label = "wait for room 1 normal player spawn"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
 timeout = 200
 
 
 [[step]]
+sync = "poll"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "eq", value = 7340032 }
 timeout = 200
 
 
 [[step]]
-wait = 40
-
+label = "room 1: input mask 0x00 for updates 684 to 724 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 724 }
+timeout = 600
 
 [[step]]
-label = "controller route action 17"
+label = "room 1: input mask 0x22 for updates 725 to 732 (game update clock)"
+sync = "poll"
 press = ["right", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 732 }
+timeout = 600
 
 [[step]]
-label = "controller route action 18"
+label = "room 1: input mask 0x10 for updates 733 to 740 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 19"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 740 }
+timeout = 600
 
 [[step]]
-label = "controller route action 20"
+label = "room 1: input mask 0x00 for updates 741 to 748 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 748 }
+timeout = 600
+
+[[step]]
+label = "room 1: input mask 0x10 for updates 749 to 756 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 756 }
+timeout = 600
 
 [[step]]
-label = "controller route action 21"
+label = "room 1: input mask 0x34 for updates 757 to 764 (game update clock)"
+sync = "poll"
 press = ["up", "cross", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 764 }
+timeout = 600
 
 [[step]]
-label = "controller route action 22"
+label = "room 1: input mask 0x01 for updates 765 to 772 (game update clock)"
+sync = "poll"
 press = ["left"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 772 }
+timeout = 600
 
 [[step]]
-label = "controller route action 23"
+label = "room 1: input mask 0x11 for updates 773 to 780 (game update clock)"
+sync = "poll"
 press = ["left", "cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 780 }
+timeout = 600
 
 [[step]]
-label = "controller route action 24"
+label = "room 1: input mask 0x32 for updates 781 to 788 (game update clock)"
+sync = "poll"
 press = ["right", "cross", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 788 }
+timeout = 600
 
 [[step]]
-label = "controller route action 25"
+label = "room 1: input mask 0x02 for updates 789 to 796 (game update clock)"
+sync = "poll"
 press = ["right"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 796 }
+timeout = 600
 
 [[step]]
-label = "controller route action 26"
+label = "room 1: input mask 0x12 for updates 797 to 804 (game update clock)"
+sync = "poll"
 press = ["right", "cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 804 }
+timeout = 600
 
 [[step]]
-label = "controller route action 27"
+label = "room 1: input mask 0x38 for updates 805 to 812 (game update clock)"
+sync = "poll"
 press = ["down", "cross", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 812 }
+timeout = 600
 
 [[step]]
-label = "controller route action 28"
+label = "room 1: input mask 0x21 for updates 813 to 828 (game update clock)"
+sync = "poll"
 press = ["left", "circle"]
-hold = 16
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 828 }
+timeout = 600
 
 [[step]]
-label = "controller route action 29"
+label = "room 1: input mask 0x30 for updates 829 to 836 (game update clock)"
+sync = "poll"
 press = ["cross", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 836 }
+timeout = 600
 
 [[step]]
-label = "controller route action 30"
+label = "room 1: input mask 0x10 for updates 837 to 844 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 844 }
+timeout = 600
 
 [[step]]
-label = "controller route action 31"
+label = "room 1: input mask 0x12 for updates 845 to 852 (game update clock)"
+sync = "poll"
 press = ["right", "cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 852 }
+timeout = 600
 
 [[step]]
-label = "controller route action 32"
+label = "room 1: input mask 0x02 for updates 853 to 860 (game update clock)"
+sync = "poll"
 press = ["right"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 860 }
+timeout = 600
 
 [[step]]
-label = "controller route action 33"
+label = "room 1: input mask 0x22 for updates 861 to 868 (game update clock)"
+sync = "poll"
 press = ["right", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 868 }
+timeout = 600
 
 [[step]]
-label = "controller route action 34"
+label = "room 1: input mask 0x10 for updates 869 to 876 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 876 }
+timeout = 600
 
 [[step]]
-label = "controller route action 35"
+label = "room 1: input mask 0x20 for updates 877 to 884 (game update clock)"
+sync = "poll"
 press = ["circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 884 }
+timeout = 600
 
 [[step]]
-label = "controller route action 36"
+label = "room 1: input mask 0x30 for updates 885 to 892 (game update clock)"
+sync = "poll"
 press = ["cross", "circle"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 37"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 892 }
+timeout = 600
 
 [[step]]
-label = "controller route action 38"
+label = "room 1: input mask 0x00 for updates 893 to 900 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 900 }
+timeout = 600
+
+[[step]]
+label = "room 1: input mask 0x10 for updates 901 to 908 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 908 }
+timeout = 600
 
 [[step]]
-label = "controller route action 39"
+label = "room 1: input mask 0x01 for updates 909 to 916 (game update clock)"
+sync = "poll"
 press = ["left"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 916 }
+timeout = 600
 
 [[step]]
-label = "controller route action 40"
+label = "room 1: input mask 0x10 for updates 917 to 924 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 41"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 924 }
+timeout = 600
 
 [[step]]
+label = "room 1: input mask 0x00 for updates 925 to 932 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 932 }
+timeout = 600
+
+[[step]]
+sync = "poll"
 label = "wait for normal room 1 top exit"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 2 }
 timeout = 400
@@ -453,153 +503,180 @@ kind = "not_flat"
 
 
 [[step]]
+sync = "poll"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
 timeout = 400
 
 
 [[step]]
+sync = "poll"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "eq", value = 6815744 }
 timeout = 400
 
 
 [[step]]
-label = "settle after the room 2 spawn"
-wait = 39
-
+label = "room 2: input mask 0x00 for updates 967 to 1006 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1006 }
+timeout = 600
 
 [[step]]
-label = "controller route action 42"
+label = "room 2: input mask 0x20 for updates 1007 to 1014 (game update clock)"
+sync = "poll"
 press = ["circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1014 }
+timeout = 600
 
 [[step]]
-label = "controller route action 43"
+label = "room 2: input mask 0x30 for updates 1015 to 1030 (game update clock)"
+sync = "poll"
 press = ["cross", "circle"]
-hold = 16
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1030 }
+timeout = 600
 
 [[step]]
-label = "controller route action 44"
+label = "room 2: input mask 0x10 for updates 1031 to 1038 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1038 }
+timeout = 600
 
 [[step]]
-label = "controller route action 45"
+label = "room 2: input mask 0x26 for updates 1039 to 1046 (game update clock)"
+sync = "poll"
 press = ["right", "up", "circle"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 46"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1046 }
+timeout = 600
 
 [[step]]
-label = "controller route action 47"
+label = "room 2: input mask 0x00 for updates 1047 to 1053 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1053 }
+timeout = 600
+
+[[step]]
+label = "room 2: input mask 0x20 for updates 1054 to 1062 (game update clock)"
+sync = "poll"
 press = ["circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1062 }
+timeout = 600
 
 [[step]]
-label = "controller route action 48"
+label = "room 2: input mask 0x32 for updates 1063 to 1070 (game update clock)"
+sync = "poll"
 press = ["right", "cross", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1070 }
+timeout = 600
 
 [[step]]
-label = "controller route action 49"
+label = "room 2: input mask 0x22 for updates 1071 to 1078 (game update clock)"
+sync = "poll"
 press = ["right", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1078 }
+timeout = 600
 
 [[step]]
-label = "controller route action 50"
+label = "room 2: input mask 0x02 for updates 1079 to 1086 (game update clock)"
+sync = "poll"
 press = ["right"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 51"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1086 }
+timeout = 600
 
 [[step]]
-label = "controller route action 52"
+label = "room 2: input mask 0x00 for updates 1087 to 1094 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1094 }
+timeout = 600
+
+[[step]]
+label = "room 2: input mask 0x34 for updates 1095 to 1102 (game update clock)"
+sync = "poll"
 press = ["up", "cross", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1102 }
+timeout = 600
 
 [[step]]
-label = "controller route action 53"
+label = "room 2: input mask 0x20 for updates 1103 to 1109 (game update clock)"
+sync = "poll"
 press = ["circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1109 }
+timeout = 600
 
 [[step]]
-label = "controller route action 54"
+label = "room 2: input mask 0x21 for updates 1110 to 1118 (game update clock)"
+sync = "poll"
 press = ["left", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1118 }
+timeout = 600
 
 [[step]]
-label = "controller route action 55"
+label = "room 2: input mask 0x01 for updates 1119 to 1126 (game update clock)"
+sync = "poll"
 press = ["left"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1126 }
+timeout = 600
 
 [[step]]
-label = "controller route action 56"
+label = "room 2: input mask 0x30 for updates 1127 to 1133 (game update clock)"
+sync = "poll"
 press = ["cross", "circle"]
-hold = 8
-
-
-[[step]]
-label = "release before the upper right wall jump"
-wait = 3
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1133 }
+timeout = 600
 
 [[step]]
-label = "controller route action 57"
+label = "room 2: input mask 0x00 for updates 1134 to 1137 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1137 }
+timeout = 600
+
+[[step]]
+label = "room 2: input mask 0x10 for updates 1138 to 1145 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 58"
-wait = 16
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1145 }
+timeout = 600
 
 [[step]]
-label = "controller route action 59"
+label = "room 2: input mask 0x00 for updates 1146 to 1161 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1161 }
+timeout = 600
+
+[[step]]
+label = "room 2: input mask 0x22 for updates 1162 to 1169 (game update clock)"
+sync = "poll"
 press = ["right", "circle"]
-hold = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1169 }
+timeout = 600
 
 [[step]]
-label = "controller route action 60"
+label = "room 2: input mask 0x10 for updates 1170 to 1177 (game update clock)"
+sync = "poll"
 press = ["cross"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 61"
-wait = 16
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1177 }
+timeout = 600
 
 [[step]]
-label = "controller route action 62"
+label = "room 2: input mask 0x00 for updates 1178 to 1193 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1193 }
+timeout = 600
+
+[[step]]
+label = "room 2: input mask 0x11 for updates 1194 to 1201 (game update clock)"
+sync = "poll"
 press = ["left", "cross"]
-hold = 8
-
-
-[[step]]
-label = "controller route action 63"
-wait = 8
-
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1201 }
+timeout = 600
 
 [[step]]
+label = "room 2: input mask 0x00 for updates 1202 to 1209 (game update clock)"
+sync = "poll"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 1209 }
+timeout = 600
+
+[[step]]
+sync = "poll"
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, op = "eq", value = 3 }
 timeout = 400
 

@@ -37,7 +37,10 @@ wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true
 timeout = 400
 
 [[step]]
-wait = 60
+sync = "poll"
+label = "room 0 entry settled: game update clock at 490"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 490 }
+timeout = 200
 
 [[step]]
 checkpoint = "room-0-entry"
@@ -174,7 +177,16 @@ wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true
 timeout = 500
 
 [[step]]
-wait = 20
+sync = "poll"
+label = "wait for the next room's player to appear"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 400
+
+[[step]]
+sync = "poll"
+label = "wait for the player to land on the spawn height"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 32, signed = true, op = "eq", value = 7340032 }
+timeout = 400
 
 [[step]]
 checkpoint = "room-0-exit-room-1-entry"

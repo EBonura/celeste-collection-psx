@@ -8,6 +8,7 @@
 name = "celeste-save-repin"
 title = "Celeste collection settings save and reboot"
 disc = ["dist/celeste-collection.cue"]
+symbols = ["dist/celeste-collection.map"]
 max_ticks = 2500
 
 [[step]]
@@ -128,7 +129,11 @@ wait = 230
 label = "start Celeste at its title and wait through the start flash"
 press = ["cross"]
 hold = 8
-wait = 250
+
+[[step]]
+label = "wait for Celeste's first room to start (player present)"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 600
 
 [[step]]
 checkpoint = "celeste-game"
@@ -171,7 +176,11 @@ wait = 250
 label = "start Celeste 2 at its title and wait through the level intro"
 press = ["cross"]
 hold = 8
-wait = 380
+
+[[step]]
+label = "wait for Celeste 2's first level to start (player present)"
+wait_until = { kind = "ram", sym = "LANI_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 800
 
 [[step]]
 checkpoint = "celeste2-game"

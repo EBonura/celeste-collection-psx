@@ -12,10 +12,12 @@ checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
 name = "pico8"
 version = "0.1.0"
 dependencies = [
+ "psx-display",
  "psx-font",
  "psx-gpu",
  "psx-hw",
  "psx-io",
+ "psx-math",
  "psx-mc",
  "psx-pad",
  "psx-rt",
@@ -31,6 +33,14 @@ dependencies = [
  "psx-gte",
  "psx-hw",
  "psxed-format",
+]
+
+[[package]]
+name = "psx-display"
+version = "0.1.0"
+dependencies = [
+ "psx-gpu",
+ "psx-hw",
 ]
 
 [[package]]
@@ -107,15 +117,18 @@ dependencies = [
 name = "psx-rt"
 version = "0.1.0"
 dependencies = [
+ "psx-gpu",
  "psx-hw",
  "psx-io",
+ "psx-tick",
 ]
 
 [[package]]
 name = "psx-sfx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "psx-asset",
+ "psx-math",
  "psx-spu",
 ]
 
@@ -126,6 +139,10 @@ dependencies = [
  "psx-hw",
  "psx-io",
 ]
+
+[[package]]
+name = "psx-tick"
+version = "0.1.0"
 
 [[package]]
 name = "psx-vram"

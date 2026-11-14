@@ -27,20 +27,3 @@ item = "shared/src/input.rs"
 count = 2
 remove = "W2"
 
-[[exception]]
-program = "celeste"
-kind = "no-receipt"
-item = "-"
-remove = "W9"
-
-[[exception]]
-program = "celeste2"
-kind = "no-receipt"
-item = "-"
-remove = "W9"
-
-[[exception]]
-program = "celeste-collection"
-kind = "no-receipt"
-item = "-"
-remove = "W9"

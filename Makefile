@@ -67,6 +67,11 @@ psoxide:
 		"$(COMPONENTS)/bin/psoxide-components" --root "$(PSOXIDE)" --lock "$(ROOT)/components.lock.json"; \
 	fi
 
+# The gate receipt (sdk/docs/GATE.md, G3): the finished executable is checked by `psx-gate` once more
+# and stamped, so the disc builder accepts it without a `no-receipt` entry. `$(call receipt,NAME,EXE)`.
+receipt = cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
+	--sdk $(PSOXIDE) --crate games/$(1) --receipt $(2) -- build --release
+
 # Guest builds run under the SDK's psoxide-rustc, so the checkout directory does not reach
 # the crate hashes: the same commit gives the same executables from any directory.
 REPRO_RUSTC := $(PSOXIDE)/target/release/psoxide-rustc
@@ -145,6 +150,7 @@ no64:
 collection: repro-rustc gate-celeste-collection
 	@mkdir -p $(DIST)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
+	$(call receipt,celeste-collection,$(COLLECTION_EXE))
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
 collection-disc: collection
@@ -191,6 +197,7 @@ CELESTE_EXE := $(CELESTE_DIR)/target/$(TARGET)/release/celeste.exe
 
 celeste: repro-rustc gate-celeste
 	cd $(CELESTE_DIR) && $(REPRO) cargo build --release
+	$(call receipt,celeste,$(CELESTE_EXE))
 	@echo "EXE  -> $(CELESTE_EXE)"
 
 celeste-disc: celeste
@@ -208,6 +215,7 @@ CELESTE2_EXE := $(CELESTE2_DIR)/target/$(TARGET)/release/celeste2.exe
 
 celeste2: repro-rustc gate-celeste2
 	cd $(CELESTE2_DIR) && $(REPRO) cargo build --release
+	$(call receipt,celeste2,$(CELESTE2_EXE))
 	@echo "EXE  -> $(CELESTE2_EXE)"
 
 celeste2-disc: celeste2

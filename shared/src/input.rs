@@ -15,9 +15,14 @@
 //! the SDK's [`PadTracker`]; this module just keeps PICO-8's bit-indexed API
 //! and repeat cadence on top of it.
 
-use psx_pad::{button, poll_port1, ButtonState, PadMode, PadTracker};
+use psx_io::periph::ControllerPort;
+use psx_pad::{button, ButtonState, Controllers, PadMode, PadTracker, Port};
 
 static mut TRACKER: PadTracker = PadTracker::new();
+
+/// The pads, read the way every game reads them. PICO-8 input is digital, so this is the form
+/// without the analog handshake: polls are five bytes to a digital pad.
+static mut PADS: Controllers<false> = Controllers::digital();
 
 /// The last cleanly read buttons (d-pad already merged with the stick), reused
 /// when a poll comes back garbled.
@@ -43,7 +48,8 @@ const STICK_THRESHOLD: i16 = 48;
 /// poll repeats the last clean state instead, so it can neither invent a press
 /// nor release a held button.
 pub fn poll_buttons() -> ButtonState {
-    let pad = poll_port1();
+    // SAFETY: a token is a logic guard, not a memory-safety one, and nothing else drives SIO0.
+    let pad = unsafe { *PADS.poll(&mut ControllerPort::steal(), Port::One) };
     let clean = match pad.mode {
         PadMode::Unknown => return unsafe { LAST_CLEAN },
         PadMode::Analog | PadMode::Config => with_stick(pad),

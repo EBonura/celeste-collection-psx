@@ -10,6 +10,8 @@ extern crate psx_rt;
 
 #[no_mangle]
 fn main() {
+    // The pause menu saves the settings; read them back once at boot (the collection does the same).
+    pico8::save::load();
     loop {
         celeste::run();
     }

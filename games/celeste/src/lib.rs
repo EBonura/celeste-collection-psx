@@ -214,7 +214,7 @@ pub fn run_sfx_soundtest(frames: &[u16]) {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
     sfx::init(AUDIO);
     psx_rt::interrupts::install_vblank_counter(); // real 60Hz (gpu::vsync is ~65fps)
-    // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
+                                                  // The SDK caps presentation at 30 fps by default; PICO-8 games run at 60.
     psx_rt::present::set_cap(psx_rt::present::PresentCap::UNCAPPED);
 
     let mut n: usize = 0;

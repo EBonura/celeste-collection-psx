@@ -41,9 +41,9 @@ use psx_font::fonts::BASIC;
 use psx_font::FontAtlas;
 use psx_gpu as gpu;
 use psx_gpu::display::{DisplayConfig, DoubleBuffer, Resolution, VideoMode};
+use psx_gpu::framebuf::FrameBuffer;
 use psx_gpu::Gpu;
 use psx_io::periph::GpuDma;
-use psx_gpu::framebuf::FrameBuffer;
 use psx_pad::{button, PadEdges};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display; the VBlank IRQ counter waits for the real blank.

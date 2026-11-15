@@ -1,7 +1,7 @@
 name = "celeste-cart-reset"
 title = "Repeated Classic and Lani cart entry resets published campaign state"
-disc = ["dist/celeste-collection.cue"]
-symbols = ["dist/celeste-collection.map"]
+disc = ["dist/gate/celeste-collection.cue"]
+symbols = ["dist/gate/celeste-collection.map"]
 max_ticks = 5000
 
 [[step]]

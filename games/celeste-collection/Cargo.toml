@@ -32,6 +32,10 @@ codegen-units = 1
 # map lacks a function of each cart (see COLLECTION_PRESENT).
 lto           = true
 
+[features]
+# The journeys' result receipts of both carts: the gate disc has them, a shipping build links none.
+receipts = ["celeste/receipts", "celeste2/receipts"]
+
 [dependencies]
 # The two games, linked in as libraries; the launcher calls their
 # `run()` entry points and they return on Select+Start.

@@ -160,6 +160,24 @@ collection: repro-rustc gate-celeste-collection
 	$(call receipt,celeste-collection,$(COLLECTION_EXE))
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
+# The journeys' disc: the collection built with the result receipts (CELESTE_JOURNEY, LANI_JOURNEY), a
+# diagnostic image pressed with --diag into dist/gate/. The shipping collection carries none.
+GATE_DIST := $(DIST)/gate
+GATE_CARGO := build --release --features receipts
+collection-gate: repro-rustc
+	@mkdir -p $(GATE_DIST)
+	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
+		--sdk $(PSOXIDE) --crate games/celeste-collection -- $(GATE_CARGO)
+	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(GATE_DIST)/celeste-collection.map" cargo $(GATE_CARGO)
+	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
+		--sdk $(PSOXIDE) --crate games/celeste-collection --receipt $(COLLECTION_EXE) -- $(GATE_CARGO)
+	cd $(MKISOPSX) && cargo run --release -- \
+		--exe $(COLLECTION_EXE) \
+		--gate-file $(ROOT)/psx-gate.toml \
+		--out $(GATE_DIST)/celeste-collection.bin \
+		--volume CELESTECOLL --diag
+	@echo "GATE DISC -> $(GATE_DIST)/celeste-collection.cue"
+
 collection-disc: collection
 	@mkdir -p $(DIST)
 	cd $(MKISOPSX) && cargo run --release -- \

@@ -65,12 +65,15 @@ fn held(b: u8) -> bool {
 
 pub fn set_input(mask: u8) {
     unsafe { RAW = mask };
-    unsafe {
-        JOURNEY_INPUT_LATCHES = JOURNEY_INPUT_LATCHES.wrapping_add(1);
-        JOURNEY_INPUT_MASK = mask as i32;
+    psx_telemetry::receipts! {
+        unsafe {
+            JOURNEY_INPUT_LATCHES = JOURNEY_INPUT_LATCHES.wrapping_add(1);
+            JOURNEY_INPUT_MASK = mask as i32;
+        }
     }
 }
 
+psx_telemetry::receipts! {
 /// Version 1 layout is shared with Classic. Coordinates and velocities are 16.16.
 /// Input latches count game input submissions, not physical controller polls.
 #[no_mangle]
@@ -79,15 +82,21 @@ static mut JOURNEY_UPDATES: i32 = 0;
 static mut JOURNEY_INPUT_LATCHES: i32 = 0;
 static mut JOURNEY_INPUT_MASK: i32 = 0;
 static mut JOURNEY_SEQUENCE: i32 = 0;
+}
 
+#[inline(always)]
 pub fn observe_update() {
-    unsafe {
+    psx_telemetry::receipts! {
+        unsafe {
         JOURNEY_UPDATES = JOURNEY_UPDATES.wrapping_add(1);
+        }
     }
 }
 
+#[inline(always)]
 pub fn observe() {
-    unsafe {
+    psx_telemetry::receipts! {
+        unsafe {
         let mut s = pico8::journey::JourneyState::new(2);
         s.updates = JOURNEY_UPDATES;
         s.input_latches = JOURNEY_INPUT_LATCHES;
@@ -118,6 +127,7 @@ pub fn observe() {
         core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY.published), 0);
         core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY), s);
         core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY.published), 1);
+        }
     }
 }
 
@@ -2245,6 +2255,7 @@ pub fn bg_rgb() -> (u8, u8, u8) {
 
 pub fn init() {
     unsafe {
+        psx_telemetry::receipts! {
         core::ptr::write_volatile(core::ptr::addr_of_mut!(LANI_JOURNEY.published), 0);
         core::ptr::write_volatile(
             core::ptr::addr_of_mut!(LANI_JOURNEY),
@@ -2254,6 +2265,7 @@ pub fn init() {
         JOURNEY_INPUT_LATCHES = 0;
         JOURNEY_INPUT_MASK = 0;
         JOURNEY_SEQUENCE = 0;
+        }
         rng::srand(42);
         init_particles();
         FRAMES = 0;

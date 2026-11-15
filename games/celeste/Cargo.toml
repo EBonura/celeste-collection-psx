@@ -47,9 +47,14 @@ lto           = true
 # The shared PICO-8 runtime (backend/fixed/rng/sfx) + the SDK crates this
 # crate's lib.rs/main.rs touch directly. backend/sfx's transitive SDK deps
 # (vram/io/hw/spu) come in through `pico8`.
+[features]
+# The journeys' result receipts (CELESTE_JOURNEY / LANI_JOURNEY): the gate disc has them, a shipping build links none.
+receipts = ["psx-telemetry/receipts"]
+
 [dependencies]
 pico8   = { path = "../../shared" }
 psx-rt  = { path = "../../.psoxide/sdk/crates/psx-rt" }
 psx-tick = { path = "../../.psoxide/sdk/crates/psx-tick" }
 psx-gpu = { path = "../../.psoxide/sdk/crates/psx-gpu" }
 psx-pad = { path = "../../.psoxide/sdk/crates/psx-pad" }
+psx-telemetry = { path = "../../.psoxide/sdk/crates/psx-telemetry" }

@@ -49,9 +49,14 @@ codegen-units = 1
 lto           = true
 
 # The shared PICO-8 runtime + the SDK crates this crate touches directly.
+[features]
+# The journeys' result receipts (CELESTE_JOURNEY / LANI_JOURNEY): the gate disc has them, a shipping build links none.
+receipts = ["psx-telemetry/receipts"]
+
 [dependencies]
 pico8   = { path = "../../shared" }
 psx-rt  = { path = "../../.psoxide/sdk/crates/psx-rt" }
 psx-tick = { path = "../../.psoxide/sdk/crates/psx-tick" }
 psx-gpu = { path = "../../.psoxide/sdk/crates/psx-gpu" }
 psx-pad = { path = "../../.psoxide/sdk/crates/psx-pad" }
+psx-telemetry = { path = "../../.psoxide/sdk/crates/psx-telemetry" }

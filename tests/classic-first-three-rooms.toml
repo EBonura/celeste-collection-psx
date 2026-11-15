@@ -1,7 +1,7 @@
 name = "celeste-classic-rooms-0-through-2"
 title = "Classic title through normal room 2 exit"
-disc = ["dist/celeste-collection.cue"]
-symbols = ["dist/celeste-collection.map"]
+disc = ["dist/gate/celeste-collection.cue"]
+symbols = ["dist/gate/celeste-collection.map"]
 max_ticks = 2400
 
 [[step]]

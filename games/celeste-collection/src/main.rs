@@ -44,7 +44,7 @@ use psx_gpu::display::{DisplayConfig, DoubleBuffer, Resolution, VideoMode};
 use psx_gpu::Gpu;
 use psx_io::periph::GpuDma;
 use psx_gpu::framebuf::FrameBuffer;
-use psx_pad::{button, ButtonState};
+use psx_pad::{button, PadEdges};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display; the VBlank IRQ counter waits for the real blank.
 use pico8::sfx::wait_vblank; // renders audio ahead while it waits
@@ -112,13 +112,6 @@ fn main() {
         // The game/credits clobbered VRAM and left the GPU in its own mode; the
         // next show_menu() re-inits and re-uploads everything.
     }
-}
-
-/// Buttons in `mask` that went down between `prev` and `now`. Each button is
-/// edge-detected on its own, so one held button never masks another's press.
-#[inline]
-fn pressed(now: ButtonState, prev: ButtonState, mask: u16) -> bool {
-    now.bits() & !prev.bits() & mask != 0
 }
 
 /// Cross, Circle or Start: what skips the intro and closes the credits.
@@ -195,17 +188,17 @@ fn show_credits() {
     const LINE_H: i16 = 12;
     let content_h = LINES.len() as i16 * LINE_H;
 
-    let mut prev = pico8::input::poll_buttons(); // void a button still held from the menu
+    let mut pad = PadEdges::new();
+    pad.settle(pico8::input::poll_buttons().bits()); // void a button still held from the menu
     let mut scroll = 0i16;
     let mut tick = 0u32;
     loop {
         let b = pico8::input::poll_buttons();
         // Per-button edges: with the old any-of-three test, one of the three
         // reading as held kept every other press from ever counting.
-        if pressed(b, prev, ANY_FACE) {
+        if pad.update(b.bits()).just_pressed(ANY_FACE) {
             return; // fresh press exits
         }
-        prev = b;
 
         fb.clear(8, 10, 26); // dark navy
         let top = 236 - scroll; // scroll up from below the screen
@@ -310,13 +303,15 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
         frame = frame.wrapping_add(1);
     }
 
-    // Seed `prev` with whatever is held now so a button still down from the screen we
+    // Settle on whatever is held now so a button still down from the screen we
     // came from doesn't read as a fresh press (e.g. the held X from "quit to menu").
-    let mut prev = pico8::input::poll_buttons();
+    let mut pad = PadEdges::new();
+    pad.settle(pico8::input::poll_buttons().bits());
 
     loop {
         let b = pico8::input::poll_buttons();
-        let pressed = |m: u16| pressed(b, prev, m);
+        let edges = pad.update(b.bits());
+        let pressed = |m: u16| edges.just_pressed(m);
 
         let old_sel = *sel;
         if pressed(button::LEFT) {
@@ -343,7 +338,6 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
             menusfx::play(menusfx::SFX_NAV);
             return MenuPick::Settings;
         }
-        prev = b;
 
         draw_menu_scene(&mut fb, &font, *sel, frame);
         sfx::update(); // keep the SPU sequencer ticking
@@ -448,7 +442,8 @@ fn show_settings() {
 
     const N: usize = 7; // SFX, Music, Pixel, Screen, Borders, Brightness, Fly
     let mut sel = 0usize;
-    let mut prev = pico8::input::poll_buttons();
+    let mut pad = PadEdges::new();
+    pad.settle(pico8::input::poll_buttons().bits());
     let mut frame = 0i32;
     // A PERSISTED setting (volumes/pixel/borders; not Screen or Fly) was
     // touched; written to the memory card once, when the screen closes.
@@ -456,7 +451,8 @@ fn show_settings() {
 
     loop {
         let b = pico8::input::poll_buttons();
-        let pressed = |m: u16| pressed(b, prev, m);
+        let edges = pad.update(b.bits());
+        let pressed = |m: u16| edges.just_pressed(m);
         let scale1x = backend::pixel_scale() == 1;
 
         if pressed(button::UP) {
@@ -521,7 +517,6 @@ fn show_settings() {
             }
             return;
         }
-        prev = b;
 
         fb.clear(6, 6, 16);
         atmos::draw(0, frame);

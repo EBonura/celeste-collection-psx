@@ -45,17 +45,12 @@ help:
 # the linker script resolve. An unchanged lock is verified against its receipt
 # and not fetched again.
 #
-# The tool is installed once per COMPONENTS_REV under target/. It is pinned here
-# rather than read from the lock because the lock's SDK revision can predate the
-# tool (the psoxide-components binary first exists at e6ec267); the tool only
-# reads the lock, so any SDK revision that has it imports the same tree. Once
-# the lock's SDK revision has the tool this can follow it, as the other fleet
-# repos do.
+# The tool is installed once per SDK revision under target/, from the revision the lock pins.
 #
 # PSOXIDE_FROM=/path/to/tree overrides the lock with a working tree, which is
 # how the demo disc puts every program it presses on one SDK.
-COMPONENTS_REV := b05a64760cea6edc5291b57b3ef4ddfc171b76dd
-COMPONENTS     := $(ROOT)/target/psoxide-components/$(COMPONENTS_REV)
+SDK_REV        := $(shell sed -n '/"sdk": *{/,/"revision"/s/.*"revision": *"\([0-9a-f]*\)".*/\1/p' "$(ROOT)/components.lock.json")
+COMPONENTS     := $(ROOT)/target/psoxide-components/$(SDK_REV)
 PSOXIDE_FROM ?=
 psoxide:
 	@if [ -n "$(PSOXIDE_FROM)" ]; then \
@@ -63,7 +58,7 @@ psoxide:
 			--from "$(PSOXIDE_FROM)" --into $(PSOXIDE); \
 	else \
 		[ -x "$(COMPONENTS)/bin/psoxide-components" ] || cargo install -q --locked \
-			--git https://github.com/EBonura/PSoXide --rev $(COMPONENTS_REV) --root "$(COMPONENTS)" psoxide-link; \
+			--git https://github.com/EBonura/PSoXide --rev $(SDK_REV) --root "$(COMPONENTS)" psoxide-link; \
 		"$(COMPONENTS)/bin/psoxide-components" --root "$(PSOXIDE)" --lock "$(ROOT)/components.lock.json"; \
 	fi
 
@@ -94,7 +89,7 @@ repro-rustc: psoxide
 PRIME := $(ROOT)/target/psoxide-registry-prime
 psoxide-prime:
 	@[ -x "$(COMPONENTS)/bin/psoxide-components" ] || cargo install -q --locked \
-		--git https://github.com/EBonura/PSoXide --rev $(COMPONENTS_REV) --root "$(COMPONENTS)" psoxide-link
+		--git https://github.com/EBonura/PSoXide --rev $(SDK_REV) --root "$(COMPONENTS)" psoxide-link
 	rm -rf "$(PRIME)" && mkdir -p "$(PRIME)"
 	jq 'del(.components.editor.paths[] | select(. == "Cargo.lock"))' "$(ROOT)/components.lock.json" > "$(PRIME)/components.lock.json"
 	"$(COMPONENTS)/bin/psoxide-components" --root "$(PRIME)/tree" --lock "$(PRIME)/components.lock.json"

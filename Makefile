@@ -72,6 +72,9 @@ psoxide:
 receipt = cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
 	--sdk $(PSOXIDE) --crate games/$(1) --receipt $(2) -- build --release
 
+# The SDK's repository tool (no-64-bit source scan, rustfmt over the tracked files).
+PSOXIDE_DEV := cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-dev --
+
 # Guest builds run under the SDK's psoxide-rustc, so the checkout directory does not reach
 # the crate hashes: the same commit gives the same executables from any directory.
 REPRO_RUSTC := $(PSOXIDE)/target/release/psoxide-rustc
@@ -144,8 +147,8 @@ COLLECTION_EXE := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.
 COLLECTION_MAP ?= $(DIST)/celeste-collection.map
 
 # Guest source names no 64/128-bit integer or float type (CI runs the same script).
-no64:
-	sh tools/check-no64.sh
+no64: psoxide
+	$(PSOXIDE_DEV) no64-scan shared/src games/celeste/src games/celeste2/src games/celeste-collection/src
 
 collection: repro-rustc gate-celeste-collection
 	@mkdir -p $(DIST)

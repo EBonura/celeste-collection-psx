@@ -231,7 +231,7 @@ celeste2-disc: celeste2
 	@echo "DISC -> $(DIST)/celeste2.cue"
 
 .PHONY: fmt fmt-check
-fmt:
-	tools/style-fmt.sh
-fmt-check:
-	tools/style-fmt.sh --check
+fmt: psoxide
+	$(PSOXIDE_DEV) style-fmt
+fmt-check: psoxide
+	$(PSOXIDE_DEV) style-fmt --check

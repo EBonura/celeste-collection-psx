@@ -9,4 +9,5 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup show
       - run: rustup component add rustfmt
-      - run: tools/style-fmt.sh --check
+      - run: make psoxide-prime
+      - run: make fmt-check

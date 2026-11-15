@@ -10,7 +10,7 @@ style. Formatting and other mechanical changes must leave the guest binary byte-
 change that can alter codegen needs a measurement showing no cost.
 
 - `rustfmt.toml` holds the guide's settings (three options are unstable, hence the pinned
-  nightly). `tools/style-fmt.sh` formats every tracked `.rs` file, `--check` only
-  reports; `make fmt` and `make fmt-check` call it, and the Style workflow runs it on
+  nightly). `make fmt` formats every tracked `.rs` file and `make fmt-check` only
+  reports; both run the SDK's `psoxide-dev style-fmt`, and the Style workflow runs it on
   every push.
 - Hardware addresses and opcodes are written in lower-case hex, as rustfmt prints them.

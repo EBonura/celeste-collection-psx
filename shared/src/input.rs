@@ -16,7 +16,7 @@
 //! and repeat cadence on top of it.
 
 use psx_io::periph::ControllerPort;
-use psx_pad::{button, ButtonState, Controllers, PadMode, PadTracker, Port};
+use psx_pad::{ButtonState, Controllers, PadMode, PadTracker, Port};
 
 static mut TRACKER: PadTracker = PadTracker::new();
 
@@ -28,7 +28,7 @@ static mut PADS: Controllers<false> = Controllers::digital();
 /// when a poll comes back garbled.
 static mut LAST_CLEAN: ButtonState = ButtonState::NONE;
 
-/// Left-stick deflection (of 127) that counts as a d-pad press. Per axis, so
+/// Left-stick deflection (of 127), 48 or more, that counts as a d-pad press. Per axis, so
 /// a diagonal push sets both bits like a diagonal on the d-pad; generous
 /// enough that a worn stick still registers, wide enough that centre drift
 /// doesn't.
@@ -62,18 +62,9 @@ pub fn poll_buttons() -> ButtonState {
 /// `pad`'s buttons with its left stick folded into the d-pad bits.
 fn with_stick(pad: psx_pad::PadState) -> ButtonState {
     let (x, y) = pad.sticks.left_centered();
-    let mut bits = pad.buttons.bits();
-    if x <= -STICK_THRESHOLD {
-        bits |= button::LEFT;
-    } else if x >= STICK_THRESHOLD {
-        bits |= button::RIGHT;
-    }
-    if y <= -STICK_THRESHOLD {
-        bits |= button::UP;
-    } else if y >= STICK_THRESHOLD {
-        bits |= button::DOWN;
-    }
-    ButtonState::from_bits(bits)
+    ButtonState::from_bits(
+        pad.buttons.bits() | psx_pad::stick_bits::<{ STICK_THRESHOLD - 1 }>(x, y),
+    )
 }
 
 // PICO-8 default auto-repeat (in the cart's frames).

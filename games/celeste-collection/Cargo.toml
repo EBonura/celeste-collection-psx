@@ -25,11 +25,12 @@ trim-paths    = "all"
 # no_std has no unwinder; abort keeps the binary small.
 panic         = "abort"
 codegen-units = 1
-# IMPORTANT: thin, not fat. Fat `lto = true` wrongly garbage-collects the
-# cross-crate `celeste::run` / `celeste2::run` call chains when both games
-# are linked in as libraries, producing a ~23 KiB EXE with the games gone.
-# Thin LTO keeps the call graph intact (and still optimizes the games).
-lto           = "thin"
+# Fat LTO: measured against thin on this build, 4.5% less work per tick (Celeste 1 -4.7%,
+# Celeste 2 -6.4%, menu -1.8%) and 1,432 B smaller text. The one visible effect is that the Celeste 1
+# title flash starts one vblank later on one emulator (the game's update count at start-up moves by one).
+# Fat once dropped both carts' `run` chains from this image; `make collection` now fails if the link
+# map lacks a function of each cart (see COLLECTION_PRESENT).
+lto           = true
 
 [dependencies]
 # The two games, linked in as libraries; the launcher calls their

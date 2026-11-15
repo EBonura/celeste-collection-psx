@@ -145,6 +145,9 @@ clean:
 COLLECTION_DIR := $(ROOT)/games/celeste-collection
 COLLECTION_EXE := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.exe
 COLLECTION_MAP ?= $(DIST)/celeste-collection.map
+# Functions that must be in the link map: `celeste::run` is inlined under fat LTO, so these are the
+# carts' update code (Celeste 1 and Celeste 2), which exists only if the cart's run chain was kept.
+COLLECTION_PRESENT := celeste::game::update celeste2::run
 
 # Guest source names no 64/128-bit integer or float type (CI runs the same script).
 no64: psoxide
@@ -153,6 +156,7 @@ no64: psoxide
 collection: repro-rustc gate-celeste-collection
 	@mkdir -p $(DIST)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
+	@for s in $(COLLECTION_PRESENT); do grep -qE "[[:space:]]$$s$$" "$(COLLECTION_MAP)" || { echo "collection: $$s is missing from the link map (a cart was dropped by LTO)"; exit 1; }; done
 	$(call receipt,celeste-collection,$(COLLECTION_EXE))
 	@echo "EXE  -> $(COLLECTION_EXE)"
 

@@ -329,21 +329,9 @@ fn mix_q16(a: i32, b: i32, t: i32) -> i32 {
 }
 
 /// `a * b >> 32` (arithmetic, flooring) for every `a` and `b`: the high word of
-/// the signed 64-bit product, formed from 16-bit halves so it needs nothing
-/// wider than 32 bits.
+/// the signed 64-bit product, which is what `Wide::mul` keeps in `high()`.
 fn mul_shr32(a: i32, b: i32) -> i32 {
-    let (x, y) = (a.unsigned_abs(), b.unsigned_abs());
-    let (x0, x1, y0, y1) = (x & 0xffff, x >> 16, y & 0xffff, y >> 16);
-    let (p00, p01, p10, p11) = (x0 * y0, x0 * y1, x1 * y0, x1 * y1);
-    let mid = (p00 >> 16) + (p01 & 0xffff) + (p10 & 0xffff);
-    let lo = (p00 & 0xffff) | (mid << 16);
-    let hi = p11 + (p01 >> 16) + (p10 >> 16) + (mid >> 16);
-    if (a < 0) != (b < 0) {
-        // Negate the two-word magnitude; the high word of the negation floors.
-        (!hi).wrapping_add((lo == 0) as u32) as i32
-    } else {
-        hi as i32
-    }
+    psx_math::Wide::mul(a, b).high()
 }
 
 /// Advance one SFX track by a block and, if it is sounding, fill `out` with the

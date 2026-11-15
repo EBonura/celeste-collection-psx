@@ -20,9 +20,9 @@ use psx_pad::{ButtonState, Controllers, PadMode, PadTracker, Port};
 
 static mut TRACKER: PadTracker = PadTracker::new();
 
-/// The pads, read the way every game reads them. PICO-8 input is digital, so this is the form
-/// without the analog handshake: polls are five bytes to a digital pad.
-static mut PADS: Controllers<false> = Controllers::digital();
+/// The pads, read the way every game reads them: the form with the analog handshake, so a DualShock
+/// goes to analog mode and its left stick can play (the digital form never asks for it).
+static mut PADS: Controllers = Controllers::new();
 
 /// The last cleanly read buttons (d-pad already merged with the stick), reused
 /// when a poll comes back garbled.
@@ -50,21 +50,14 @@ const STICK_THRESHOLD: i16 = 48;
 pub fn poll_buttons() -> ButtonState {
     // SAFETY: a token is a logic guard, not a memory-safety one, and nothing else drives SIO0.
     let pad = unsafe { *PADS.poll(&mut ControllerPort::steal(), Port::One) };
-    let clean = match pad.mode {
-        PadMode::Unknown => return unsafe { LAST_CLEAN },
-        PadMode::Analog | PadMode::Config => with_stick(pad),
-        PadMode::Digital | PadMode::Negcon | PadMode::Disconnected => pad.buttons,
-    };
+    if matches!(pad.mode, PadMode::Unknown) {
+        return unsafe { LAST_CLEAN };
+    }
+    let clean = ButtonState::from_bits(
+        pad.buttons.bits() | psx_pad::stick_bits_of::<{ STICK_THRESHOLD - 1 }>(&pad),
+    );
     unsafe { LAST_CLEAN = clean };
     clean
-}
-
-/// `pad`'s buttons with its left stick folded into the d-pad bits.
-fn with_stick(pad: psx_pad::PadState) -> ButtonState {
-    let (x, y) = pad.sticks.left_centered();
-    ButtonState::from_bits(
-        pad.buttons.bits() | psx_pad::stick_bits::<{ STICK_THRESHOLD - 1 }>(x, y),
-    )
 }
 
 // PICO-8 default auto-repeat (in the cart's frames).

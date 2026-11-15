@@ -54,7 +54,7 @@ help:
 #
 # PSOXIDE_FROM=/path/to/tree overrides the lock with a working tree, which is
 # how the demo disc puts every program it presses on one SDK.
-COMPONENTS_REV := 1df54aec340d60e4c0d199fc590fe995218804c3
+COMPONENTS_REV := b05a64760cea6edc5291b57b3ef4ddfc171b76dd
 COMPONENTS     := $(ROOT)/target/psoxide-components/$(COMPONENTS_REV)
 PSOXIDE_FROM ?=
 psoxide:

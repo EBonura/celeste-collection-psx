@@ -18,7 +18,7 @@
 use crate::{backend, sfx};
 use psx_font::fonts::BASIC;
 use psx_font::FontAtlas;
-use psx_pad::{button, ButtonState};
+use psx_pad::{button, ButtonState, PadEdges};
 use psx_vram::{Clut, TextureDepth, TexturePage};
 
 pub const UP: u8 = 1 << 0;
@@ -86,7 +86,7 @@ pub enum Exit {
 
 pub struct Pause {
     sel: u8,
-    prev: u8,
+    edges: PadEdges,  // the control mask of the frame before
     blip: i32,        // SFX id played when nudging a volume slider, so it's audible
     fly: bool,        // show the debug "FLY" row (toggles pico8::debug fly mode)
     changed: bool,    // a PERSISTED setting was touched; save to card on close
@@ -102,9 +102,12 @@ impl Pause {
     pub fn new(blip: i32, fly: bool) -> Self {
         let font = FontAtlas::upload(&BASIC, FONT_TPAGE, FONT_CLUT);
         crate::icons::upload();
+        // Every control reads as held when the menu opens, so none counts as a press until released.
+        let mut edges = PadEdges::new();
+        edges.settle(0xff);
         Pause {
             sel: ROW_SFX,
-            prev: 0xff,
+            edges,
             blip,
             fly,
             changed: false,
@@ -143,9 +146,9 @@ impl Pause {
     /// Advance the menu one frame given the current control mask. Returns
     /// `Some(..)` when the menu should close.
     pub fn update(&mut self, mask: u8) -> Option<Exit> {
-        let pressed = mask & !self.prev; // rising edges only
-        let released = self.prev & !mask;
-        self.prev = mask;
+        let frame = self.edges.update(mask as u16);
+        let pressed = frame.pressed() as u8; // rising edges only
+        let released = frame.released() as u8;
 
         // Select+Start leaves the game from anywhere, including this menu. It is
         // checked before Start alone so a Start that lands a frame ahead of

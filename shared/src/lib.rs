@@ -23,6 +23,7 @@ pub mod backend;
 pub mod debug;
 pub mod fixed;
 pub mod font;
+pub mod harness;
 pub mod icons;
 mod icons_data;
 pub mod input;

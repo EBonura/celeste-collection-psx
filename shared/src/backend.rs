@@ -116,18 +116,29 @@ fn upload_4bpp_doubled(rect: VramRect, src: &[u16]) {
     let mut row = 0u16;
     while row < rect.h {
         let base = (row as usize / 2) * 32;
-        let mut x = 0;
-        while x < 32 {
-            let w = src.get(base + x).copied().unwrap_or(0) as u32;
-            strip[2 * x] = ((w & 15) * 0x11 | ((w >> 4) & 15) * 0x1100) as u16;
-            strip[2 * x + 1] = (((w >> 8) & 15) * 0x11 | ((w >> 12) & 15) * 0x1100) as u16;
-            x += 1;
-        }
+        let line = src.get(base..base + 32);
         let (top, bottom) = strip.split_at_mut(64);
+        match line {
+            Some(line) => {
+                // An opaque length keeps LLVM from unrolling all 32 halfwords (1.5 KB of code).
+                let n = core::hint::black_box(32usize);
+                for (pair, &w) in top.chunks_exact_mut(2).zip(&line[..n]) {
+                    pair[0] = double_pixels(w as u32);
+                    pair[1] = double_pixels((w >> 8) as u32);
+                }
+            }
+            None => top.fill(0),
+        }
         bottom.copy_from_slice(top);
         upload_16bpp(VramRect::new(rect.x, rect.y + row, 64, 2), &strip);
         row += 2;
     }
+}
+
+/// Two 4-bit pixels (the low byte of `b`, first pixel lowest) as four: each repeated once.
+#[inline(always)]
+fn double_pixels(b: u32) -> u16 {
+    ((b & 15) * 0x11 | ((b >> 4) & 15) * 0x1100) as u16
 }
 
 /// Register `cart` and upload its spritesheet plus the universal font and
@@ -868,6 +879,7 @@ fn side_strip_v(x0: i16, x1: i16, y0: i16, y1: i16, c0: (u8, u8, u8), c1: (u8, u
 /// rectangle (GP0 0x60, three words). The row half-width only ever shrinks as
 /// `dy` grows, so the span work is O(r). Clouds issue dozens of these per frame
 /// and the one-quad-per-row version was the biggest GPU FIFO stall in the game.
+#[inline(never)]
 pub fn circfill(cx: i16, cy: i16, radius: i16, c: i32) {
     circfill_clip(cx, cy, radius, c, NO_CLIP);
 }

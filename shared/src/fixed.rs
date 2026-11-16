@@ -18,17 +18,6 @@ pub const fn fx(x: f64) -> Fix32 {
     Fix32((x * 65536.0) as i32)
 }
 
-/// The table value at `i` (0..=4096): stored 16-bit, where a stored 0 below the half is the 65536 of the peak.
-#[inline(never)]
-fn sin_entry(i: usize) -> i32 {
-    let v = i32::from(SIN_TBL[i]);
-    if v == 0 && i < 2048 {
-        65536
-    } else {
-        v
-    }
-}
-
 impl Fix32 {
     pub const ZERO: Fix32 = Fix32(0);
 
@@ -90,16 +79,26 @@ impl Fix32 {
         Fix32(((self.0 % b.0) + b.0) % b.0)
     }
     /// PICO-8 `sin` (note: turns, and negated — matches `_fix32_sin`).
+    /// Kept out of line: one copy of the table lookup serves every caller.
+    #[inline(never)]
     pub fn sin(self) -> Fix32 {
         let mut index = ((self.0.wrapping_add(0x4002) >> 2) & 0x3fff) as i32;
         if index > 0x1fff {
             index = 0x4000 - index;
         }
-        if index < 0x1000 {
-            Fix32::from_bits(sin_entry(index as usize))
+        let (i, negate) = if index < 0x1000 {
+            (index, false)
         } else {
-            Fix32::from_bits(-sin_entry((0x2000 - index) as usize))
-        }
+            (0x2000 - index, true)
+        };
+        // The table is 16-bit: a stored 0 below the half stands for the 65536 of the peak.
+        let stored = i32::from(SIN_TBL[i as usize]);
+        let v = if stored == 0 && i < 2048 {
+            65536
+        } else {
+            stored
+        };
+        Fix32::from_bits(if negate { -v } else { v })
     }
     /// PICO-8 `cos(x) = -sin(x + 0.25)`.
     #[inline]

@@ -23,12 +23,12 @@ use psx_io::gpu::{wait_command_ready, write_command};
 use psx_io::periph::GpuDma;
 use psx_vram::{upload_16bpp, Clut, TextureDepth, TexturePage, VramRect};
 
-/// A game's PICO-8 graphics data: the doubled 256x256 4bpp spritesheet and the
+/// A game's PICO-8 graphics data: the 4bpp spritesheet (stored at half size) and the
 /// tilemap (cells + per-sprite flags). Registered once via [`set_cart`]; the
 /// backend's `spr`/`map`/`mget`/`fget` read from the active cart.
 #[derive(Clone, Copy)]
 pub struct Cart {
-    /// 256x256 @ 4bpp spritesheet, 64 halfwords/row (== [u16; 16384]).
+    /// The 128-wide 4bpp spritesheet, 32 halfwords a row (see `upload_4bpp_doubled`).
     pub gfx: &'static [u16],
     /// Map cells, `map_w` wide.
     pub tilemap: &'static [u8],
@@ -106,16 +106,40 @@ pub fn set_cart(cart: Cart) {
     unsafe { CART = cart };
 }
 
+/// Upload a 4bpp image that is stored at half size: `src` holds the 128-wide source, 32 halfwords a
+/// row (four 4-bit pixels each, first pixel lowest), and rows past its end are blank. The image
+/// lands in `rect` (64 halfwords wide, an even number of rows) with every pixel and every row
+/// doubled, two rows at a time through a 256 B buffer.
+#[inline(never)]
+fn upload_4bpp_doubled(rect: VramRect, src: &[u16]) {
+    let mut strip = [0u16; 128];
+    let mut row = 0u16;
+    while row < rect.h {
+        let base = (row as usize / 2) * 32;
+        let mut x = 0;
+        while x < 32 {
+            let w = src.get(base + x).copied().unwrap_or(0) as u32;
+            strip[2 * x] = ((w & 15) * 0x11 | ((w >> 4) & 15) * 0x1100) as u16;
+            strip[2 * x + 1] = (((w >> 8) & 15) * 0x11 | ((w >> 12) & 15) * 0x1100) as u16;
+            x += 1;
+        }
+        let (top, bottom) = strip.split_at_mut(64);
+        bottom.copy_from_slice(top);
+        upload_16bpp(VramRect::new(rect.x, rect.y + row, 64, 2), &strip);
+        row += 2;
+    }
+}
+
 /// Register `cart` and upload its spritesheet plus the universal font and
 /// sprite CLUT to VRAM. Call once after `gpu::init`.
 pub fn upload_assets(cart: Cart) {
     set_cart(cart);
     unsafe { MAP_ALT_FLAG = -1 };
-    upload_16bpp(
+    upload_4bpp_doubled(
         VramRect::new(GFX_TPAGE.x(), GFX_TPAGE.y(), 64, 256),
         cart.gfx,
     );
-    upload_16bpp(
+    upload_4bpp_doubled(
         VramRect::new(FONT_TPAGE.x(), FONT_TPAGE.y(), 64, 170),
         &FONT_DATA,
     );
@@ -131,7 +155,7 @@ pub fn upload_assets(cart: Cart) {
 /// for PICO-8-font text. Coordinates are PICO-8 128-space (scaled 2x, centred);
 /// set `camera(0, 0)` first. Call once after `gpu::init`.
 pub fn upload_font() {
-    upload_16bpp(
+    upload_4bpp_doubled(
         VramRect::new(FONT_TPAGE.x(), FONT_TPAGE.y(), 64, 170),
         &FONT_DATA,
     );

@@ -37,5 +37,6 @@ pub mod save;
 pub mod settings_codec;
 pub mod sfx;
 mod sin_table;
+pub mod slider;
 pub mod synth;
 pub mod util;

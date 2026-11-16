@@ -15,7 +15,7 @@
 //! 4 confirm (X), 5 start, 6 back (Circle), 7 select. [`mask`] builds it from the
 //! pad.
 
-use crate::{backend, sfx};
+use crate::{backend, sfx, slider};
 use psx_font::fonts::BASIC;
 use psx_font::FontAtlas;
 use psx_pad::{button, ButtonState, PadEdges};
@@ -408,17 +408,19 @@ impl Pause {
     fn draw_slider(&self, row: u8, label: &str, vol: u16, y: i16) {
         let lit = self.sel == row;
         self.text(28, y, label, if lit { T_WHITE } else { T_GREY });
-        // a 40px track with a filled portion and a handle at the fill end
-        let tx: i16 = 56;
-        let tw: i16 = 38;
-        backend::rectfill(tx, y + 1, tx + tw, y + 3, 5); // track
-        let fw = (vol as i16) * tw / 8;
-        if fw > 0 {
-            backend::rectfill(tx, y + 1, tx + fw, y + 3, if lit { 11 } else { 3 });
-        }
-        let kx = tx + fw;
-        backend::rectfill(kx - 1, y - 1, kx + 1, y + 5, if lit { 7 } else { 6 });
-        // handle
+        // a 38px track with a filled portion and a handle at the fill end (PICO-8 palette indices)
+        const STYLE: slider::Style<i32> = slider::Style {
+            width: 38,
+            rows: (1, 3),
+            track: 5,
+            fill: (11, 3),
+            knob: Some(slider::Knob {
+                rows: (-1, 5),
+                half_width: 1,
+                colour: (7, 6),
+            }),
+        };
+        slider::draw(56, y, vol, lit, &STYLE, backend::rectfill);
     }
 
     /// Black 1px outline (4 diagonals) behind text at screen `(x, y)`, so labels

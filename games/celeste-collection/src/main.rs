@@ -626,27 +626,16 @@ fn show_settings() {
 
 /// A small volume slider (track + filled portion) at screen `(x, y)`.
 fn draw_vol_slider(x: i16, y: i16, vol: u16, lit: bool) {
-    const TW: i16 = 64;
-    gpu::draw_quad_flat(
-        [(x, y + 2), (x + TW, y + 2), (x, y + 6), (x + TW, y + 6)],
-        0x30,
-        0x30,
-        0x3a,
-    );
-    let fw = vol as i16 * TW / 8;
-    if fw > 0 {
-        let (r, g, b) = if lit {
-            (0x30, 0xc0, 0x40)
-        } else {
-            (0x20, 0x70, 0x30)
-        };
-        gpu::draw_quad_flat(
-            [(x, y + 2), (x + fw, y + 2), (x, y + 6), (x + fw, y + 6)],
-            r,
-            g,
-            b,
-        );
-    }
+    const STYLE: pico8::slider::Style<(u8, u8, u8)> = pico8::slider::Style {
+        width: 64,
+        rows: (2, 6),
+        track: (0x30, 0x30, 0x3a),
+        fill: ((0x30, 0xc0, 0x40), (0x20, 0x70, 0x30)),
+        knob: None,
+    };
+    pico8::slider::draw(x, y, vol, lit, &STYLE, |x0, y0, x1, y1, (r, g, b)| {
+        gpu::draw_quad_flat([(x0, y0), (x1, y0), (x0, y1), (x1, y1)], r, g, b);
+    });
 }
 
 /// Full-screen subtractive grey quad: `background - (g,g,g)`, a linear darken.

@@ -992,112 +992,35 @@ fn render_osc<const W: u8>(s: &mut Synth, mix: &mut [i32; BLOCK_SAMPLES], o: Osc
 // ADPCM encoder
 // ---------------------------------------------------------------------------
 
-const ADPCM_FILTERS: [(i32, i32); 5] = psx_hw::adpcm::FILTERS;
-
 /// Encode 28 PCM samples into one SPU ADPCM block, carrying the decoder history
 /// (`ENC_S1/S2`) across blocks so the stream decodes continuously. Picks the
-/// predictor by open-loop residual peak, then quantises closed-loop.
+/// predictor by open-loop residual peak, then quantises closed-loop (`psx_hw::adpcm`).
 pub(crate) fn encode_block(pcm: &[i16; BLOCK_SAMPLES], flags: u8, out: &mut [u8; BLOCK_BYTES]) {
-    let (s1, s2) = unsafe { (ENC_S1, ENC_S2) };
+    use psx_hw::adpcm::{
+        best_filter, encode_block, filter_peaks, residual_peak, shift_for_peak,
+    };
+    let state = unsafe { (ENC_S1, ENC_S2) };
     // ponytail: the predictor is re-picked every fourth block (a note is
     // stationary for far longer than 5 ms; the SNR cost measured 1 dB on the
     // host bench); the other blocks keep the last winner and only measure its
-    // residual peak for the shift. The search pass shares each filter's
-    // products across all five candidates. (Reusing the shift too was tried:
+    // residual peak for the shift. (Reusing the shift too was tried:
     // another 1.5 dB, not worth 2% of the frame.)
-    let search = unsafe { ENC_BLOCK & 3 == 0 };
-    let mut best_f = unsafe { ENC_FILTER };
-    let mut best_max = 0i32;
-    let (mut p1, mut p2) = (s1, s2);
-    if search {
-        let mut rmax = [0i32; 5];
-        for &x in pcm.iter() {
-            let x = x as i32;
-            let r = [
-                x,
-                x - ((p1 * 60) >> 6),
-                x - ((p1 * 115) >> 6) - ((p2 * -52) >> 6),
-                x - ((p1 * 98) >> 6) - ((p2 * -55) >> 6),
-                x - ((p1 * 122) >> 6) - ((p2 * -60) >> 6),
-            ];
-            for f in 0..5 {
-                rmax[f] = rmax[f].max(r[f].abs());
-            }
-            p2 = p1;
-            p1 = x;
-        }
-        best_f = 0;
-        best_max = rmax[0];
-        for f in 1..5 {
-            if rmax[f] < best_max {
-                best_max = rmax[f];
-                best_f = f;
-            }
-        }
-    } else {
-        let (k0, k1) = ADPCM_FILTERS[best_f];
-        for &x in pcm.iter() {
-            let x = x as i32;
-            best_max = best_max.max((x - ((p1 * k0) >> 6) - ((p2 * k1) >> 6)).abs());
-            p2 = p1;
-            p1 = x;
-        }
-    }
+    let filter;
+    let peak;
     unsafe {
-        ENC_FILTER = best_f;
+        if ENC_BLOCK & 3 == 0 {
+            (filter, peak) = best_filter(&filter_peaks(pcm, state));
+            ENC_FILTER = filter;
+        } else {
+            filter = ENC_FILTER;
+            peak = residual_peak(pcm, state, filter);
+        }
         ENC_BLOCK = ENC_BLOCK.wrapping_add(1);
     }
-    let shift = shift_for(best_max);
-    let (k0, k1) = ADPCM_FILTERS[best_f];
-    quantize(pcm, k0, k1, shift, s1, s2, out);
-    out[0] = ((best_f as u8) << 4) | shift as u8;
-    out[1] = flags;
-}
-
-/// Smallest shift whose 4-bit range covers a residual peak.
-fn shift_for(rmax: i32) -> u32 {
-    let mut shift = 12u32;
-    while shift > 0 && rmax > (7 << (12 - shift)) {
-        shift -= 1;
-    }
-    shift
-}
-
-/// Closed-loop quantisation of one block with predictor `(k0, k1)` and `shift`,
-/// from decoder history `(s1, s2)`. Writes the nibbles and the new history.
-fn quantize(
-    pcm: &[i16; BLOCK_SAMPLES],
-    k0: i32,
-    k1: i32,
-    shift: u32,
-    s1: i32,
-    s2: i32,
-    out: &mut [u8; BLOCK_BYTES],
-) {
-    let (mut p1, mut p2) = (s1, s2);
-    let rs = 12 - shift;
-    for i in 0..BLOCK_SAMPLES {
-        let pred = ((p1 * k0) >> 6) + ((p2 * k1) >> 6);
-        let r = pcm[i] as i32 - pred;
-        let q = (if rs > 0 {
-            (r + (1 << (rs - 1))) >> rs
-        } else {
-            r
-        })
-        .clamp(-8, 7);
-        let dec = (((q << 12) >> shift) + pred).clamp(-0x8000, 0x7fff);
-        p2 = p1;
-        p1 = dec;
-        let n = (q & 0xf) as u8;
-        if i & 1 == 0 {
-            out[2 + i / 2] = n;
-        } else {
-            out[2 + i / 2] |= n << 4;
-        }
-    }
+    let (s1, s2) = encode_block(pcm, state, filter, shift_for_peak(peak), flags, out);
     unsafe {
-        ENC_S1 = p1;
-        ENC_S2 = p2;
+        ENC_S1 = s1;
+        ENC_S2 = s2;
     }
 }
 

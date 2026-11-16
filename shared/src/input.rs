@@ -16,17 +16,13 @@
 //! and repeat cadence on top of it.
 
 use psx_io::periph::ControllerPort;
-use psx_pad::{ButtonState, Controllers, PadMode, PadTracker, Port};
+use psx_pad::{ButtonState, Controllers, PadTracker, Port};
 
 static mut TRACKER: PadTracker = PadTracker::new();
 
 /// The pads, read the way every game reads them: the form with the analog handshake, so a DualShock
 /// goes to analog mode and its left stick can play (the digital form never asks for it).
 static mut PADS: Controllers = Controllers::new();
-
-/// The last cleanly read buttons (d-pad already merged with the stick), reused
-/// when a poll comes back garbled.
-static mut LAST_CLEAN: ButtonState = ButtonState::NONE;
 
 /// Left-stick deflection (of 127), 48 or more, that counts as a d-pad press. Per axis, so
 /// a diagonal push sets both bits like a diagonal on the d-pad; generous
@@ -40,24 +36,15 @@ const STICK_THRESHOLD: i16 = 48;
 /// are centred and nothing changes. Use this everywhere the games, launcher
 /// and pause menu read the pad.
 ///
-/// A poll whose ID handshake stays garbled through the SDK's retries
-/// ([`PadMode::Unknown`]) carries button bytes that mean nothing: decoded as
-/// active-low they can read as a burst of buttons nobody pressed, which the
-/// launcher would take as fresh presses (Select opens the credits) and, if it
-/// persists, as buttons held forever (no fresh press ever registers). Such a
-/// poll repeats the last clean state instead, so it can neither invent a press
-/// nor release a held button.
+/// A garbled poll is handled by [`Controllers`]: it keeps the last clean state for a few polls
+/// and then reports the pad as unknown with no button held, so a dead link neither
+/// invents a press nor leaves a button held forever.
 pub fn poll_buttons() -> ButtonState {
     // SAFETY: a token is a logic guard, not a memory-safety one, and nothing else drives SIO0.
     let pad = unsafe { *PADS.poll(&mut ControllerPort::steal(), Port::One) };
-    if matches!(pad.mode, PadMode::Unknown) {
-        return unsafe { LAST_CLEAN };
-    }
-    let clean = ButtonState::from_bits(
+    ButtonState::from_bits(
         pad.buttons.bits() | psx_pad::stick_bits_of::<{ STICK_THRESHOLD - 1 }>(&pad),
-    );
-    unsafe { LAST_CLEAN = clean };
-    clean
+    )
 }
 
 // PICO-8 default auto-repeat (in the cart's frames).

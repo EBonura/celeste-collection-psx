@@ -12,6 +12,8 @@ publish = false
 
 [dependencies]
 psx-math = { path = "../../.psoxide/sdk/crates/psx-math" }
+psx-fx = { path = "../../.psoxide/sdk/crates/psx-fx" }
+psx-hw = { path = "../../.psoxide/crates/psx-hw" }
 
 [lib]
 path = "src/lib.rs"

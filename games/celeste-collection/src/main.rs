@@ -36,18 +36,17 @@ use assets::cover_celeste::COVER_CELESTE;
 use assets::cover_celeste2::COVER_CELESTE2;
 use assets::palette::PICO8_CLUT;
 
+use pico8::screen::Screen;
 use pico8::{backend, debug, icons, menusfx, sfx};
 use psx_font::fonts::BASIC;
 use psx_font::FontAtlas;
 use psx_gpu as gpu;
 use psx_gpu::display::{DisplayConfig, DoubleBuffer, Resolution, VideoMode};
-use psx_gpu::framebuf::FrameBuffer;
 use psx_gpu::Gpu;
 use psx_io::periph::GpuDma;
 use psx_pad::{button, PadEdges};
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) instead of
 // syncing to the display; the VBlank IRQ counter waits for the real blank.
-use pico8::sfx::wait_vblank; // renders audio ahead while it waits
 use psx_vram::{upload_16bpp, Clut, TextureDepth, TexturePage, VramRect};
 
 // Menu SFX are dedicated CC0 one-shot samples (see pico8::menusfx), NOT in-game
@@ -138,7 +137,7 @@ fn show_intro() {
 /// proper capitalisation; Cross, Circle or Start returns to the menu.
 fn show_credits() {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    let mut fb = FrameBuffer::new(320, 240);
+    let mut fb = Screen::new();
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
     let font = FontAtlas::upload(&BASIC, FONT_TPAGE, FONT_CLUT);
@@ -246,7 +245,6 @@ fn show_credits() {
         sfx::update();
         backend::brightness_overlay();
         gpu::draw_sync();
-        wait_vblank();
         fb.swap();
     }
 }
@@ -273,7 +271,7 @@ enum MenuPick {
 /// it and is updated as they move.
 fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    let mut fb = FrameBuffer::new(320, 240);
+    let mut fb = Screen::new();
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
 
@@ -296,7 +294,6 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
         fade_quad((255 - 255 * k / FADE_FRAMES) as u8);
         backend::brightness_overlay_faded((128 * k / FADE_FRAMES) as u8);
         gpu::draw_sync();
-        wait_vblank();
         fb.swap();
         frame = frame.wrapping_add(1);
     }
@@ -341,7 +338,6 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
         sfx::update(); // keep the SPU sequencer ticking
         backend::brightness_overlay();
         gpu::draw_sync();
-        wait_vblank();
         fb.swap();
         frame = frame.wrapping_add(1);
     }
@@ -352,7 +348,7 @@ const FADE_FRAMES: i32 = 16;
 
 /// Draw one full menu frame (backdrop, covers, tracer, title, labels, hint) into
 /// the back buffer. The caller adds any fade overlay, then presents.
-fn draw_menu_scene(fb: &mut FrameBuffer, font: &FontAtlas, sel: usize, frame: i32) {
+fn draw_menu_scene(fb: &mut Screen, font: &FontAtlas, sel: usize, frame: i32) {
     fb.clear(0, 0, 0);
     atmos::draw(sel, frame);
 
@@ -431,7 +427,7 @@ fn draw_menu_scene(fb: &mut FrameBuffer, font: &FontAtlas, sel: usize, frame: i3
 /// the shared backend/sfx state, so both menus stay in sync.
 fn show_settings() {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    let mut fb = FrameBuffer::new(320, 240);
+    let mut fb = Screen::new();
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
     let font = upload_menu_vram();
@@ -618,7 +614,6 @@ fn show_settings() {
         sfx::update();
         backend::brightness_overlay();
         gpu::draw_sync();
-        wait_vblank();
         fb.swap();
         frame = frame.wrapping_add(1);
     }
@@ -663,13 +658,12 @@ fn fade_quad(g: u8) {
 }
 
 /// Dissolve the menu to black over `FADE_FRAMES` (when leaving for a game).
-fn fade_out(fb: &mut FrameBuffer, font: &FontAtlas, sel: usize, frame: &mut i32) {
+fn fade_out(fb: &mut Screen, font: &FontAtlas, sel: usize, frame: &mut i32) {
     for k in 1..=FADE_FRAMES {
         draw_menu_scene(fb, font, sel, *frame);
         fade_quad((255 * k / FADE_FRAMES) as u8);
         backend::brightness_overlay_faded((128 * (FADE_FRAMES - k) / FADE_FRAMES) as u8);
         gpu::draw_sync();
-        wait_vblank();
         fb.swap();
         *frame = frame.wrapping_add(1);
     }

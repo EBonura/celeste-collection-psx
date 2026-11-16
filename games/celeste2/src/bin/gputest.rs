@@ -10,19 +10,18 @@
 #![no_main]
 extern crate psx_rt;
 
+use pico8::screen::Screen;
 use pico8::{backend, sfx};
 use psx_gpu as gpu;
 use psx_gpu::display::{Resolution, VideoMode};
-use psx_gpu::framebuf::FrameBuffer;
-use psx_rt::interrupts::wait_vblank;
 
 #[no_mangle]
 fn main() {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    let mut fb = FrameBuffer::new(320, 240);
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
     psx_rt::interrupts::install_vblank_counter();
+    let mut fb = Screen::new();
     backend::upload_assets(celeste2::CART);
     backend::set_side_preset(1); // Dusk gradient (the one missing on hardware)
 
@@ -64,7 +63,6 @@ fn main() {
         );
 
         gpu::draw_sync();
-        wait_vblank();
         fb.swap();
         sfx::update(); // advance the music sequencer each frame
         t = t.wrapping_add(1);

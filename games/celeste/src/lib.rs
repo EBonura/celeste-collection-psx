@@ -20,10 +20,10 @@ use assets::audio_data::{MUSIC_DATA, SFX_DATA};
 use assets::gfx::GFX_DATA;
 use assets::tilemap::{MAP_W, TILEMAP_DATA, TILE_FLAGS};
 use pico8::backend::{self, Cart};
+use pico8::screen::Screen;
 use pico8::sfx::{self, AudioData};
 use psx_gpu as gpu;
 use psx_gpu::display::{Resolution, VideoMode};
-use psx_gpu::framebuf::FrameBuffer;
 use psx_pad::button;
 // The SDK's `gpu::vsync()` busy-waits a fixed 242 hblanks (~15.4ms) from when
 // it's called instead of syncing to the display, which left only ~1.3ms of
@@ -78,7 +78,6 @@ fn pad_mask() -> u8 {
 /// Boot Celeste and run its 60fps frame loop until Select+Start is held.
 pub fn run() {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    let mut fb = FrameBuffer::new(320, 240);
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
     backend::upload_assets(CART);
@@ -96,6 +95,7 @@ pub fn run() {
     // Drive the audio sequencer off real VBlanks, not render frames, so the
     // music keeps PICO-8's hardware tempo even when rendering can't hold 60fps.
     psx_rt::interrupts::install_vblank_counter();
+    let mut fb = Screen::new();
     // Prime the initial 40 audio blocks after init selects the title music,
     // while loading and before the first visible update. This preserves all
     // startup samples without charging their synthesis to the first frame.
@@ -149,8 +149,7 @@ pub fn run() {
             backend::set_deferred(true); // list the frame, draw it by DMA
             game::draw();
             game::observe();
-            backend::submit(); // the GPU draws while the VBlank wait renders audio
-            wait_vblank();
+            backend::submit(); // the GPU draws; swap waits for it and renders audio meanwhile
             backend::set_deferred(false); // waits for the GPU
             fb.swap();
         }
@@ -160,7 +159,7 @@ pub fn run() {
 }
 
 /// Pause overlay: see [`pico8::harness::run_pause`]. SFX 2 (the cursor blip) is the slider feedback.
-fn run_pause(fb: &mut FrameBuffer) -> bool {
+fn run_pause(fb: &mut Screen) -> bool {
     pico8::harness::run_pause(fb, 2, (0, 0, 0), game::draw)
 }
 
@@ -192,7 +191,6 @@ pub fn run_music_iso(pattern: i32) {
 /// `scene` binary + frametest; compared with a PICO-8 frame by tools/scene_cmp.py.
 pub fn run_scene(x: i32, y: i32) {
     gpu::init(VideoMode::Ntsc, Resolution::R320X240);
-    let mut fb = FrameBuffer::new(320, 240);
     gpu::set_draw_area(0, 0, 319, 239);
     gpu::set_draw_offset(0, 0);
     backend::upload_assets(CART);
@@ -201,6 +199,7 @@ pub fn run_scene(x: i32, y: i32) {
     pico8::rng::srand(42);
     game::start_at_room(x, y);
     psx_rt::interrupts::install_vblank_counter();
+    let mut fb = Screen::new();
     loop {
         game::set_input(0);
         game::update();
@@ -210,8 +209,7 @@ pub fn run_scene(x: i32, y: i32) {
             fb.clear(0, 0, 0);
             backend::set_deferred(true); // list the frame, draw it by DMA
             game::draw();
-            backend::submit(); // the GPU draws while the VBlank wait renders audio
-            wait_vblank();
+            backend::submit(); // the GPU draws; swap waits for it and renders audio meanwhile
             backend::set_deferred(false); // waits for the GPU
             fb.swap();
         }

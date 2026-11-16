@@ -1,4 +1,4 @@
-// PICO-8 sin lookup table: 16.16 quarter-wave values for indices 0..=4096 (4,097 entries). Every value fits 16 bits
+// This file is the source now (the psx-lab generator it came from is retired). PICO-8 sin lookup table: 16.16 quarter-wave values for indices 0..=4096 (4,097 entries). Every value fits 16 bits
 // except 65536, stored as 0 (and the true 0 at index 4096 is also stored 0): `Fix32::sin` tells them apart by index.
 pub static SIN_TBL: [u16; 4097] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65534, 65534,

@@ -2,11 +2,13 @@
 """Convert a PICO-8 cart (.p8) into the PSoXide asset Rust modules used by
 this collection: `gfx.rs` (spritesheet) and `tilemap.rs` (map + flags).
 
-PICO-8 stores graphics 4bpp and the PSoXide backend draws the 128x128
-PICO-8 image pre-doubled to 256x256 (each pixel 2x2), exactly mirroring
-the original ccleste-derived Celeste assets. The `font.rs` and
-`palette.rs` modules are universal PICO-8 data and are shared verbatim
-between games, so this tool does not regenerate them.
+PICO-8 stores graphics 4bpp. `gfx.rs` holds the 128x128 image at its real
+size (32 halfwords a row, trailing all-zero rows dropped);
+`backend::upload_4bpp_doubled` doubles every pixel and row into the 256x256
+tpage while the cart is uploaded. The `font.rs`, `sin_table.rs` and
+`palette.rs` modules are universal PICO-8 data shared between games; the
+committed files are their source (the generator they came from, in psx-lab,
+is retired), so this tool does not regenerate them.
 
 Usage:
     python3 tools/p8_to_rust.py <cart.p8> <out_dir>
@@ -83,23 +85,23 @@ def tile_flags(sections):
     return flags
 
 
-def double_and_pack(px):
-    """Double the 128x128 pixel grid to 256x256 and pack to 4bpp u16s.
+def pack(px):
+    """Pack the 128x128 pixel grid to 4bpp u16s, dropping trailing zero rows.
 
     PS1 4bpp packs 4 pixels per halfword, low nibble = leftmost pixel.
-    Returns a flat list of 16384 ints (256 rows x 64 halfwords).
+    Returns a flat list of 32 halfwords per row.
     """
     words = []
     for y in range(128):
-        drow = []
-        for x in range(128):
-            drow.append(px[y][x])
-            drow.append(px[y][x])
-        for _ in range(2):  # each source row drawn twice
-            for x in range(0, 256, 4):
-                w = (drow[x] & 0xF) | ((drow[x + 1] & 0xF) << 4) \
-                    | ((drow[x + 2] & 0xF) << 8) | ((drow[x + 3] & 0xF) << 12)
-                words.append(w)
+        for x in range(0, 128, 4):
+            words.append(
+                (px[y][x] & 0xF)
+                | ((px[y][x + 1] & 0xF) << 4)
+                | ((px[y][x + 2] & 0xF) << 8)
+                | ((px[y][x + 3] & 0xF) << 12)
+            )
+    while len(words) >= 32 and not any(words[-32:]):
+        del words[-32:]
     return words
 
 
@@ -107,13 +109,18 @@ HEADER = ("// Auto-generated from {cart} by tools/p8_to_rust.py. "
           "Do not edit by hand.\n")
 
 
+GFX_HEADER = (
+    "// Generated from the former 256-wide table (every pixel and row doubled): the 128-wide source, four 4-bit\n"
+    "// pixels per halfword, 32 halfwords a row, trailing zero rows dropped. `backend::upload_4bpp_doubled` expands it.\n"
+)
+
+
 def write_gfx(out_dir, cart, words):
     with open(os.path.join(out_dir, "gfx.rs"), "w") as f:
-        f.write(HEADER.format(cart=cart))
-        f.write("\n// 256x256 @ 4bpp (64 halfwords/row). Upload to a Bit4 tpage.\n")
+        f.write(GFX_HEADER)
         f.write(f"pub static GFX_DATA: [u16; {len(words)}] = [\n")
-        for i in range(0, len(words), 64):
-            chunk = words[i : i + 64]
+        for i in range(0, len(words), 12):
+            chunk = words[i : i + 12]
             f.write("    " + ", ".join(f"0x{w:04X}" for w in chunk) + ",\n")
         f.write("];\n")
 
@@ -145,7 +152,7 @@ def main():
     cart_name = os.path.basename(cart)
 
     px = gfx_pixels(sections.get("gfx", []))
-    write_gfx(out_dir, cart_name, double_and_pack(px))
+    write_gfx(out_dir, cart_name, pack(px))
     write_tilemap(out_dir, cart_name, map_bytes(sections), tile_flags(sections))
     print(f"Wrote gfx.rs and tilemap.rs to {out_dir} from {cart_name}")
 

@@ -1,4 +1,4 @@
-// Generated from the former 256-wide table (every pixel and row doubled): the 128-wide source, four 4-bit
+// This file is the source now (the psx-lab generator it came from is retired). Derived from the former 256-wide table (every pixel and row doubled): the 128-wide source, four 4-bit
 // pixels per halfword, 32 halfwords a row, trailing zero rows dropped. `backend::upload_4bpp_doubled` expands it.
 pub static GFX_DATA: [u16; 2048] = [
     0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x8880, 0x0888, 0x0000, 0x0000, 0x0000, 0x0000,

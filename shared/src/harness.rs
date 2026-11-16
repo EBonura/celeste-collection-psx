@@ -3,16 +3,16 @@
 //! the clear colour and its draw routine.
 
 use crate::pause::{self, Exit, Pause};
+use crate::screen::Screen;
 use crate::sfx::{self, wait_vblank, AudioData};
 use psx_gpu as gpu;
 use psx_gpu::display::{Resolution, VideoMode};
-use psx_gpu::framebuf::FrameBuffer;
 
 /// Pause overlay: freeze the game, show the volume/quit menu, and keep the SPU
 /// advancing so the music plays on at the chosen volume. Returns true if the
 /// player picked "quit to menu". `cursor_sfx` is the slider feedback blip, `bg`
 /// the clear colour behind the frozen frame and `draw` the game's draw routine.
-pub fn run_pause(fb: &mut FrameBuffer, cursor_sfx: i32, bg: (u8, u8, u8), draw: fn()) -> bool {
+pub fn run_pause(fb: &mut Screen, cursor_sfx: i32, bg: (u8, u8, u8), draw: fn()) -> bool {
     let mut menu = Pause::new(cursor_sfx, true); // show the debug FLY row
     loop {
         match menu.update(pause::mask(crate::input::poll_buttons())) {
@@ -25,7 +25,6 @@ pub fn run_pause(fb: &mut FrameBuffer, cursor_sfx: i32, bg: (u8, u8, u8), draw: 
         draw(); // frozen game behind the overlay
         menu.draw();
         gpu::draw_sync();
-        wait_vblank();
         fb.swap();
         sfx::update(); // keep music/SFX alive (and audible at the new volume)
     }

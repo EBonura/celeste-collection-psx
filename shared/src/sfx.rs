@@ -198,6 +198,21 @@ pub fn wait_vblank() {
         }
     }
 }
+/// Render audio ahead for as long as `pending` says something is still to happen (a flip to land).
+#[cfg(target_arch = "mips")]
+pub fn fill_while(mut pending: impl FnMut() -> bool) {
+    while pending() {
+        unsafe {
+            if !fill_one() {
+                core::hint::spin_loop();
+            }
+        }
+    }
+}
+/// Host: nothing to wait for.
+#[cfg(not(target_arch = "mips"))]
+pub fn fill_while(_pending: impl FnMut() -> bool) {}
+
 /// Host: the VBlank counter never advances, so waiting would hang.
 #[cfg(not(target_arch = "mips"))]
 pub fn wait_vblank() {}

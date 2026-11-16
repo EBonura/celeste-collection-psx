@@ -2578,8 +2578,9 @@ unsafe fn rect_outline(x0: i16, y0: i16, x1: i16, y1: i16, c: i32) {
 
 /// Two-digit decimal into `buf[0..2]`.
 fn two_digits(n: i32, buf: &mut [u8]) {
-    buf[0] = b'0' + ((n / 10) % 10) as u8;
-    buf[1] = b'0' + (n % 10) as u8;
+    // The last two digits of `n` (the hours wrap at 100).
+    let mut tmp = [0u8; psx_math::fmt::U32_DEC_MAX];
+    buf[..2].copy_from_slice(psx_math::fmt::u32_dec_padded(&mut tmp, n as u32 % 100, 2).as_bytes());
 }
 
 /// `draw_time`: the HH:MM:SS run timer.

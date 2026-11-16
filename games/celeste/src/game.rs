@@ -2206,24 +2206,11 @@ impl Fmt {
             self.byte(b);
         }
     }
-    fn int(&mut self, mut v: i32) {
-        if v < 0 {
-            self.byte(b'-');
-            v = -v;
-        }
-        let mut tmp = [0u8; 12];
-        let mut k = 0;
-        loop {
-            tmp[k] = b'0' + (v % 10) as u8;
-            k += 1;
-            v /= 10;
-            if v == 0 {
-                break;
-            }
-        }
-        while k > 0 {
-            k -= 1;
-            self.byte(tmp[k]);
+    #[inline(never)]
+    fn int(&mut self, v: i32) {
+        let mut tmp = [0u8; psx_math::fmt::I32_DEC_MAX];
+        for &b in psx_math::fmt::i32_dec(&mut tmp, v).as_bytes() {
+            self.byte(b);
         }
     }
     /// Zero-padded to 2 digits (for the clock).

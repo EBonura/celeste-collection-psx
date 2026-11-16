@@ -57,4 +57,5 @@ psx-rt  = { path = "../../.psoxide/sdk/crates/psx-rt" }
 psx-tick = { path = "../../.psoxide/sdk/crates/psx-tick" }
 psx-gpu = { path = "../../.psoxide/sdk/crates/psx-gpu" }
 psx-pad = { path = "../../.psoxide/sdk/crates/psx-pad" }
+psx-math = { path = "../../.psoxide/sdk/crates/psx-math" }
 psx-telemetry = { path = "../../.psoxide/sdk/crates/psx-telemetry" }

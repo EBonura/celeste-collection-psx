@@ -20,11 +20,20 @@ fn main() {
     // PSX-EXE image (the script lays out the executable header) instead
     // of an ELF.
     println!("cargo:rustc-link-arg=-T{}", ld.display());
-    // PSX_ELF=1 keeps the ELF (symbols for frametest --profile: point
-    // mipsel-none-elf-nm at the .exe); it is not a bootable image.
-    if std::env::var_os("PSX_ELF").is_none() {
+    // `PSOXIDE_LINK_ELF=1` (set by the SDK's psoxide-pgo driver) keeps the ELF instead of
+    // the flat PSX-EXE: same code at the same addresses, it does not boot.
+    println!("cargo:rerun-if-env-changed=PSOXIDE_LINK_ELF");
+    if std::env::var_os("PSOXIDE_LINK_ELF").is_none() {
         println!("cargo:rustc-link-arg=--oformat=binary");
     }
-    println!("cargo:rerun-if-env-changed=PSX_ELF");
+    // `PSOXIDE_LINK_ORDER` (set by psoxide-pgo for a `+order` variant) names a
+    // symbol-ordering file for this link only.
+    println!("cargo:rerun-if-env-changed=PSOXIDE_LINK_ORDER");
+    if let Some(order) = std::env::var_os("PSOXIDE_LINK_ORDER") {
+        println!(
+            "cargo:rustc-link-arg=--symbol-ordering-file={}",
+            order.to_string_lossy()
+        );
+    }
     println!("cargo:rerun-if-changed={}", ld.display());
 }

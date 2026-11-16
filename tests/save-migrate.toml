@@ -1,0 +1,97 @@
+# A card the previous release wrote (the private CCS1 settings file, SFX slider lowered to seven
+# segments) boots into the current release: the saved value loads, a later change rewrites the file
+# as a psx_settings record, and a cold boot from that card loads the rewritten value.
+#
+# psoxide-gate run tests/save-migrate.toml --strict
+name = "celeste-save-migrate"
+title = "Celeste collection reads the old settings file and rewrites it"
+disc = ["dist/gate/celeste-collection.cue"]
+symbols = ["dist/gate/celeste-collection.map"]
+max_ticks = 1500
+
+[card_fixture]
+path = "tests/fixtures/ccs1-card-sfx7.mcd"
+sha256 = "b5bd9b93a6aede597fa5aee9697f5fb979bc5d993eb81da5dca610d4b1b415e2"
+
+[[step]]
+label = "skip cover introduction"
+wait = 60
+
+[[step]]
+press = ["cross"]
+hold = 8
+wait = 100
+
+[[step]]
+label = "open collection settings"
+press = ["start"]
+hold = 8
+wait = 35
+
+[[step]]
+checkpoint = "migrated-loaded"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+[[step.assert]]
+kind = "pixels"
+color = [48, 192, 64]
+color_tol = 8
+region = { x = 188, y = 66, w = 64, h = 4 }
+min_count = 215
+max_count = 230
+note = "the old file's seven-segment SFX setting loaded"
+
+[[step]]
+label = "lower the SFX volume one more step"
+press = ["left"]
+hold = 8
+wait = 30
+
+[[step]]
+label = "close settings and commit to card"
+press = ["circle"]
+hold = 8
+wait = 350
+
+[[step]]
+checkpoint = "migrated-written"
+golden = false
+[[step.assert]]
+kind = "card_writes"
+min_count = 1
+
+[[step]]
+card = { action = "snapshot" }
+
+[[step]]
+card = { action = "reboot" }
+
+[[step]]
+label = "skip cover introduction with the rewritten card"
+wait = 60
+
+[[step]]
+press = ["cross"]
+hold = 8
+wait = 100
+
+[[step]]
+label = "reopen collection settings after cold boot"
+press = ["start"]
+hold = 8
+wait = 35
+
+[[step]]
+checkpoint = "migrated-reloaded"
+golden = false
+[[step.assert]]
+kind = "not_flat"
+[[step.assert]]
+kind = "pixels"
+color = [48, 192, 64]
+color_tol = 8
+region = { x = 188, y = 66, w = 64, h = 4 }
+min_count = 180
+max_count = 200
+note = "the rewritten record loads the six-segment SFX setting"

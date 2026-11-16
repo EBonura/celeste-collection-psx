@@ -34,6 +34,7 @@ dependencies = [
  "psx-mc",
  "psx-pad",
  "psx-rt",
+ "psx-settings",
  "psx-sfx",
  "psx-spu",
  "psx-vram",
@@ -146,6 +147,16 @@ dependencies = [
  "psx-io",
  "psx-math",
  "psx-tick",
+]
+
+[[package]]
+name = "psx-settings"
+version = "0.1.0"
+dependencies = [
+ "psx-display",
+ "psx-math",
+ "psx-mc",
+ "psx-pad",
 ]
 
 [[package]]

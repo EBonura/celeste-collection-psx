@@ -15,9 +15,9 @@
 //! - The card is formatted only when it affirmatively reports unformatted
 //!   AND the player is saving; read errors never trigger a format.
 
+use crate::settings_codec::{Settings, RECORD_LEN};
 use crate::{backend, sfx};
-use psx_display::Brightness;
-use psx_mc::{Card, HardwareCard, Slot};
+use psx_mc::{Card, ControllerPort, HardwareCard, Slot};
 
 /// BIOS file name (region + product code + label). PS1 names cap at 20
 /// chars, so the label is CELSTCC1 (CELESTE CLASSIC COLLECTION, slot 1).
@@ -25,66 +25,64 @@ const FILE_NAME: &str = "BESLES-00000CELSTCC1";
 /// Human-readable title shown by the console's memory-card manager.
 const TITLE: &str = "CELESTE COLLECTION";
 
-/// Payload magic + layout version. Bump the digit if the layout changes.
-const MAGIC: [u8; 4] = *b"CCS1";
-/// magic(4) + sfx vol + music vol + pixel scale + borders preset + brightness.
-const PAYLOAD_LEN: usize = 9;
-/// The payload before brightness was added. Files of this length still load,
-/// with brightness at DEFAULT.
-const PAYLOAD_LEN_V1: usize = 8;
-
 /// The payload as last synced with the card (loaded or written), so [`save`]
 /// can skip the slow write when the live settings already match. `None` until
 /// a load or write succeeds.
-static mut SYNCED: Option<[u8; PAYLOAD_LEN]> = None;
+static mut SYNCED: Option<[u8; RECORD_LEN]> = None;
 
-/// The live settings, encoded as the on-card payload.
-fn snapshot() -> [u8; PAYLOAD_LEN] {
-    let mut p = [0u8; PAYLOAD_LEN];
-    p[0..4].copy_from_slice(&MAGIC);
-    p[4] = sfx::sfx_volume() as u8;
-    p[5] = sfx::music_volume() as u8;
-    p[6] = backend::pixel_scale() as u8;
-    p[7] = backend::side_preset();
-    p[8] = backend::brightness().to_byte();
-    p
+/// The live settings.
+fn current() -> Settings {
+    Settings {
+        sfx: sfx::sfx_volume().min(8) as u8,
+        music: sfx::music_volume().min(8) as u8,
+        pixel_scale: backend::pixel_scale() as u8,
+        side_preset: backend::side_preset(),
+        brightness: backend::brightness(),
+    }
+}
+
+/// The card, on port 1's slot one.
+fn card() -> Card<HardwareCard> {
+    // SAFETY: a token is a logic guard, not a memory-safety one, and nothing else drives SIO0
+    // while the collection loads or saves its settings.
+    Card::new(HardwareCard::on_port(
+        unsafe { ControllerPort::steal() },
+        Slot::One,
+    ))
 }
 
 /// Load the settings file and apply it. Call once at boot, before the menu.
 /// Any failure (no card, unformatted, no file, bad payload) keeps defaults.
 pub fn load() {
-    let mut card = Card::new(HardwareCard::new(Slot::One));
-    let mut buf = [0u8; 128];
-    let Ok(len) = card.read(FILE_NAME, &mut buf) else {
+    let mut buf = [0u8; psx_settings::MAX_RECORD_LEN];
+    let Ok(len) = card().read(FILE_NAME, &mut buf) else {
         return;
     };
-    if len < PAYLOAD_LEN_V1 || buf[0..4] != MAGIC {
+    let Some((settings, legacy)) = Settings::decode(&buf[..len]) else {
         return;
-    }
+    };
     // Every setter clamps/wraps on its own, so a stale payload from a future
     // layout can nudge a setting but never wedge the game.
-    sfx::set_sfx_volume(buf[4] as u16); // clamps to 0..=8
-    sfx::set_music_volume(buf[5] as u16); // clamps to 0..=8
-    backend::set_pixel_scale(buf[6] as i16); // clamps to 1|2
-    backend::set_side_preset(buf[7]); // wraps % preset count
-                                      // A file from before brightness has no ninth byte: DEFAULT.
-    backend::set_brightness(if len >= PAYLOAD_LEN {
-        Brightness::from_byte(buf[8]) // clamps to -5..=5
-    } else {
-        Brightness::DEFAULT
-    });
-    unsafe { SYNCED = Some(snapshot()) };
+    sfx::set_sfx_volume(settings.sfx as u16); // clamps to 0..=8
+    sfx::set_music_volume(settings.music as u16); // clamps to 0..=8
+    backend::set_pixel_scale(settings.pixel_scale as i16); // clamps to 1|2
+    backend::set_side_preset(settings.side_preset); // wraps % preset count
+    backend::set_brightness(settings.brightness);
+    // A file from an earlier release stays unsynced, so the next save rewrites it as a record.
+    unsafe { SYNCED = if legacy { None } else { current().encode() } };
 }
 
 /// Write the settings file if the live settings differ from the card's.
 /// Call when a settings menu closes after a change; failures are silent
 /// (the settings simply stay RAM-only for this session).
 pub fn save() {
-    let snap = snapshot();
+    let Some(snap) = current().encode() else {
+        return;
+    };
     if unsafe { SYNCED } == Some(snap) {
         return;
     }
-    let mut card = Card::new(HardwareCard::new(Slot::One));
+    let mut card = card();
     match card.is_formatted() {
         Ok(true) => {}
         // Fresh card + an explicit player save: the one case we format.

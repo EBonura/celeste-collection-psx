@@ -34,6 +34,7 @@ pub mod pause;
 pub mod playhead;
 pub mod rng;
 pub mod save;
+pub mod settings_codec;
 pub mod sfx;
 mod sin_table;
 pub mod synth;

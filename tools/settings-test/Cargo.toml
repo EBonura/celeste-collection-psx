@@ -1,0 +1,19 @@
+[package]
+name = "settings-test"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Host test for the collection's settings file: the record codec and the reader for the private
+# CCS1 file of earlier releases, over card images those releases really wrote. Run with
+#   cargo test --release --manifest-path tools/settings-test/Cargo.toml
+[workspace]
+
+[dependencies]
+psx-settings = { path = "../../.psoxide/sdk/crates/psx-settings" }
+psx-display = { path = "../../.psoxide/sdk/crates/psx-display" }
+psx-pad = { path = "../../.psoxide/sdk/crates/psx-pad" }
+psx-mc = { path = "../../.psoxide/sdk/crates/psx-mc" }
+
+[lib]
+path = "src/lib.rs"

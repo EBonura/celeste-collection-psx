@@ -14,7 +14,9 @@ mod tests {
     fn file_of(image: &[u8]) -> Vec<u8> {
         let mut card = Card::new(RamCard::from_image(image).expect("a 128 KiB card image"));
         let mut buf = [0u8; 128];
-        let len = card.read(FILE_NAME, &mut buf).expect("the settings file is on the card");
+        let len = card
+            .read(FILE_NAME, &mut buf)
+            .expect("the settings file is on the card");
         buf[..len].to_vec()
     }
 

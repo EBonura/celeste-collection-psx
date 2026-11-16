@@ -702,10 +702,7 @@ unsafe fn sequence_channel(c: usize) {
 fn rand_q16() -> i32 {
     // xorshift32 -> uniform in [-1, 1) Q16
     unsafe {
-        let mut x = RNG;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
+        let x = psx_fx::Xorshift32::step(RNG);
         RNG = x;
         (x >> 15) as i32 - 65536
     }
@@ -995,7 +992,7 @@ fn render_osc<const W: u8>(s: &mut Synth, mix: &mut [i32; BLOCK_SAMPLES], o: Osc
 // ADPCM encoder
 // ---------------------------------------------------------------------------
 
-const ADPCM_FILTERS: [(i32, i32); 5] = [(0, 0), (60, 0), (115, -52), (98, -55), (122, -60)];
+const ADPCM_FILTERS: [(i32, i32); 5] = psx_hw::adpcm::FILTERS;
 
 /// Encode 28 PCM samples into one SPU ADPCM block, carrying the decoder history
 /// (`ENC_S1/S2`) across blocks so the stream decodes continuously. Picks the

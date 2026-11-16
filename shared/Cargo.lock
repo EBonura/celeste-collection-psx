@@ -14,6 +14,7 @@ version = "0.1.0"
 dependencies = [
  "psx-display",
  "psx-font",
+ "psx-fx",
  "psx-gpu",
  "psx-hw",
  "psx-io",
@@ -32,6 +33,7 @@ version = "0.1.0"
 dependencies = [
  "psx-gte",
  "psx-hw",
+ "psx-math",
  "psxed-format",
 ]
 
@@ -55,6 +57,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "psx-fx"
+version = "0.1.0"
+dependencies = [
+ "psx-gpu",
+]
+
+[[package]]
 name = "psx-gpu"
 version = "0.1.0"
 dependencies = [
@@ -69,6 +78,7 @@ version = "0.1.0"
 dependencies = [
  "psx-gte-core",
  "psx-hw",
+ "psx-math",
 ]
 
 [[package]]
@@ -90,6 +100,7 @@ name = "psx-io"
 version = "0.1.0"
 dependencies = [
  "psx-hw",
+ "psx-math",
 ]
 
 [[package]]
@@ -102,6 +113,7 @@ version = "0.1.0"
 dependencies = [
  "psx-hw",
  "psx-io",
+ "psx-math",
 ]
 
 [[package]]
@@ -120,6 +132,7 @@ dependencies = [
  "psx-gpu",
  "psx-hw",
  "psx-io",
+ "psx-math",
  "psx-tick",
 ]
 

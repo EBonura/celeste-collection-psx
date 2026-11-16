@@ -18,7 +18,7 @@ use crate::palette::{PICO8_CLUT, PICO8_RGB, TEXT_CLUTS};
 use psx_display::Brightness;
 use psx_gpu::display::Resolution;
 use psx_gpu::{self as gpu};
-use psx_hw::gpu::{pack_color, pack_texcoord, pack_vertex, pack_xy};
+use psx_hw::gpu::{gp0, pack_color, pack_texcoord, pack_vertex, pack_xy, packet};
 use psx_io::gpu::{wait_command_ready, write_command};
 use psx_io::periph::GpuDma;
 use psx_vram::{upload_16bpp, Clut, TextureDepth, TexturePage, VramRect};
@@ -304,11 +304,14 @@ pub fn draw_sync() {
 /// `Tpage::apply_as_draw_mode` writes).
 #[inline]
 fn draw_mode_word(tpage: TexturePage) -> u32 {
-    0xe100_0000
-        | (tpage.x() as u32 / 64)
-        | (if tpage.y() == 256 { 1 } else { 0 }) << 4
-        | (tpage.depth() as u32) << 7
-        | 1 << 10
+    gp0::draw_mode_in_range(
+        tpage.x() as u32 / 64,
+        if tpage.y() == 256 { 1 } else { 0 },
+        0,
+        tpage.depth() as u32,
+        false,
+        true,
+    )
 }
 
 #[inline]
@@ -426,7 +429,7 @@ fn draw_cell(
     }
     if sc == 2 && !flip_x && !flip_y {
         emit([
-            0x6400_0000 | pack_color(0x80, 0x80, 0x80),
+            packet::TEXTURED_RECT | pack_color(0x80, 0x80, 0x80),
             pack_vertex(x, y),
             pack_texcoord(u0, v0, clut_word),
             pack_xy(16, 16),
@@ -440,7 +443,7 @@ fn draw_cell(
     let (vt, vb) = if flip_y { (v_hi, v0) } else { (v0, v_hi) };
     let tp = tpage.uv_word(0);
     emit([
-        0x2c00_0000 | pack_color(0x80, 0x80, 0x80),
+        packet::FLAT_TEXTURED_QUAD | pack_color(0x80, 0x80, 0x80),
         pack_vertex(x, y),
         pack_texcoord(ul, vt, clut_word),
         pack_vertex(x + sz, y),
@@ -542,7 +545,7 @@ pub fn pset(x: i16, y: i16, c: i32) {
     let (r, g, b) = rgb(c);
     let size = unsafe { SCALE } as u16;
     emit([
-        0x6000_0000 | pack_color(r, g, b),
+        packet::FLAT_RECT | pack_color(r, g, b),
         pack_vertex(sx(x), sy(y)),
         pack_xy(size, size),
     ]);
@@ -558,7 +561,7 @@ pub fn rectfill(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
     let y1 = sy(by + 1);
     let (r, g, b) = rgb(c);
     emit([
-        0x6000_0000 | pack_color(r, g, b),
+        packet::FLAT_RECT | pack_color(r, g, b),
         pack_vertex(x0, y0),
         pack_xy((x1 - x0) as u16, (y1 - y0) as u16),
     ]);
@@ -633,11 +636,7 @@ fn upload_fillp() {
 /// Set the GPU texture window (GP0 0xE2). Masks/offsets are in 8-pixel units.
 #[inline]
 unsafe fn set_tex_window(mask_x: u32, mask_y: u32, off_x: u32, off_y: u32) {
-    emit([0xe200_0000
-        | (mask_x & 0x1f)
-        | ((mask_y & 0x1f) << 5)
-        | ((off_x & 0x1f) << 10)
-        | ((off_y & 0x1f) << 15)]);
+    emit([gp0::tex_window(mask_x, mask_y, off_x, off_y)]);
 }
 
 /// Colour currently in the active fillp CLUT slot (so a run of same-colour
@@ -686,7 +685,7 @@ unsafe fn fillp_prim(x: i16, y: i16, w: u16, h: u16, u: u8, v: u8) {
         return;
     }
     emit([
-        0x6400_0000 | pack_color(0x80, 0x80, 0x80),
+        packet::TEXTURED_RECT | pack_color(0x80, 0x80, 0x80),
         pack_vertex(x, y),
         pack_texcoord(u, v, fill_clut().uv_word()),
         pack_xy(w, h),
@@ -756,7 +755,7 @@ pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize
             cy,
             radius,
             clip,
-            0x6400_0000 | pack_color(0x80, 0x80, 0x80),
+            packet::TEXTURED_RECT | pack_color(0x80, 0x80, 0x80),
             Some(tex),
         );
         fillp_end();
@@ -767,7 +766,7 @@ pub fn fillp_circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, pattern: usize
 pub fn line(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
     let (r, g, b) = rgb(c);
     emit([
-        0x4000_0000 | pack_color(r, g, b),
+        packet::FLAT_LINE | pack_color(r, g, b),
         pack_vertex(sx(x), sy(y)),
         pack_vertex(sx(x2), sy(y2)),
     ]);
@@ -780,7 +779,7 @@ pub fn line(x: i16, y: i16, x2: i16, y2: i16, c: i32) {
 pub fn quad(p: [(i16, i16); 4], c: i32) {
     let (r, g, b) = rgb(c);
     emit([
-        0x2800_0000 | pack_color(r, g, b),
+        packet::FLAT_QUAD | pack_color(r, g, b),
         pack_vertex(sx(p[0].0), sy(p[0].1)),
         pack_vertex(sx(p[1].0), sy(p[1].1)),
         pack_vertex(sx(p[2].0), sy(p[2].1)),
@@ -848,7 +847,7 @@ pub fn side_bars() {
 /// Gouraud triangle (GP0 0x30).
 fn gouraud_tri(v: [(i16, i16); 3], c: [(u8, u8, u8); 3]) {
     emit([
-        0x3000_0000 | pack_color(c[0].0, c[0].1, c[0].2),
+        packet::SHADED_TRIANGLE | pack_color(c[0].0, c[0].1, c[0].2),
         pack_vertex(v[0].0, v[0].1),
         pack_color(c[1].0, c[1].1, c[1].2),
         pack_vertex(v[1].0, v[1].1),
@@ -892,7 +891,7 @@ pub fn circfill_clip(cx: i16, cy: i16, radius: i16, c: i32, clip: ClipRect) {
         cy,
         radius,
         clip,
-        0x6000_0000 | pack_color(r, g, b),
+        packet::FLAT_RECT | pack_color(r, g, b),
         None,
     );
 }
@@ -1252,7 +1251,7 @@ pub fn circ(cx: i16, cy: i16, radius: i16, c: i32) {
         let x0 = sx(x);
         let y0 = sy(y);
         emit([
-            0x6000_0000 | pack_color(r, g, b),
+            packet::FLAT_RECT | pack_color(r, g, b),
             pack_vertex(x0, y0),
             pack_xy(2, 2),
         ]);

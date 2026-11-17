@@ -996,9 +996,7 @@ fn render_osc<const W: u8>(s: &mut Synth, mix: &mut [i32; BLOCK_SAMPLES], o: Osc
 /// (`ENC_S1/S2`) across blocks so the stream decodes continuously. Picks the
 /// predictor by open-loop residual peak, then quantises closed-loop (`psx_hw::adpcm`).
 pub(crate) fn encode_block(pcm: &[i16; BLOCK_SAMPLES], flags: u8, out: &mut [u8; BLOCK_BYTES]) {
-    use psx_hw::adpcm::{
-        best_filter, encode_block, filter_peaks, residual_peak, shift_for_peak,
-    };
+    use psx_hw::adpcm::{best_filter, encode_block, filter_peaks, residual_peak, shift_for_peak};
     let state = unsafe { (ENC_S1, ENC_S2) };
     // ponytail: the predictor is re-picked every fourth block (a note is
     // stationary for far longer than 5 ms; the SNR cost measured 1 dB on the
@@ -1388,7 +1386,7 @@ mod tests {
 
     /// Decode one ADPCM block exactly like the SPU (for a codec round trip).
     fn decode_block(blk: &[u8], s: &mut (i32, i32), out: &mut [i16; BLOCK_SAMPLES]) {
-        let (k0, k1) = ADPCM_FILTERS[(blk[0] >> 4) as usize];
+        let (k0, k1) = psx_hw::adpcm::FILTERS[(blk[0] >> 4) as usize];
         let shift = (blk[0] & 15) as u32;
         for i in 0..BLOCK_SAMPLES {
             let b = blk[2 + i / 2] as i32;

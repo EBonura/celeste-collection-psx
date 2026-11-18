@@ -1,8 +1,8 @@
 # Written by `psoxide-test bless`; edit only by blessing again (decision 4: a bar changes by editing
 # psoxide-test.toml with a reason, never by hand-editing these numbers).
 schema = 1
-blessed_commit = "6a9a08c55acb537b1b03d4996e84f0b7e848761b+dirty"
-sdk_pin = "aaf06b0ffa5d3fbf0868e7e6c40f4f3999d695f6"
+blessed_commit = "0d268a83378bdebe8dd30420752390b81452e0ce"
+sdk_pin = "0187c5f4fab876cbeaa9a99a37df305ccae1e4a3"
 
 [size.ship]
 text = 244948
@@ -20,25 +20,34 @@ vblanks = ["1:1549,5:10", "1:1549,5:10", "1:1549,5:10", "1:1545,5:10", "1:1544,5
 [journeys.cart-reset]
 ticks = 2556
 open_loop = 25
+clock_waits = 0
 
 [journeys.classic-first-room]
 ticks = 881
 open_loop = 17
+clock_waits = 0
 
 [journeys.classic-first-three-rooms]
 ticks = 1451
 open_loop = 17
+clock_waits = 0
 
 [journeys.save-migrate]
 ticks = 823
 open_loop = 6
+clock_waits = 0
 
 [journeys.save-repin]
 ticks = 1980
 open_loop = 13
+clock_waits = 0
 
 [journeys.smoke-boot-play]
 ticks = 414
 open_loop = 0
+clock_waits = 0
 
 [host]
+
+[maps]
+ship = "ebce3ab688bea6455e3ee5b1410bdfdfcc7c5e19b15d9bfe9dd15aee323cfa01"

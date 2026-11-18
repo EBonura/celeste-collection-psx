@@ -50,8 +50,10 @@ name = "check-mfc0"
 command = ["cargo", "run", "-q", "--release", "--locked", "--manifest-path", ".psoxide/tools/psoxide-hazard/Cargo.toml", "--bin", "check-mfc0", "--", "shared", "games"]
 
 [[host]]
+# The two synthesisers keep their state in statics: the tests must not overlap (tools/synth-ab/.cargo/config.toml
+# sets RUST_TEST_THREADS for a run from that directory; the harness runs from the repo root).
 name = "synth-ab"
-command = ["cargo", "test", "-q", "--manifest-path", "tools/synth-ab/Cargo.toml"]
+command = ["cargo", "test", "-q", "--manifest-path", "tools/synth-ab/Cargo.toml", "--", "--test-threads=1"]
 
 [[host]]
 name = "settings-test"

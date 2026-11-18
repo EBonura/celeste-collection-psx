@@ -24,11 +24,13 @@ collect = { "celeste-collection.bin" = "dist/gate/celeste-collection.bin", "cele
 disc = "celeste-collection.cue"
 map = "celeste-collection.map"
 
-[size]
+[[size]]
 build = "ship"
 
 [journeys]
 files = "tests/*.toml"
+# The old gate ran every journey on the hardware renderer too (--strict, real and mister).
+hw = true
 precheck = ["cart-reset", "smoke-boot-play"]
 
 [cross]
@@ -50,8 +52,7 @@ name = "check-mfc0"
 command = ["cargo", "run", "-q", "--release", "--locked", "--manifest-path", ".psoxide/tools/psoxide-hazard/Cargo.toml", "--bin", "check-mfc0", "--", "shared", "games"]
 
 [[host]]
-# The two synthesisers keep their state in statics: the tests must not overlap (tools/synth-ab/.cargo/config.toml
-# sets RUST_TEST_THREADS for a run from that directory; the harness runs from the repo root).
+# The two synthesisers keep their state in statics: the tests must not overlap.
 name = "synth-ab"
 command = ["cargo", "test", "-q", "--manifest-path", "tools/synth-ab/Cargo.toml", "--", "--test-threads=1"]
 
@@ -64,7 +65,7 @@ build = "ship"
 seed = [".psoxide"]
 compare = ["celeste-collection.bin", "celeste-collection.cue", "celeste-collection.exe"]
 
-[install]
+[[install]]
 build = "ship"
 name = "Celeste Classic Collection"
 

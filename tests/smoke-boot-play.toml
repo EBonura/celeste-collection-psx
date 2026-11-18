@@ -13,9 +13,11 @@ disc = "build/gate/celeste-collection.cue"
 symbols = "build/gate/celeste-collection.map"
 pad = "dualshock"
 
+# The collection is a 1.3 MB executable read from the disc: PCSX-Redux models the CD read time, so the
+# splash appears well after boot there (the ceiling is generous, the wait ends on state).
 [[step]]
 wait_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 1 }
-timeout = 600
+timeout = 3000
 
 [[step]]
 checkpoint = "splash"

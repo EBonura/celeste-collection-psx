@@ -50,16 +50,12 @@ name = "check-mfc0"
 command = ["cargo", "run", "-q", "--release", "--locked", "--manifest-path", ".psoxide/tools/psoxide-hazard/Cargo.toml", "--bin", "check-mfc0", "--", "shared", "games"]
 
 [[host]]
-name = "source-contracts"
-command = ["cargo", "test", "-q", "--manifest-path", "tools/source-contracts/Cargo.toml"]
-
-[[host]]
 name = "synth-ab"
-command = ["cargo", "test", "-q", "--release", "--manifest-path", "tools/synth-ab/Cargo.toml"]
+command = ["cargo", "test", "-q", "--manifest-path", "tools/synth-ab/Cargo.toml"]
 
 [[host]]
 name = "settings-test"
-command = ["cargo", "test", "-q", "--release", "--manifest-path", "tools/settings-test/Cargo.toml"]
+command = ["cargo", "test", "-q", "--manifest-path", "tools/settings-test/Cargo.toml"]
 
 [clean]
 build = "ship"

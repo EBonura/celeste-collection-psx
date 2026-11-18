@@ -1,0 +1,112 @@
+# Cross-emulator smoke (psoxide-test [cross]): the gate disc (the shipping code plus the result
+# receipts) shows the boot splash, reaches the cover menu, launches Celeste Classic, shows its title,
+# starts room 0 and moves the player with a held direction. Closed loop only: every press is held
+# until the game's own state says it took, every wait ends on game state, every checkpoint reads RAM.
+# The same file runs on PSoXide (the gate), PCSX-ReARMed and PCSX-Redux; the harness swaps the pad
+# for each run of [cross] pads.
+# SHELL_PHASE (collection shell, receipts builds only): 1 boot splash, 2 cover menu ready, 3 game picked.
+# CELESTE_JOURNEY (tests/JOURNEY-STATE.md): +0 version, +20 segment (room 0..30, title 31), +24 player
+# present, +28 player x (16.16), +80 published.
+name = "celeste-smoke"
+title = "Celeste smoke: splash, cover menu, Classic load and title, room 0, input moves the player"
+disc = "build/gate/celeste-collection.cue"
+symbols = "build/gate/celeste-collection.map"
+pad = "dualshock"
+
+[[step]]
+wait_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 1 }
+timeout = 600
+
+[[step]]
+checkpoint = "splash"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SHELL_PHASE"
+value = 1
+
+# A face button skips the splash; the menu then settles on whatever is held, so the press is held
+# only until the menu says it is ready. Circle, not Cross: the next press (Cross on the menu) then has
+# a fresh edge with no fixed rest between the two.
+[[step]]
+press = ["circle"]
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 600
+
+[[step]]
+checkpoint = "menu"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SHELL_PHASE"
+value = 2
+
+# Cross on the cover menu launches the highlighted game (Classic is selected first).
+[[step]]
+press = ["cross"]
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 3 }
+timeout = 600
+
+[[step]]
+label = "the Classic cart loaded and shows its title"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 31 }
+timeout = 900
+
+[[step]]
+checkpoint = "classic-title"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 0
+value = 1
+note = "version 1 Classic observation ABI"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 80
+value = 1
+note = "payload publication completed"
+
+# Start on the Classic title (a fresh edge after the menu's Cross is long released by the load).
+[[step]]
+press = ["cross"]
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 0 }
+timeout = 900
+
+[[step]]
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 600
+
+[[step]]
+checkpoint = "in-play"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 24
+value = 1
+note = "room 0 has its player"
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 20
+value = 0
+
+# Room 0 spawns the player at x 8.0 (524288 in 16.16); holding right moves it past 9.0.
+[[step]]
+label = "hold right until the player has moved"
+press = ["right"]
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 28, signed = true, op = "gt", value = 589824 }
+timeout = 900
+
+[[step]]
+checkpoint = "input-moves-the-game"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "CELESTE_JOURNEY"
+offset = 28
+signed = true
+op = "gt"
+value = 589824

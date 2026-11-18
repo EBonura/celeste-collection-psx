@@ -1,28 +1,37 @@
 name = "celeste-classic-first-room"
 title = "Classic title through normal room 0 exit"
-disc = ["dist/gate/celeste-collection.cue"]
-symbols = ["dist/gate/celeste-collection.map"]
+disc = ["build/gate/celeste-collection.cue"]
+symbols = ["build/gate/celeste-collection.map"]
+pad = "dualshock"
 max_ticks = 2400
 
 [[step]]
-label = "skip collection introduction"
-wait = 60
-
-[[step]]
-press = ["cross"]
-hold = 8
-wait = 100
+label = "skip the boot splash (Circle, so the menu's Cross is a fresh edge)"
+press = ["circle"]
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 600
 
 [[step]]
 label = "launch Classic"
 press = ["cross"]
-hold = 8
-wait = 230
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 3 }
+timeout = 600
+
+[[step]]
+label = "the Classic cart loaded and shows its title"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 31 }
+timeout = 900
+
+[[step]]
+label = "the title has run 219 game updates (the dwell the recorded inputs below were taken after)"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 8, op = "ge", value = 219 }
+timeout = 600
 
 [[step]]
 label = "start through Classic title"
 press = ["cross"]
-hold = 8
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 0 }
+timeout = 900
 
 [[step]]
 wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 0 }

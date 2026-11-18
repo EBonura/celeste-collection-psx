@@ -3,22 +3,20 @@
 # The two carts' berry and death counters are per-run, not saved. The final
 # checkpoints also enter each game and exercise the CPU/hardware renderers.
 #
-# psoxide-gate run tests/save-repin.toml --disc dist/gate/celeste-collection.cue \
+# psoxide-gate run tests/save-repin.toml --disc build/gate/celeste-collection.cue \
 #   --out <private-report-dir> --strict
 name = "celeste-save-repin"
 title = "Celeste collection settings save and reboot"
-disc = ["dist/gate/celeste-collection.cue"]
-symbols = ["dist/gate/celeste-collection.map"]
+disc = ["build/gate/celeste-collection.cue"]
+symbols = ["build/gate/celeste-collection.map"]
+pad = "dualshock"
 max_ticks = 2500
 
 [[step]]
-label = "skip cover introduction"
-wait = 60
-
-[[step]]
+label = "skip the boot splash"
 press = ["cross"]
-hold = 8
-wait = 100
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 600
 
 [[step]]
 label = "open collection settings"

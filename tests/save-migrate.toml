@@ -5,8 +5,9 @@
 # psoxide-gate run tests/save-migrate.toml --strict
 name = "celeste-save-migrate"
 title = "Celeste collection reads the old settings file and rewrites it"
-disc = ["dist/gate/celeste-collection.cue"]
-symbols = ["dist/gate/celeste-collection.map"]
+disc = ["build/gate/celeste-collection.cue"]
+symbols = ["build/gate/celeste-collection.map"]
+pad = "dualshock"
 max_ticks = 1500
 
 [card_fixture]
@@ -14,13 +15,10 @@ path = "tests/fixtures/ccs1-card-sfx7.mcd"
 sha256 = "b5bd9b93a6aede597fa5aee9697f5fb979bc5d993eb81da5dca610d4b1b415e2"
 
 [[step]]
-label = "skip cover introduction"
-wait = 60
-
-[[step]]
+label = "skip the boot splash"
 press = ["cross"]
-hold = 8
-wait = 100
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 600
 
 [[step]]
 label = "open collection settings"

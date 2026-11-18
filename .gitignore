@@ -9,6 +9,7 @@ target/
 *.cue
 *.toc
 /dist/*.map
+/dist/gate/
 # Headless navigation route output (tools/nav-routes)
 /dist/nav-routes/
 

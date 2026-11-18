@@ -83,6 +83,22 @@ const CENTER1: i16 = COVER1_X + COVER_W / 2;
 const CENTER2: i16 = COVER2_X + COVER_W / 2;
 const SCREEN_CX: i16 = 160;
 
+/// Which shell screen the collection is on, for the journeys and the cross-emulator smoke (a receipts
+/// build only; the shipping disc has no such word): 1 the boot splash, 2 the cover menu ready for a
+/// press, 3 a game was picked.
+#[cfg(feature = "receipts")]
+#[no_mangle]
+pub static mut SHELL_PHASE: u32 = 0;
+
+#[cfg(feature = "receipts")]
+fn shell_phase(phase: u32) {
+    // SAFETY: a single-threaded volatile store to a word nothing else writes; the host only reads it.
+    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(SHELL_PHASE), phase) }
+}
+
+#[cfg(not(feature = "receipts"))]
+fn shell_phase(_phase: u32) {}
+
 #[no_mangle]
 fn main() {
     psx_rt::interrupts::install_vblank_counter();
@@ -116,6 +132,7 @@ const ANY_FACE: u16 = button::CROSS | button::CIRCLE | button::START;
 
 /// Boot splash: the SDK's, with the studio mark above the line. Any face button skips it.
 fn show_intro() {
+    shell_phase(1);
     // SAFETY: the one place the collection takes the GPU DMA token; nothing else holds it while
     // the splash runs, and it is zero-sized. Later screens reset the GPU through `gpu::init`.
     let mut gpu = Gpu::new(
@@ -302,6 +319,7 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
     // came from doesn't read as a fresh press (e.g. the held X from "quit to menu").
     let mut pad = PadEdges::new();
     pad.settle(pico8::input::poll_buttons().bits());
+    shell_phase(2);
 
     loop {
         let b = pico8::input::poll_buttons();
@@ -322,6 +340,7 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
             // Launch sound, then dissolve to black before the game boots (this also
             // gives the sound time to be heard before the SPU is clobbered).
             menusfx::play(menusfx::SFX_CONFIRM);
+            shell_phase(3);
             fade_out(&mut fb, &font, *sel, &mut frame);
             return MenuPick::Play;
         }

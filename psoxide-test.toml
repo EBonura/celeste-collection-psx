@@ -1,0 +1,80 @@
+# The Celeste Classic Collection's test description for psoxide-test (the SDK's harness,
+# tools/psoxide-test). It declares what to build and check; the harness decides how.
+# Baseline: psoxide-test.baseline.toml.
+schema = 1
+name = "Celeste Classic Collection"
+repository = "EBonura/celeste-collection-psx"
+
+# The shipping disc (what the library gets): no state receipts linked.
+[[build]]
+name = "ship"
+out = "build/ship"
+commands = [["make", "collection-disc"]]
+collect = { "celeste-collection.bin" = "dist/celeste-collection.bin", "celeste-collection.cue" = "dist/celeste-collection.cue", "celeste-collection.map" = "dist/celeste-collection.map", "celeste-collection.exe" = "games/celeste-collection/target/mipsel-sony-psx/release/celeste-collection.exe" }
+disc = "celeste-collection.cue"
+map = "celeste-collection.map"
+
+# The journeys' disc: the same collection with the result receipts (CELESTE_JOURNEY, LANI_JOURNEY,
+# SHELL_PHASE), pressed with --diag. Built second: it overwrites the cargo target of the shipping exe.
+[[build]]
+name = "gate"
+out = "build/gate"
+commands = [["make", "collection-gate"]]
+collect = { "celeste-collection.bin" = "dist/gate/celeste-collection.bin", "celeste-collection.cue" = "dist/gate/celeste-collection.cue", "celeste-collection.map" = "dist/gate/celeste-collection.map", "celeste-collection.exe" = "games/celeste-collection/target/mipsel-sony-psx/release/celeste-collection.exe" }
+disc = "celeste-collection.cue"
+map = "celeste-collection.map"
+
+[size]
+build = "ship"
+
+[journeys]
+files = "tests/*.toml"
+precheck = ["cart-reset", "smoke-boot-play"]
+
+[cross]
+smoke = ["tests/smoke-boot-play.toml"]
+# The shipping disc has no receipts: it must boot and present with no input on every emulator.
+boot = { build = "ship", frames = 3000 }
+
+[[host]]
+name = "fmt-check"
+command = ["make", "fmt-check"]
+
+[[host]]
+name = "no64"
+command = ["make", "no64"]
+
+# Load-delay hazards in guest asm (fleet rule since SDK 580daa02), with the pin's own scanner.
+[[host]]
+name = "check-mfc0"
+command = ["cargo", "run", "-q", "--release", "--locked", "--manifest-path", ".psoxide/tools/psoxide-hazard/Cargo.toml", "--bin", "check-mfc0", "--", "shared", "games"]
+
+[[host]]
+name = "source-contracts"
+command = ["cargo", "test", "-q", "--manifest-path", "tools/source-contracts/Cargo.toml"]
+
+[[host]]
+name = "synth-ab"
+command = ["cargo", "test", "-q", "--release", "--manifest-path", "tools/synth-ab/Cargo.toml"]
+
+[[host]]
+name = "settings-test"
+command = ["cargo", "test", "-q", "--release", "--manifest-path", "tools/settings-test/Cargo.toml"]
+
+[clean]
+build = "ship"
+seed = [".psoxide"]
+compare = ["celeste-collection.bin", "celeste-collection.cue", "celeste-collection.exe"]
+
+[install]
+build = "ship"
+name = "Celeste Classic Collection"
+
+# One window on the poll-bound tape pgo/classic.pxtape (tools/speed-tape.py): splash skip, menu launch,
+# title start, then Classic play. Polls 2800..6000 are gameplay (rooms 1 and 2 with deaths and respawns).
+[[speed]]
+name = "classic"
+build = "ship"
+tape = "pgo/classic.pxtape"
+polls = [2800, 6000]
+offsets = [-48, -36, -24, -12, 0, 12, 24, 36]

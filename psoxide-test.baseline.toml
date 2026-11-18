@@ -1,0 +1,42 @@
+# Written by `psoxide-test bless`; edit only by blessing again (decision 4: a bar changes by editing
+# psoxide-test.toml with a reason, never by hand-editing these numbers).
+schema = 1
+blessed_commit = "fdbc1fbe81fb6d2a0c3134a43358189a0c16a594+dirty"
+sdk_pin = "aaf06b0ffa5d3fbf0868e7e6c40f4f3999d695f6"
+
+[size]
+text = 244948
+data = 230120
+bss = 48124
+free = 1475380
+
+[speed.classic]
+offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
+flips = [1560, 1560, 1560, 1556, 1556, 1556, 1556, 1556]
+work_per_frame = [518236, 518230, 518224, 519587, 519586, 519586, 519586, 519586]
+frame_work_p99 = [519325, 519325, 519326, 519326, 526417, 527758, 527758, 529780]
+vblanks = ["1:1549,5:10", "1:1549,5:10", "1:1549,5:10", "1:1545,5:10", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11"]
+
+[journeys.cart-reset]
+ticks = 2556
+open_loop = 25
+
+[journeys.classic-first-room]
+ticks = 881
+open_loop = 17
+
+[journeys.classic-first-three-rooms]
+ticks = 1451
+open_loop = 17
+
+[journeys.save-migrate]
+ticks = 823
+open_loop = 6
+
+[journeys.save-repin]
+ticks = 1980
+open_loop = 13
+
+[journeys.smoke-boot-play]
+ticks = 414
+open_loop = 0

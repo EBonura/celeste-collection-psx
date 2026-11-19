@@ -3,3 +3,4 @@
 id celeste
 front celeste.png
 back celeste.png celeste2.png
+shots celeste.png celeste2.png

@@ -14,3 +14,5 @@ Without it the launcher still builds and the Celeste Collection gets the plain c
 The baker scales every picture to the cover sizes (104x78, 68x51, 52x39) and to
 the 64x48 back-cover shots without cropping, and stretches anything that is not
 4:3. The front is celeste.png; the back has that and celeste2.png.
+
+The `shots` line of the manifest lists the pictures of the shelf's screenshot panel, in order; the disc build cooks them itself.

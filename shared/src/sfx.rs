@@ -280,6 +280,8 @@ pub(crate) fn upload(dest: SpuAddr, bytes: &[u8]) -> bool {
 }
 
 /// A ring upload failed: the stream never starts, or goes silent, and [`update`] stops.
+#[cold]
+#[inline(never)]
 unsafe fn fail_stream() {
     UPLOAD_FAILED = true;
     Voice::new(STREAM_VOICE).set_volume(Volume::SILENCE, Volume::SILENCE);

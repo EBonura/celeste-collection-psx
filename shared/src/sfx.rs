@@ -273,6 +273,8 @@ pub fn init(audio: AudioData) {
 
 /// Upload ADPCM bytes through the driver [`init`] took. A failed upload is reported to the
 /// caller (`false`), which never plays what did not land; nothing here retries.
+// One copy: inlined into its three callers it cost 670 bytes more.
+#[inline(never)]
 pub(crate) fn upload(dest: SpuAddr, bytes: &[u8]) -> bool {
     unsafe { SPU.as_mut().is_some_and(|spu| spu.upload_adpcm(dest, bytes).is_ok()) }
 }

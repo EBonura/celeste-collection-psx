@@ -1,20 +1,20 @@
 # Written by `psoxide-test bless`; edit only by blessing again (decision 4: a bar changes by editing
 # psoxide-test.toml with a reason, never by hand-editing these numbers).
 schema = 1
-blessed_commit = "184ba4688a90d24b45554c41d29b960f5a03b4e9"
+blessed_commit = "a2e8308cfb30349a5284688ef058d00f7d96a449"
 sdk_pin = "fce1f6855bc1c3e8336cc68be98a3df06ef9a967"
 
 [size.ship]
-text = 245568
-data = 230136
+text = 246220
+data = 230280
 bss = 48132
-free = 1474748
+free = 1473948
 
 [speed.classic]
 offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
 flips = [1556, 1556, 1556, 1556, 1556, 1556, 1556, 1556]
-work_per_frame = [519230, 519231, 519231, 519226, 519221, 519217, 519217, 519217]
-frame_work_p99 = [515290, 515290, 515290, 515290, 515290, 515290, 515290, 515290]
+work_per_frame = [519187, 519188, 519188, 519183, 519178, 519174, 519174, 519174]
+frame_work_p99 = [516035, 516035, 516035, 516035, 516035, 516035, 516035, 516035]
 vblanks = ["1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11"]
 
 [journeys.cart-reset]
@@ -50,4 +50,4 @@ clock_waits = 0
 [host]
 
 [maps]
-ship = "05c07d16ceb0b1e25a5b592932460627329146f4a346ff07f93700cb21d1981b"
+ship = "ec7611aa7edcf270dcb9ae24ea31f2c52d1f24931c9098b329c03376ce29431e"

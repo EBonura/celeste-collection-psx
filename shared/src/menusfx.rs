@@ -20,12 +20,14 @@ const VOL_BASE: i16 = 0x2800; // pre-scale level (scaled by the SFX-volume setti
 const VOICES: [u8; 3] = [16, 17, 18]; // round-robin so quick sounds don't cut each other
 
 static mut NEXT: usize = 0;
+/// The bank landed whole; a bank that did not is never played.
+static mut READY: bool = false;
 
 /// Upload the menu SFX bank to SPU RAM. Call once after `crate::sfx::init`
 /// (which does `spu::init`); re-call if the SPU is re-initialised (e.g. the
 /// launcher after returning from a game).
 pub fn init() {
-    spu::upload_adpcm(SpuAddr::new(SPU_BASE), &MENU_SFX_ADPCM.0);
+    unsafe { READY = crate::sfx::upload(SpuAddr::new(SPU_BASE), &MENU_SFX_ADPCM.0) };
 }
 
 /// Fire menu sound `id` (`SFX_NAV` / `SFX_CONFIRM` / `SFX_TRANSITION`). Volume is
@@ -35,6 +37,9 @@ pub fn play(id: usize) {
         return;
     }
     unsafe {
+        if !READY {
+            return;
+        }
         let (off, samples) = MENU_SFX[id];
         let v = VOICES[NEXT % VOICES.len()];
         NEXT = NEXT.wrapping_add(1);

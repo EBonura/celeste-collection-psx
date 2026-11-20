@@ -27,8 +27,9 @@
 use crate::playhead::{blocks_for_frames, PlayHead};
 use crate::synth::{self, BLOCK_BYTES, BLOCK_SAMPLES, SAMPLE_RATE};
 use psx_hw::spu::{SPUCNT, SPUSTAT};
+use psx_io::periph::SpuDma;
 use psx_spu as spu;
-use spu::{Adsr, Pitch, SpuAddr, Voice, Volume};
+use spu::{Adsr, Pitch, Spu, SpuAddr, Voice, Volume};
 
 pub use crate::synth::{
     music, music_volume, play, play_ch, set_music_mute, set_music_volume, set_sfx_volume,
@@ -69,6 +70,10 @@ static mut UPLOADED: u32 = 0; // next block to DMA: [UPLOADED, WRITE) is staged 
 static mut TARGET: u32 = 0; // where the last update wanted WRITE
 static mut MARK: u32 = 0; // block the SPU IRQ latch is armed on
 static mut LAST_VBLANK: u32 = 0;
+/// The SPU driver, taken in [`init`]: the one owner of the upload path.
+static mut SPU: Option<Spu> = None;
+/// A ring upload did not land: the stream is never started, or is silenced, and not retried.
+static mut UPLOAD_FAILED: bool = false;
 
 /// DMA source for the ring uploads (word-aligned, whole ring so init can fill
 /// it in one go).
@@ -153,10 +158,13 @@ unsafe fn flush() {
     while UPLOADED < WRITE {
         let first = UPLOADED % RING_BLOCKS;
         let run = (WRITE - UPLOADED).min(RING_BLOCKS - first);
-        spu::upload_adpcm(
+        if !upload(
             SpuAddr::new(ring_addr(UPLOADED)),
             STAGE.0[first as usize..(first + run) as usize].as_flattened(),
-        );
+        ) {
+            fail_stream();
+            return;
+        }
         UPLOADED += run;
     }
 }
@@ -248,26 +256,50 @@ pub fn init(audio: AudioData) {
         UPLOADED = 0;
         TARGET = 0;
 
-        spu::init();
+        UPLOAD_FAILED = false;
+        // SAFETY: a token is a logic guard, and this module is the only SPU uploader.
+        SPU = Some(Spu::new(SpuDma::steal()));
         spu::set_main_volume(Volume::MAX, Volume::MAX);
         // Silent ring, with its loop flags in place.
         for (b, blk) in STAGE.0.iter_mut().enumerate() {
             *blk = [0; BLOCK_BYTES];
             blk[1] = ring_flags(b as u32);
         }
-        spu::upload_adpcm(SpuAddr::new(RING_BASE), STAGE.0.as_flattened());
+        if !upload(SpuAddr::new(RING_BASE), STAGE.0.as_flattened()) {
+            fail_stream();
+        }
     }
+}
+
+/// Upload ADPCM bytes through the driver [`init`] took. A failed upload is reported to the
+/// caller (`false`), which never plays what did not land; nothing here retries.
+// One copy: inlined into its three callers it cost 670 bytes more.
+#[inline(never)]
+pub(crate) fn upload(dest: SpuAddr, bytes: &[u8]) -> bool {
+    unsafe { SPU.as_mut().is_some_and(|spu| spu.upload_adpcm(dest, bytes).is_ok()) }
+}
+
+/// A ring upload failed: the stream never starts, or goes silent, and [`update`] stops.
+unsafe fn fail_stream() {
+    UPLOAD_FAILED = true;
+    Voice::new(STREAM_VOICE).set_volume(Volume::SILENCE, Volume::SILENCE);
 }
 
 /// Advance the stream: call once per frame. Polls the SPU play-head latch,
 /// renders the blocks consumed since last time and uploads them ahead of it.
 pub fn update() {
     unsafe {
+        if UPLOAD_FAILED {
+            return;
+        }
         if !STARTED {
             while WRITE < LEAD_BLOCKS {
                 render_one();
             }
             flush();
+            if UPLOAD_FAILED {
+                return;
+            }
             TARGET = WRITE;
             start_stream();
             return;

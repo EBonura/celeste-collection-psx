@@ -1,21 +1,30 @@
 # Written by `psoxide-test bless`; edit only by blessing again (decision 4: a bar changes by editing
 # psoxide-test.toml with a reason, never by hand-editing these numbers).
 schema = 1
-blessed_commit = "a2e8308cfb30349a5284688ef058d00f7d96a449"
-sdk_pin = "fce1f6855bc1c3e8336cc68be98a3df06ef9a967"
+blessed_commit = "dfa1afc166499a54437ffb573389dc134a32f366"
+sdk_pin = "6bfe478ff0e0c6e226cdf67b164df311c1658fec"
 
 [size.ship]
-text = 246220
+text = 240276
 data = 230280
 bss = 48132
-free = 1473948
+free = 1479884
 
 [speed.classic]
 offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
-flips = [1556, 1556, 1556, 1556, 1556, 1556, 1556, 1556]
-work_per_frame = [519187, 519188, 519188, 519183, 519178, 519174, 519174, 519174]
-frame_work_p99 = [516035, 516035, 516035, 516035, 516035, 516035, 516035, 516035]
-vblanks = ["1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11"]
+flips = [1560, 1560, 1560, 1556, 1556, 1556, 1556, 1556]
+work_per_frame = [517733, 517727, 517721, 519082, 519081, 519081, 519081, 519447]
+frame_work_p99 = [526030, 526030, 526030, 526031, 526736, 527834, 527834, 542722]
+vblanks = ["1:1549,5:10", "1:1549,5:10", "1:1549,5:10", "1:1545,5:10", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1543,2:1,5:11"]
+layouts = []
+
+[speed.classic.identity]
+tape = "pgo/classic.pxtape"
+tape_sha256 = "736bbbb50378c0fb0bea2961680ba5f66c145c53184019d5c63b27a42af68bb7"
+window = "polls 2800..6000"
+offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
+launch_args = []
+gate_revision = "97cd078f9d2a33eb6aff274541bccc118f5b12e8"
 
 [journeys.cart-reset]
 ticks = 2556
@@ -50,4 +59,4 @@ clock_waits = 0
 [host]
 
 [maps]
-ship = "ec7611aa7edcf270dcb9ae24ea31f2c52d1f24931c9098b329c03376ce29431e"
+ship = "2bcbcea829226ffa4b9bcd397781e089cb21a58f685242f10600dd769b934c7c"

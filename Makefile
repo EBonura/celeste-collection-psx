@@ -149,8 +149,13 @@ COLLECTION_PRESENT := celeste::game::update celeste2::run
 no64: psoxide
 	$(PSOXIDE_DEV) no64-scan shared/src games/celeste/src games/celeste2/src games/celeste-collection/src
 
+# The ship and gate builds share one cargo target with two feature sets, so cargo can reuse an
+# earlier link and leave the map unwritten. Dropping the linked image makes each build relink.
+relink_collection = rm -f $(COLLECTION_DIR)/target/$(TARGET)/release/deps/celeste_collection-*.exe
+
 collection: repro-rustc gate-celeste-collection
 	@mkdir -p $(DIST)
+	$(relink_collection)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
 	@for s in $(COLLECTION_PRESENT); do grep -qE "[[:space:]]$$s$$" "$(COLLECTION_MAP)" || { echo "collection: $$s is missing from the link map (a cart was dropped by LTO)"; exit 1; }; done
 	$(call receipt,celeste-collection,$(COLLECTION_EXE))
@@ -164,6 +169,7 @@ collection-gate: repro-rustc
 	@mkdir -p $(GATE_DIST)
 	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
 		--sdk $(PSOXIDE) --crate games/celeste-collection -- $(GATE_CARGO)
+	$(relink_collection)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(GATE_DIST)/celeste-collection.map" cargo $(GATE_CARGO)
 	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
 		--sdk $(PSOXIDE) --crate games/celeste-collection --receipt $(COLLECTION_EXE) -- $(GATE_CARGO)

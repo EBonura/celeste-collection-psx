@@ -106,7 +106,7 @@ pub struct Entry {
 /// private bytes; otherwise it applies the block's settings. It also reads the scene table into
 /// RAM once ([`table`]). `previous` is `None` on a BIOS boot, which is when the menu plays the
 /// splash.
-#[link_section = ".psx_cold.scene_entered"]
+#[link_section = ".boot_only.scene_entered"]
 #[inline(never)]
 pub fn scene_entered() -> Entry {
     read_table();
@@ -150,9 +150,9 @@ pub fn table() -> &'static [u32] {
 /// Make the block's settings the live ones: the psx-settings record (volumes, pixel scale,
 /// borders, brightness) and the private bytes (fly, screen follow). `false` when the block is not
 /// valid or its record does not decode, leaving the live settings as they are. Only
-/// [`scene_entered`] calls it (cold code too); the card is then taken as not synced, so the next
+/// [`scene_entered`] calls it (boot-only too); the card is then taken as not synced, so the next
 /// save after a change writes it.
-#[link_section = ".psx_cold.settings"]
+#[link_section = ".boot_only.settings"]
 #[inline(never)]
 pub fn settings() -> bool {
     if !valid() {
@@ -212,3 +212,66 @@ pub fn switch_to(scene: SceneId) {
     write(OFF_SCENES, scene as u32 | current << 16);
     write(OFF_SWITCHES, read(OFF_SWITCHES).wrapping_add(1));
 }
+
+// The boot-only memory's mover (psoxide-boot.ld names `__boot_entry`; `__core_boot` goes on to it):
+// `.boot` copied from where the file stores it (after .data and the core's image) to where it
+// runs (after .bss), away from any overlap, `.boot_bss` zeroed, the I-cache invalidated over the
+// run range, then psx-rt's `_start`. The core SDK's psx-rt carries this mover; the pinned psx-rt
+// does not, so the collection has it until the pin moves. `$sp` is already STACK_INIT
+// (`__core_boot`); `$a0..$a2` are kept.
+#[cfg(target_arch = "mips")]
+extern "C" {
+    static __boot_start: u8;
+    static __boot_load_end: u8;
+    static __boot_end: u8;
+    static __boot_lma: u8;
+}
+
+#[cfg(target_arch = "mips")]
+#[no_mangle]
+#[link_section = ".text.__boot_entry_rs"]
+extern "C" fn __boot_entry_rs() {
+    let run = &raw const __boot_start as *mut u32;
+    let load_end = &raw const __boot_load_end as usize;
+    let end = &raw const __boot_end as usize;
+    let stored = &raw const __boot_lma as *const u32;
+    let words = (load_end - run as usize) / 4;
+    // SAFETY: psoxide-boot.ld lays these out word aligned: `words` words stored at `__boot_lma`
+    // inside the loaded image and as many at `__boot_start`, memory nothing uses yet; no code runs
+    // from either. The copy runs away from the overlap, a word at a time.
+    unsafe {
+        if (run as usize) < (stored as usize) {
+            for i in 0..words {
+                core::ptr::write_volatile(run.add(i), core::ptr::read_volatile(stored.add(i)));
+            }
+        } else {
+            for i in (0..words).rev() {
+                core::ptr::write_volatile(run.add(i), core::ptr::read_volatile(stored.add(i)));
+            }
+        }
+        let mut at = load_end;
+        while at < end {
+            core::ptr::write_volatile(at as *mut u32, 0);
+            at += 4;
+        }
+    }
+    psx_rt::cache::flush_instruction_cache_range(run as u32, load_end as u32);
+}
+
+#[cfg(target_arch = "mips")]
+core::arch::global_asm!(
+    ".section .text.__boot_entry,\"ax\",@progbits",
+    ".globl __boot_entry",
+    ".set noreorder",
+    "__boot_entry:",
+    "move  $s0, $a0",
+    "move  $s1, $a1",
+    "move  $s2, $a2",
+    "jal   __boot_entry_rs",
+    "nop",
+    "move  $a0, $s0",
+    "move  $a1, $s1",
+    "j     _start",
+    "move  $a2, $s2",
+    ".set reorder",
+);

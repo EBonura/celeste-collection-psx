@@ -381,7 +381,23 @@ const OBJ0: Obj = Obj {
 /// cap of 48 silently dropped every object past it in scan order, so the later
 /// parts of levels 3-7 lost their spikes, grapplers, checkpoints and crumbles.
 const MAX_OBJ: usize = 224;
-static mut OBJ: [Obj; MAX_OBJ] = [OBJ0; MAX_OBJ];
+// Zero-filled storage (.bss), not 39 KB of repeated `OBJ0` in the image (a shorter load);
+// `reset_storage` gives it `OBJ0` before the cart starts.
+// SAFETY: `Obj` holds only integers, bools, fixed-point words, `usize` links and a field-less enum
+// whose first variant is 0, so the all-zero bit pattern is a valid `Obj`.
+static mut OBJ: [Obj; MAX_OBJ] = unsafe { core::mem::zeroed() };
+
+/// Give the object table its initial value (`OBJ0`), what the image held before it moved to
+/// zero-filled storage. Call before [`init`].
+#[inline(never)]
+pub fn reset_storage() {
+    // SAFETY: single-threaded cart start-up; nothing holds a reference into the table.
+    unsafe {
+        for i in 0..MAX_OBJ {
+            OBJ[i] = OBJ0;
+        }
+    }
+}
 static mut PLAYER: usize = NONE;
 static mut HAVE_GRAPPLE: bool = false;
 // Active checkpoint oid (-1 = none); reset per level. The player respawns here.

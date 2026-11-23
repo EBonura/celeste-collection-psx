@@ -25,3 +25,5 @@ psx-pad  = { path = "../.psoxide/sdk/crates/psx-pad" }
 psx-mc   = { path = "../.psoxide/sdk/crates/psx-mc" }
 psx-settings = { path = "../.psoxide/sdk/crates/psx-settings" }
 psx-rt   = { path = "../.psoxide/sdk/crates/psx-rt" }
+# The journeys' receipts (SETTINGS_JOURNEY), enabled by a game crate's `receipts` feature.
+psx-telemetry = { path = "../.psoxide/sdk/crates/psx-telemetry" }

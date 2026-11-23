@@ -46,3 +46,6 @@ __pycache__/
 # Reference audio may also be a symlink into another checkout
 audio-ref
 tools/psx-audio-capture/Cargo.lock
+/dist/*.boot-env
+/dist/SCENES.TBL*
+/dist/menu-boot.env

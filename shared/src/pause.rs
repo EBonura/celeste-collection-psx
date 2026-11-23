@@ -116,6 +116,11 @@ impl Pause {
         }
     }
 
+    /// The highlighted row, and whether it is Quit to Menu (for the journeys' receipts).
+    pub fn row(&self) -> (u8, bool) {
+        (self.sel, self.sel == self.quit_row())
+    }
+
     fn row_count(&self) -> u8 {
         if self.fly {
             8

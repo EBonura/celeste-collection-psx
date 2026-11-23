@@ -31,7 +31,7 @@ const TITLE: &str = "CELESTE COLLECTION";
 static mut SYNCED: Option<[u8; RECORD_LEN]> = None;
 
 /// The live settings.
-fn current() -> Settings {
+pub fn current() -> Settings {
     Settings {
         sfx: sfx::sfx_volume().min(8) as u8,
         music: sfx::music_volume().min(8) as u8,
@@ -61,15 +61,25 @@ pub fn load() {
     let Some((settings, legacy)) = Settings::decode(&buf[..len]) else {
         return;
     };
-    // Every setter clamps/wraps on its own, so a stale payload from a future
-    // layout can nudge a setting but never wedge the game.
+    apply(settings);
+    // A file from an earlier release stays unsynced, so the next save rewrites it as a record.
+    set_synced(!legacy);
+}
+
+/// Make `settings` the live settings. Every setter clamps/wraps on its own, so a stale payload
+/// from a future layout can nudge a setting but never wedge the game.
+pub fn apply(settings: Settings) {
     sfx::set_sfx_volume(settings.sfx as u16); // clamps to 0..=8
     sfx::set_music_volume(settings.music as u16); // clamps to 0..=8
     backend::set_pixel_scale(settings.pixel_scale as i16); // clamps to 1|2
     backend::set_side_preset(settings.side_preset); // wraps % preset count
     backend::set_brightness(settings.brightness);
-    // A file from an earlier release stays unsynced, so the next save rewrites it as a record.
-    unsafe { SYNCED = if legacy { None } else { current().encode() } };
+}
+
+/// Record whether the card holds the live settings: true marks them synced, false forces the
+/// next [`save`] to write.
+pub fn set_synced(on: bool) {
+    unsafe { SYNCED = if on { current().encode() } else { None } };
 }
 
 /// Write the settings file if the live settings differ from the card's.

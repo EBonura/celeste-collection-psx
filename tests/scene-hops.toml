@@ -1,0 +1,235 @@
+# The collection's scenes (menu, Classic, Lani: one resident image) and the handoff block: boot ->
+# menu -> Classic -> pause -> Quit to Menu -> Lani -> back to the menu, with an SFX volume change
+# made in the menu's settings and another in Classic's pause menu, each checked in the handoff
+# block after every switch and in the live setting at the end. SCENE_BLOCK + 0x14 is the current
+# scene (0 menu, 1 Classic, 2 Lani), + 0x16 the previous one, + 0x1c the switch count, + 0x39 the
+# psx-settings record's SFX volume in percent (slider step 8 = 100, 7 = 88, 6 = 75), + 0x81 the
+# menu's highlighted cart (CORE-ABI.md section 2). No memory card: the block is the settings' only
+# home besides the live state.
+name = "celeste-scene-hops"
+title = "Scene hops: boot, menu, Classic, pause quit, Lani, menu; SFX volume in the block at every switch"
+disc = ["build/gate/celeste-collection.cue"]
+symbols = ["build/gate/celeste-collection.map"]
+pad = "dualshock"
+memcard = "none"
+max_ticks = 6000
+
+[[step]]
+label = "the image wrote the handoff block (a cold boot)"
+wait_until = { kind = "ram", sym = "SCENE_BLOCK", op = "eq", value = 0x42435350 }
+timeout = 3000
+
+[[step]]
+checkpoint = "boot-splash"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x14
+size = 2
+value = 0
+note = "the menu scene is current (the boot-only splash plays)"
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x39
+size = 1
+value = 100
+note = "default SFX volume in the block"
+
+[[step]]
+label = "skip the splash: the cover menu is ready"
+press = ["circle"]
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 900
+
+[[step]]
+label = "the cover menu is ready"
+wait_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 600
+
+[[step]]
+label = "open collection settings"
+press = ["start"]
+hold_until = { kind = "ram", sym = "SETTINGS_JOURNEY", offset = 0, op = "eq", value = 2 }
+timeout = 120
+
+[[step]]
+label = "lower SFX volume by one step (the first row)"
+press = ["left"]
+hold_until = { kind = "ram", sym = "SETTINGS_JOURNEY", offset = 8, op = "eq", value = 7 }
+timeout = 120
+
+[[step]]
+checkpoint = "menu-settings-edited"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SETTINGS_JOURNEY"
+offset = 8
+value = 7
+note = "SFX slider at seven of eight steps"
+
+[[step]]
+label = "close settings (no card: nothing written)"
+press = ["circle"]
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 300
+
+[[step]]
+label = "launch Classic"
+press = ["cross"]
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 3 }
+timeout = 600
+
+[[step]]
+label = "the switch to Classic completes"
+wait_until = { kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 1 }
+timeout = 900
+
+[[step]]
+label = "Classic shows its title"
+wait_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 20, signed = true, op = "eq", value = 31 }
+timeout = 900
+
+[[step]]
+checkpoint = "classic-title"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x39
+size = 1
+value = 88
+note = "the menu's SFX change reached Classic"
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x16
+size = 2
+value = 0
+
+[[step]]
+label = "start Classic"
+press = ["cross"]
+hold_until = { kind = "ram", sym = "CELESTE_JOURNEY", offset = 24, op = "eq", value = 1 }
+timeout = 900
+
+[[step]]
+label = "pause"
+press = ["start"]
+hold_until = { kind = "ram", sym = "SETTINGS_JOURNEY", offset = 0, op = "eq", value = 1 }
+timeout = 120
+
+[[step]]
+label = "lower SFX volume once more in the pause menu (first row)"
+press = ["left"]
+hold_until = { kind = "ram", sym = "SETTINGS_JOURNEY", offset = 8, op = "eq", value = 6 }
+timeout = 120
+
+[[step]]
+label = "up wraps to Quit to Menu"
+press = ["up"]
+hold_until = { kind = "ram", sym = "SETTINGS_JOURNEY", offset = 16, op = "eq", value = 1 }
+timeout = 120
+
+[[step]]
+label = "Quit to Menu: the switch to the menu completes"
+press = ["cross"]
+hold_until = { kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }
+timeout = 900
+
+[[step]]
+label = "the cover menu is ready again"
+wait_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 600
+
+[[step]]
+checkpoint = "menu-after-classic"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x39
+size = 1
+value = 75
+note = "the pause menu's SFX change reached the menu"
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x16
+size = 2
+value = 1
+
+[[step]]
+label = "highlight Lani"
+press = ["right"]
+hold_until = { kind = "ram", sym = "SCENE_BLOCK", offset = 0x81, size = 1, op = "eq", value = 1 }
+timeout = 60
+
+[[step]]
+label = "launch Lani"
+press = ["cross"]
+hold_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 3 }
+timeout = 600
+
+[[step]]
+label = "the switch to Lani completes"
+wait_until = { kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 2 }
+timeout = 900
+
+[[step]]
+label = "Lani's cart has published its first observation"
+wait_until = { kind = "ram", sym = "LANI_JOURNEY", offset = 80, op = "eq", value = 1 }
+timeout = 900
+
+[[step]]
+checkpoint = "lani-title"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x39
+size = 1
+value = 75
+note = "the SFX volume reached Lani"
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x81
+size = 1
+value = 1
+note = "the menu's last cart is Lani"
+
+[[step]]
+label = "Select+Start: the switch back to the menu completes"
+press = ["select", "start"]
+hold_until = { kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }
+timeout = 900
+
+[[step]]
+label = "the cover menu is ready, Lani still highlighted"
+wait_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+timeout = 600
+
+[[step]]
+label = "open collection settings"
+press = ["start"]
+hold_until = { kind = "ram", sym = "SETTINGS_JOURNEY", offset = 0, op = "eq", value = 2 }
+timeout = 120
+
+[[step]]
+checkpoint = "menu-settings-after-hops"
+golden = false
+[[step.assert]]
+kind = "ram"
+sym = "SCENE_BLOCK"
+offset = 0x1c
+value = 4
+note = "menu->Classic, Classic->menu, menu->Lani, Lani->menu"
+[[step.assert]]
+kind = "ram"
+sym = "SETTINGS_JOURNEY"
+offset = 8
+value = 6
+note = "six of eight SFX steps: the live setting came back through every switch"

@@ -67,6 +67,7 @@ dependencies = [
  "psx-settings",
  "psx-sfx",
  "psx-spu",
+ "psx-telemetry",
  "psx-vram",
 ]
 

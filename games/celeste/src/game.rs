@@ -413,9 +413,27 @@ const OBJ0: Obj = Obj {
 };
 
 // ---- global game state (mirrors celeste.cpp file-scope statics) ----
-static mut OBJECTS: [Obj; MAX_OBJECTS] = [OBJ0; MAX_OBJECTS];
+// The object table and the dummy player start as zero-filled storage (.bss), not 76 KB of
+// repeated `OBJ0` in the image (a shorter load), and `reset_storage` gives them `OBJ0` before the
+// cart starts. Every field of `Obj` is plain data, so zero is a valid value until then.
+// SAFETY (both): `Obj` holds only integers, bools, fixed-point words and a field-less enum whose
+// first variant is 0, so the all-zero bit pattern is a valid `Obj`.
+static mut OBJECTS: [Obj; MAX_OBJECTS] = unsafe { core::mem::zeroed() };
 static mut NEXT_ID: i16 = 0;
-static mut PLAYER_DUMMY: Obj = OBJ0;
+static mut PLAYER_DUMMY: Obj = unsafe { core::mem::zeroed() };
+
+/// Give the object table and the dummy player their initial value (`OBJ0`), what the image held
+/// before they moved to zero-filled storage. Call before [`init`].
+#[inline(never)]
+pub fn reset_storage() {
+    // SAFETY: single-threaded cart start-up; nothing holds a reference into either static.
+    unsafe {
+        for i in 0..MAX_OBJECTS {
+            OBJECTS[i] = OBJ0;
+        }
+        PLAYER_DUMMY = OBJ0;
+    }
+}
 
 static mut ROOM: VecI = VecI { x: 0, y: 0 };
 static mut FREEZE: i32 = 0;

@@ -1,12 +1,16 @@
 //! Celeste Classic Collection -- the headline artifact.
 //!
-//! Boot flow: a fading Bonnie Studios intro (logo + "Built with PSoXIDE") ->
-//! a cover menu showing the real PICO-8 cart labels for each demade game. Pick
+//! Boot flow: the SDK splash (logo + "Built with PSoXide", boot-only memory, played once after a
+//! BIOS boot) -> a cover menu showing the real PICO-8 cart labels for each demade game. Pick
 //! one with the D-pad and press X to launch it, Start for the settings screen
 //! or Select for a scrolling credits screen. Each game is linked in as a
 //! library and exposes `run()`, which boots the game and returns when the
 //! player holds Select+Start or picks "Quit to Menu" in its pause menu --
 //! dropping back here to the menu.
+//!
+//! For the SDK's scene core the image holds three scenes (the menu, Classic, Lani), resident
+//! together from boot, so a switch between them reads nothing from the disc; `scene_core` is the
+//! seam to the core.
 //!
 //! Button rules, the same on every screen: Cross confirms or advances, Circle
 //! or Start goes back, and a press only counts on the frame its button goes
@@ -26,11 +30,15 @@
 
 #![no_std]
 #![no_main]
+#![feature(asm_experimental_arch)]
 
 extern crate psx_rt;
 
 mod assets;
 mod atmos;
+mod scene_core;
+
+use scene_core::{SceneId, CLASSIC, LANI, MENU};
 
 use assets::cover_celeste::COVER_CELESTE;
 use assets::cover_celeste2::COVER_CELESTE2;
@@ -85,7 +93,7 @@ const SCREEN_CX: i16 = 160;
 
 /// Which shell screen the collection is on, for the journeys and the cross-emulator smoke (a receipts
 /// build only; the shipping disc has no such word): 1 the boot splash, 2 the cover menu ready for a
-/// press, 3 a game was picked.
+/// press, 3 a game was picked, 4 the settings screen is open.
 #[cfg(feature = "receipts")]
 #[no_mangle]
 pub static mut SHELL_PHASE: u32 = 0;
@@ -102,28 +110,49 @@ fn shell_phase(_phase: u32) {}
 #[no_mangle]
 fn main() {
     psx_rt::interrupts::install_vblank_counter();
-    // Apply saved settings (volumes, pixel scale, borders) from the memory
-    // card, once, before anything renders. No card / no save = defaults.
-    pico8::save::load();
+    // The settings (volumes, pixel scale, borders, brightness) come from the handoff block, or from
+    // the memory card on a cold entry (no card / no save = defaults), once, before anything renders.
+    let entry = scene_core::scene_entered(MENU);
     atmos::init(); // seed the menu's cloud/particle backdrops
-    show_intro(); // Bonnie Studios logo fade -> menu (once, on boot)
+    if entry.previous.is_none() {
+        show_intro(); // the SDK splash, once, from boot-only memory
+    }
     let mut first = true; // play the intro->menu transition only on the first menu
-    let mut sel = 0usize; // highlighted game, kept across every trip away from the menu
+    let mut sel = scene_core::last_cart(); // highlighted game, kept across every trip away
+    let mut scene = MENU;
     loop {
-        match show_menu(first, &mut sel) {
-            MenuPick::Play => {
-                if sel == 0 {
-                    celeste::run()
-                } else {
-                    celeste2::run()
-                }
+        // The scene dispatch: every scene is resident, so a switch is this call.
+        let next: SceneId = match scene {
+            CLASSIC => {
+                celeste::run();
+                MENU
             }
+            LANI => {
+                celeste2::run();
+                MENU
+            }
+            _ => {
+                let next = menu_scene(first, &mut sel);
+                first = false;
+                next
+            }
+        };
+        scene_core::switch_to(next);
+        scene = next;
+    }
+}
+
+/// The menu scene: the cover menu, the credits and the settings, until a game is picked. Returns
+/// the picked game's scene. The game/credits clobbered VRAM and left the GPU in their own mode;
+/// each show_menu() re-inits and re-uploads everything.
+fn menu_scene(mut first: bool, sel: &mut usize) -> SceneId {
+    loop {
+        match show_menu(first, sel) {
+            MenuPick::Play => return if *sel == 0 { CLASSIC } else { LANI },
             MenuPick::Credits => show_credits(),
             MenuPick::Settings => show_settings(),
         }
         first = false;
-        // The game/credits clobbered VRAM and left the GPU in its own mode; the
-        // next show_menu() re-inits and re-uploads everything.
     }
 }
 
@@ -131,6 +160,9 @@ fn main() {
 const ANY_FACE: u16 = button::CROSS | button::CIRCLE | button::START;
 
 /// Boot splash: the SDK's, with the studio mark above the line. Any face button skips it.
+/// Boot-only memory (sdk/psoxide-boot.ld), with psx-splash: run once after a BIOS boot.
+#[link_section = ".boot_only.show_intro"]
+#[inline(never)]
 fn show_intro() {
     shell_phase(1);
     // SAFETY: the one place the collection takes the GPU DMA token; nothing else holds it while
@@ -335,6 +367,7 @@ fn show_menu(first: bool, sel: &mut usize) -> MenuPick {
         }
         if *sel != old_sel {
             menusfx::play(menusfx::SFX_NAV); // cursor moved
+            scene_core::set_last_cart(*sel); // kept for the next time the menu opens
         }
         if pressed(button::CROSS) {
             // Launch sound, then dissolve to black before the game boots (this also
@@ -461,8 +494,10 @@ fn show_settings() {
     // A PERSISTED setting (volumes/pixel/borders; not Screen or Fly) was
     // touched; written to the memory card once, when the screen closes.
     let mut dirty = false;
+    shell_phase(4);
 
     loop {
+        pico8::journey::observe_settings(2, sel as i32, false);
         let b = pico8::input::poll_buttons();
         let edges = pad.update(b.bits());
         let pressed = |m: u16| edges.just_pressed(m);
@@ -528,6 +563,7 @@ fn show_settings() {
             if dirty {
                 pico8::save::save();
             }
+            pico8::journey::observe_settings(0, 0, false);
             return;
         }
 

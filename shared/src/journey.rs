@@ -83,3 +83,30 @@ const _: () = {
     assert!(core::mem::offset_of!(JourneyState, published) == 80);
     assert!(core::mem::offset_of!(JourneyState, sequence) == 84);
 };
+
+psx_telemetry::receipts! {
+/// The settings screens, for the journeys (receipts builds only): word 0 the screen open (0 none,
+/// 1 a cart's pause menu, 2 the menu scene's settings screen), word 1 its highlighted row, words 2
+/// and 3 the live SFX and music volumes (slider steps 0..=8), word 4 1 while the highlighted row is
+/// the pause menu's Quit to Menu. Every scene image links its own copy.
+#[no_mangle]
+pub static mut SETTINGS_JOURNEY: [i32; 5] = [0; 5];
+}
+
+/// Publish the settings screen state for the journeys (nothing in a shipping build).
+#[inline(always)]
+pub fn observe_settings(_screen: i32, _row: i32, _on_quit: bool) {
+    psx_telemetry::receipts! {
+        let words = [
+            _screen,
+            _row,
+            crate::sfx::sfx_volume() as i32,
+            crate::sfx::music_volume() as i32,
+            _on_quit as i32,
+        ];
+        // SAFETY: a single-threaded volatile store to words only the host reads.
+        unsafe {
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(SETTINGS_JOURNEY), words);
+        }
+    }
+}

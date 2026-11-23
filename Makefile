@@ -136,7 +136,8 @@ clean:
 # ---- Celeste Classic Collection (headline artifact) ------------------
 # One bootable image: a cover menu that launches either game. Both games
 # are linked into the launcher as libraries, so this is a single boot EXE
-# (mkisopsx packs exactly one).
+# (mkisopsx packs exactly one). Under the SDK's scene core it is one resident image holding three
+# scenes (menu, Classic, Lani); its top of RAM is games/scene-ram.ld, below the core's window.
 COLLECTION_DIR := $(ROOT)/games/celeste-collection
 COLLECTION_EXE := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.exe
 COLLECTION_MAP ?= $(DIST)/celeste-collection.map
@@ -148,11 +149,27 @@ COLLECTION_PRESENT := celeste::game::update celeste2::run
 no64: psoxide
 	$(PSOXIDE_DEV) no64-scan shared/src games/celeste/src games/celeste2/src games/celeste-collection/src
 
+# The splash lives in the SDK's boot-only memory (sdk/psoxide-boot.ld), which takes two links:
+# `$(call link_collection,CARGO,MAP)` links with placeholder addresses (build.rs), reads `__bss_end`
+# and `__data_end` from the map into MAP.boot-env, links again with them and checks .data and .bss
+# stayed put. Every later cargo run in a recipe sources that file, or it would relink with the
+# placeholders. The first link drops the linked image so each build writes its map afresh.
+map_sym = awk '/ $(1) = \./ { print "0x" $$1; exit }' $(2)
+define link_collection
+	rm -f $(COLLECTION_DIR)/target/$(TARGET)/release/deps/celeste_collection-*.exe
+	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(2)" cargo $(1)
+	echo "export COLLECTION_BOOT_VMA=$$($(call map_sym,__bss_end,$(2))) COLLECTION_BOOT_LMA=$$($(call map_sym,__data_end,$(2)))" > $(2).boot-env
+	. $(2).boot-env && cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(2)" cargo $(1) \
+		&& [ "$$($(call map_sym,__bss_end,$(2)))" = "$$COLLECTION_BOOT_VMA" ] \
+		&& [ "$$($(call map_sym,__data_end,$(2)))" = "$$COLLECTION_BOOT_LMA" ] \
+		|| { echo "collection: .data or .bss moved between the two boot-only links"; exit 1; }
+endef
+
 collection: repro-rustc gate-celeste-collection
 	@mkdir -p $(DIST)
-	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
+	$(call link_collection,build --release,$(COLLECTION_MAP))
 	@for s in $(COLLECTION_PRESENT); do grep -qE "[[:space:]]$$s$$" "$(COLLECTION_MAP)" || { echo "collection: $$s is missing from the link map (a cart was dropped by LTO)"; exit 1; }; done
-	$(call receipt,celeste-collection,$(COLLECTION_EXE))
+	. $(COLLECTION_MAP).boot-env && $(call receipt,celeste-collection,$(COLLECTION_EXE))
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
 # The journeys' disc: the collection built with the result receipts (CELESTE_JOURNEY, LANI_JOURNEY), a
@@ -163,8 +180,8 @@ collection-gate: repro-rustc
 	@mkdir -p $(GATE_DIST)
 	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
 		--sdk $(PSOXIDE) --crate games/celeste-collection -- $(GATE_CARGO)
-	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(GATE_DIST)/celeste-collection.map" cargo $(GATE_CARGO)
-	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
+	$(call link_collection,$(GATE_CARGO),$(GATE_DIST)/celeste-collection.map)
+	. $(GATE_DIST)/celeste-collection.map.boot-env && cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
 		--sdk $(PSOXIDE) --crate games/celeste-collection --receipt $(COLLECTION_EXE) -- $(GATE_CARGO)
 	cd $(MKISOPSX) && cargo run --release -- \
 		--exe $(COLLECTION_EXE) \

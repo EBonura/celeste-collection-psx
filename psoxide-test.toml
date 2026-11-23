@@ -31,7 +31,7 @@ build = "ship"
 files = "tests/*.toml"
 # The old gate ran every journey on the hardware renderer too (--strict, real and mister).
 hw = true
-precheck = ["cart-reset", "smoke-boot-play"]
+precheck = ["cart-reset", "smoke-boot-play", "scene-hops"]
 
 [cross]
 smoke = ["tests/smoke-boot-play.toml"]
@@ -77,3 +77,58 @@ build = "ship"
 tape = "pgo/classic.pxtape"
 polls = [2800, 6000]
 offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
+
+# Load time on the gate disc (it carries the receipts the conditions name), one replay per row of the
+# poll-bound tape pgo/loads.pxtape: splash skip, Classic launched and quit with Select+Start, Lani
+# highlighted, launched and quit. Every scene is in the one resident image, so a switch reads no
+# disc. SCENE_BLOCK + 0x14 is the current scene (0 menu, 1 Classic, 2 Lani), + 0x16 the previous
+# one, + 0x81 the menu's highlighted cart (CORE-ABI.md section 2).
+[[load]]
+name = "boot-to-splash"
+build = "gate"
+until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 1 }
+max_polls = 200
+
+[[load]]
+name = "boot-to-menu"
+build = "gate"
+tape = "pgo/loads.pxtape"
+launch_args = ["--dualshock-pad"]
+until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }
+max_polls = 400
+
+[[load]]
+name = "menu-to-classic"
+build = "gate"
+tape = "pgo/loads.pxtape"
+launch_args = ["--dualshock-pad"]
+from = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }, { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 3 }]
+until = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 1 }, { kind = "ram", sym = "CELESTE_JOURNEY", offset = 80, op = "eq", value = 1 }]
+max_polls = 700
+
+[[load]]
+name = "classic-to-menu"
+build = "gate"
+tape = "pgo/loads.pxtape"
+launch_args = ["--dualshock-pad"]
+from = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }, { kind = "ram", sym = "SCENE_BLOCK", offset = 0x16, size = 2, op = "eq", value = 1 }]
+until = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }, { kind = "ram", sym = "SCENE_BLOCK", offset = 0x16, size = 2, op = "eq", value = 1 }, { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }]
+max_polls = 1000
+
+[[load]]
+name = "menu-to-lani"
+build = "gate"
+tape = "pgo/loads.pxtape"
+launch_args = ["--dualshock-pad"]
+from = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }, { kind = "ram", sym = "SCENE_BLOCK", offset = 0x81, size = 1, op = "eq", value = 1 }, { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 3 }]
+until = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 2 }, { kind = "ram", sym = "LANI_JOURNEY", offset = 80, op = "eq", value = 1 }]
+max_polls = 1200
+
+[[load]]
+name = "lani-to-menu"
+build = "gate"
+tape = "pgo/loads.pxtape"
+launch_args = ["--dualshock-pad"]
+from = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }, { kind = "ram", sym = "SCENE_BLOCK", offset = 0x16, size = 2, op = "eq", value = 2 }]
+until = [{ kind = "ram", sym = "SCENE_BLOCK", offset = 0x14, size = 2, op = "eq", value = 0 }, { kind = "ram", sym = "SCENE_BLOCK", offset = 0x16, size = 2, op = "eq", value = 2 }, { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 2 }]
+max_polls = 1500

@@ -16,10 +16,18 @@ pub fn run_pause(fb: &mut Screen, cursor_sfx: i32, bg: (u8, u8, u8), draw: fn())
     let mut menu = Pause::new(cursor_sfx, true); // show the debug FLY row
     loop {
         match menu.update(pause::mask(crate::input::poll_buttons())) {
-            Some(Exit::Resume) => return false,
-            Some(Exit::QuitToMenu) => return true,
+            Some(Exit::Resume) => {
+                crate::journey::observe_settings(0, 0, false);
+                return false;
+            }
+            Some(Exit::QuitToMenu) => {
+                crate::journey::observe_settings(0, 0, false);
+                return true;
+            }
             None => {}
         }
+        let (row, on_quit) = menu.row();
+        crate::journey::observe_settings(1, row as i32, on_quit);
 
         fb.clear(bg.0, bg.1, bg.2);
         draw(); // frozen game behind the overlay

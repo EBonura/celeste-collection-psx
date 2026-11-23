@@ -86,6 +86,7 @@ pub fn run() {
 
     // Seed the RNG before init (clouds/particles use it), like main.cpp.
     pico8::rng::srand(42);
+    game::reset_storage();
     game::init();
 
     // The launcher launched us with Cross still held; prime the input model so
@@ -197,6 +198,7 @@ pub fn run_scene(x: i32, y: i32) {
     sfx::init(AUDIO);
     backend::set_screen_follow(false);
     pico8::rng::srand(42);
+    game::reset_storage();
     game::start_at_room(x, y);
     psx_rt::interrupts::install_vblank_counter();
     let mut fb = Screen::new();

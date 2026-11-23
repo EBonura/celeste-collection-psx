@@ -63,6 +63,10 @@ const _: () = assert!(RECORD_LEN <= SETTINGS_BYTES);
 const RAM_SIZE: u32 = parse_hex(env!("SCENE_RAM_SIZE"));
 /// The initial stack pointer: 100h below the top of RAM, as psoxide.ld puts it.
 const STACK_INIT: u32 = 0x8000_0000 + RAM_SIZE - 0x100;
+/// `STACK_INIT` as `lui` + `addiu` halves (the assembler's `%hi` of a constant this large
+/// evaluated to 0).
+const STACK_HI: u32 = STACK_INIT.wrapping_add(0x8000) >> 16;
+const STACK_LO: i32 = STACK_INIT as u16 as i16 as i32;
 
 /// The handoff block as the link map names it (games/scene-block.ld places `.scene_block` at
 /// 0x801FFF00, NOLOAD): the harness and the journeys read `SCENE_BLOCK` + offset. Only its address
@@ -129,8 +133,8 @@ pub struct Entry {
 /// reset with a stale block in RAM, a foreign loader) it reads the memory card, as the collection
 /// always did at boot, and writes a fresh block. `previous` is `None` exactly on that second path,
 /// which is when the menu plays the splash.
-// Runs once, at the start of `main`: boot-only memory (sdk/psoxide-boot.ld), with `settings`.
-#[link_section = ".boot_only.scene_entered"]
+// Runs once, at the start of `main`: cold code, with `settings`.
+#[link_section = ".psx_cold.scene_entered"]
 #[inline(never)]
 pub fn scene_entered(id: SceneId) -> Entry {
     if valid() && read(OFF_FLAGS) & FLAG_SWITCHED != 0 && current_scene() == id {
@@ -160,9 +164,9 @@ pub fn scene_entered(id: SceneId) -> Entry {
 /// Make the block's settings the live ones: the psx-settings record (volumes, pixel scale,
 /// borders, brightness) and the private bytes (fly, screen follow). `false` when the block is not
 /// valid or its record does not decode, leaving the live settings as they are. Only
-/// [`scene_entered`] calls it, so it is boot-only too; the card is then taken as not synced, so the
-/// next save after a change writes it.
-#[link_section = ".boot_only.settings"]
+/// [`scene_entered`] calls it (cold code too); the card is then taken as not synced, so the next
+/// save after a change writes it.
+#[link_section = ".psx_cold.settings"]
 #[inline(never)]
 pub fn settings() -> bool {
     if !valid() {
@@ -222,54 +226,23 @@ pub fn switch_to(scene: SceneId) {
     write(OFF_SWITCHES, read(OFF_SWITCHES).wrapping_add(1));
 }
 
-// The image's entry when it links the SDK's boot-only memory (sdk/psoxide-boot.ld sets the PS-X
-// header's PC to it): `$sp` to `STACK_INIT` first (the BIOS starts a disc's program with `$sp` =
-// 0x801FFFF0, SYSTEM.CNF's STACK, inside the handoff block; the core's `__core_boot` does this,
-// CORE-ABI.md 4.3), then the boot-only sections moved from where the file stores them (after
-// `.data`) to where they run (after `.bss`), from the end backwards because the two ranges may
-// overlap, their own bss zeroed, and on to psx-rt's `_start`. No stack, `$a0..$a3` untouched.
+// The image's entry (games/scene-ram.ld sets psoxide.ld's `__initial_pc` to it): `$sp` to
+// `STACK_INIT` before anything uses the stack, then psx-rt's `_start`. The BIOS starts a disc's
+// program with `$sp` = 0x801FFFF0 (SYSTEM.CNF's STACK), inside the handoff block; the core's
+// `__core_boot` does this for every program (CORE-ABI.md 4.3). `$a0..$a3` untouched.
 #[cfg(target_arch = "mips")]
 core::arch::global_asm!(
     r#"
-    .section .text.__boot_entry,"ax",@progbits
-    .globl __boot_entry
-    .weak __boot_lma
-    .weak __boot_start
-    .weak __boot_load_end
-    .weak __boot_end
+    .section .text.__scene_boot,"ax",@progbits
+    .globl __scene_boot
     .set push
     .set noreorder
-    .set noat
-__boot_entry:
-    lui   $sp, %hi({stack_init})
-    addiu $sp, $sp, %lo({stack_init})
-    lui   $t0, %hi(__boot_lma)
-    addiu $t0, $t0, %lo(__boot_lma)
-    lui   $t1, %hi(__boot_start)
-    addiu $t1, $t1, %lo(__boot_start)
-    lui   $t2, %hi(__boot_load_end)
-    addiu $t2, $t2, %lo(__boot_load_end)
-    subu  $t3, $t2, $t1
-    addu  $t4, $t0, $t3
-1:  beq   $t2, $t1, 2f
-    nop
-    addiu $t4, $t4, -4
-    lw    $t5, 0($t4)
-    addiu $t2, $t2, -4
-    b     1b
-    sw    $t5, 0($t2)
-2:  lui   $t1, %hi(__boot_load_end)
-    addiu $t1, $t1, %lo(__boot_load_end)
-    lui   $t2, %hi(__boot_end)
-    addiu $t2, $t2, %lo(__boot_end)
-3:  beq   $t1, $t2, 4f
-    nop
-    sw    $zero, 0($t1)
-    b     3b
-    addiu $t1, $t1, 4
-4:  j     _start
-    nop
+__scene_boot:
+    lui   $sp, {stack_hi}
+    j     _start
+    addiu $sp, $sp, {stack_lo}
     .set pop
 "#,
-    stack_init = const STACK_INIT,
+    stack_hi = const STACK_HI,
+    stack_lo = const STACK_LO,
 );

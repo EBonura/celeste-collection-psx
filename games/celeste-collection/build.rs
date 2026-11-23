@@ -1,17 +1,9 @@
 //! Inject PSoXide's PSX linker scripts into the final link, by absolute path derived from this
-//! crate's location, in this order: the top of RAM the collection links for
-//! (`games/scene-ram.ld`, under the scene core's window), the SDK's boot-only memory for the
-//! splash (`sdk/psoxide-boot.ld`), psoxide.ld, and the handoff block's section
-//! (`games/scene-block.ld`).
-//!
-//! The boot-only memory takes two links: the first with placeholder `BOOT_VMA`/`BOOT_LMA` to learn
-//! `__bss_end` and `__data_end`, the second with those (the Makefile passes them as
-//! `COLLECTION_BOOT_VMA`/`COLLECTION_BOOT_LMA` and checks they held).
+//! crate's location, in this order: the top of RAM the collection links for and its entry
+//! (`games/scene-ram.ld`, under the scene core's window), psoxide.ld, and the handoff block's
+//! section (`games/scene-block.ld`).
 
 use std::path::PathBuf;
-
-/// Placeholder boot-only addresses for the first link (any address past the image).
-const BOOT_PLACEHOLDER: &str = "0x80180000";
 
 /// The `RAM_SIZE_OVERRIDE` line of `games/scene-ram.ld`, or `PSX_RAM_SIZE_OVERRIDE` when the
 /// environment sets it.
@@ -48,28 +40,23 @@ fn main() {
     let sdk = repo_root.join(".psoxide/sdk");
     let ld = sdk.join("psoxide.ld");
     let ld = ld.canonicalize().unwrap_or(ld);
-    let boot_ld = sdk.join("psoxide-boot.ld");
     let block_ld = games.join("scene-block.ld");
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     // The top of RAM, as a `-T` file ahead of psoxide.ld so the link map records it.
     let ram = ram_size(games);
     let ram_ld = out.join("scene-ram.ld");
-    std::fs::write(&ram_ld, format!("RAM_SIZE_OVERRIDE = {ram:#x};\n"))
-        .expect("write scene-ram.ld");
+    std::fs::write(
+        &ram_ld,
+        format!("RAM_SIZE_OVERRIDE = {ram:#x};\n__initial_pc = __scene_boot;\n"),
+    )
+    .expect("write scene-ram.ld");
     println!("cargo:rustc-env=SCENE_RAM_SIZE={ram:#x}");
     println!("cargo:rustc-link-arg=-T{}", ram_ld.display());
 
-    // The splash's boot-only memory.
-    println!("cargo:rerun-if-env-changed=COLLECTION_BOOT_VMA");
-    println!("cargo:rerun-if-env-changed=COLLECTION_BOOT_LMA");
-    let boot_vma = std::env::var("COLLECTION_BOOT_VMA").unwrap_or(BOOT_PLACEHOLDER.into());
-    let boot_lma = std::env::var("COLLECTION_BOOT_LMA").unwrap_or(BOOT_PLACEHOLDER.into());
-    println!("cargo:rustc-link-arg=-T{}", boot_ld.display());
+    // The entry that moves `$sp` below the core's window before `_start` (scene_core.rs).
     println!("cargo:rustc-link-arg=-u");
-    println!("cargo:rustc-link-arg=__boot_entry");
-    println!("cargo:rustc-link-arg=--defsym=BOOT_VMA={boot_vma}");
-    println!("cargo:rustc-link-arg=--defsym=BOOT_LMA={boot_lma}");
+    println!("cargo:rustc-link-arg=__scene_boot");
 
     // `-T` selects the linker script; `--oformat=binary` dumps a flat
     // PSX-EXE image (the script lays out the executable header) instead
@@ -95,7 +82,7 @@ fn main() {
         println!("cargo:rustc-link-arg=-Map={}", PathBuf::from(map).display());
     }
     println!("cargo:rerun-if-env-changed=PSX_LINK_MAP");
-    for f in [&ld, &boot_ld, &block_ld] {
+    for f in [&ld, &block_ld] {
         println!("cargo:rerun-if-changed={}", f.display());
     }
 }

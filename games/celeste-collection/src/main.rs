@@ -1,7 +1,7 @@
 //! Celeste Classic Collection -- the headline artifact.
 //!
-//! Boot flow: the SDK splash (logo + "Built with PSoXide", boot-only memory, played once after a
-//! BIOS boot) -> a cover menu showing the real PICO-8 cart labels for each demade game. Pick
+//! Boot flow: the SDK splash (logo + "Built with PSoXide", played once after a cold entry) -> a
+//! cover menu showing the real PICO-8 cart labels for each demade game. Pick
 //! one with the D-pad and press X to launch it, Start for the settings screen
 //! or Select for a scrolling credits screen. Each game is linked in as a
 //! library and exposes `run()`, which boots the game and returns when the
@@ -160,8 +160,9 @@ fn menu_scene(mut first: bool, sel: &mut usize) -> SceneId {
 const ANY_FACE: u16 = button::CROSS | button::CIRCLE | button::START;
 
 /// Boot splash: the SDK's, with the studio mark above the line. Any face button skips it.
-/// Boot-only memory (sdk/psoxide-boot.ld), with psx-splash: run once after a BIOS boot.
-#[link_section = ".boot_only.show_intro"]
+/// Cold code: run once after a cold entry. (It belongs in the SDK's boot-only memory,
+/// sdk/psoxide-boot.ld, once that works for a flat-binary Rust link.)
+#[link_section = ".psx_cold.show_intro"]
 #[inline(never)]
 fn show_intro() {
     shell_phase(1);

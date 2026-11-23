@@ -7,16 +7,13 @@
 #                                                        jumps and grapples (pgo/lani.pxtape)
 #   frontend launch --path build/ship/celeste-collection.cue --input-tape frames.pxtape \
 #     --input-tape-transcribe pgo/classic.pxtape --steps 40000000000
-# The scene split loads each scene between the menu and the cart: no pad poll runs during a load,
-# so the transcribed tape's poll indices do not count it.
 import struct, sys
 CROSS, CIRCLE, RIGHT, UP, DOWN, LEFT = 1<<14, 1<<13, 1<<5, 1<<4, 1<<6, 1<<7
 frames = []
 def idle(n): frames.extend([0]*n)
 def press(mask, hold): frames.extend([mask]*hold)
 if len(sys.argv) > 2 and sys.argv[2] == "lani":
-    # Frame timings fit the scene disc: a switch takes up to about 100 frames before the next
-    # screen polls the pad.
+    # Generous idles: the menu is ready well before Right, and Lani's title well before its Cross.
     idle(60); press(CIRCLE, 8); idle(160); press(RIGHT, 8); idle(30); press(CROSS, 8)
     idle(400); press(CROSS, 8)
     idle(400)  # title to level 1, intro settled

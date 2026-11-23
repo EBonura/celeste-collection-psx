@@ -78,6 +78,16 @@ tape = "pgo/classic.pxtape"
 polls = [2800, 6000]
 offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
 
+# The same for Lani's Trek on pgo/lani.pxtape (tools/speed-tape.py ... lani): splash skip, Lani picked
+# and launched, title start, then level 1 with jumps, grapples and deaths from about poll 1050.
+# Polls 1200..4100 are gameplay.
+[[speed]]
+name = "lani"
+build = "ship"
+tape = "pgo/lani.pxtape"
+polls = [1200, 4100]
+offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
+
 # Load time on the gate disc (it carries the receipts the conditions name), one replay per row of the
 # poll-bound tape pgo/loads.pxtape: splash skip, Classic launched and quit with Select+Start, Lani
 # highlighted, launched and quit. Every scene is in the one resident image, so a switch reads no

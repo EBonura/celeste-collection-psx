@@ -49,3 +49,5 @@ tools/psx-audio-capture/Cargo.lock
 /dist/*.boot-env
 /dist/SCENES.TBL*
 /dist/menu-boot.env
+/dist/*.order*
+/dist/*.first.*

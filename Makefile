@@ -153,12 +153,36 @@ no64: psoxide
 # earlier link and leave the map unwritten. Dropping the linked image makes each build relink.
 relink_collection = rm -f $(COLLECTION_DIR)/target/$(TARGET)/release/deps/celeste_collection-*.exe
 
+# The I-cache placement (psoxide-pgo, tools/psoxide-pgo/README.md "order" and "search"): the
+# committed layout profile COLLECTION_LAYOUT, searched on the Classic and Lani speed windows. The
+# shipping link is made twice: the first in plain order (its map and image are what `place` binds
+# the layout to; the search flow scores placements on them), then `psoxide-pgo place` writes the
+# ordering file and the second link follows it (build.rs passes PSOXIDE_LINK_ORDER to ld.lld), and
+# `psoxide-pgo followed` proves it did. COLLECTION_LAYOUT=off links in plain order once. The
+# receipt's own cargo run sees the same ordering file, so it does not relink in plain order.
+# Until a layout is committed the link is plain.
+COLLECTION_LAYOUT ?= $(if $(wildcard $(ROOT)/pgo/celeste-collection.layout),$(ROOT)/pgo/celeste-collection.layout,off)
+COLLECTION_ORDER  := $(DIST)/celeste-collection.order
+COLLECTION_FIRST_MAP := $(DIST)/celeste-collection.first.map
+COLLECTION_FIRST_EXE := $(DIST)/celeste-collection.first.exe
+PGO_TOOL = cargo run -q --release --locked --manifest-path "$(PSOXIDE)/tools/psoxide-pgo/Cargo.toml" --
+ORDERED = $(if $(filter off,$(COLLECTION_LAYOUT)),,PSOXIDE_LINK_ORDER="$(COLLECTION_ORDER)")
+
 collection: repro-rustc gate-celeste-collection
 	@mkdir -p $(DIST)
 	$(relink_collection)
+ifeq ($(COLLECTION_LAYOUT),off)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
+else
+	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_FIRST_MAP)" cargo build --release
+	cp $(COLLECTION_EXE) $(COLLECTION_FIRST_EXE)
+	PSOXIDE="$(PSOXIDE)" $(PGO_TOOL) place "$(COLLECTION_LAYOUT)" "$(COLLECTION_FIRST_MAP)" \
+		"$(COLLECTION_FIRST_EXE)" "$(PSOXIDE)/sdk/psoxide.ld" "$(COLLECTION_ORDER)"
+	cd $(COLLECTION_DIR) && $(REPRO) $(ORDERED) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
+	PSOXIDE="$(PSOXIDE)" $(PGO_TOOL) followed "$(COLLECTION_ORDER)" "$(COLLECTION_MAP)"
+endif
 	@for s in $(COLLECTION_PRESENT); do grep -qE "[[:space:]]$$s$$" "$(COLLECTION_MAP)" || { echo "collection: $$s is missing from the link map (a cart was dropped by LTO)"; exit 1; }; done
-	$(call receipt,celeste-collection,$(COLLECTION_EXE))
+	$(ORDERED) $(call receipt,celeste-collection,$(COLLECTION_EXE))
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
 # The journeys' disc: the collection built with the result receipts (CELESTE_JOURNEY, LANI_JOURNEY), a

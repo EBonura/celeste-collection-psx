@@ -18,14 +18,17 @@
 use pico8::settings_codec::{Settings, RECORD_LEN};
 use pico8::{backend, debug, save};
 
-/// A scene id: the row of the scene table (CORE-ABI.md section 1).
+/// A scene id: the row of the disc's scene table (SCENES.TBL v2, written by `mkisopsx --scenes`
+/// from `games/celeste-collection/scenes.txt`).
 pub type SceneId = u16;
-/// The cover menu, the settings screen and the credits.
-pub const MENU: SceneId = 0;
-/// Celeste Classic.
-pub const CLASSIC: SceneId = 1;
-/// Celeste 2: Lani's Trek.
-pub const LANI: SceneId = 2;
+/// The Program's start scene: the core starts the image through `__core_boot`.
+pub const START: SceneId = 0;
+/// The cover menu, the settings screen and the credits (in-program).
+pub const MENU: SceneId = 1;
+/// Celeste Classic (in-program).
+pub const CLASSIC: SceneId = 2;
+/// Celeste 2: Lani's Trek (in-program).
+pub const LANI: SceneId = 3;
 /// "No scene": the previous scene after a cold entry.
 const NONE: SceneId = 0xffff;
 
@@ -33,21 +36,14 @@ const NONE: SceneId = 0xffff;
 const BLOCK: usize = 0x801f_ff00;
 const MAGIC: u32 = 0x4243_5350; // "PSCB"
 const VERSION: u32 = 1;
-const LENGTH: u32 = 0x100;
 const OFF_MAGIC: usize = 0x00;
 const OFF_VERSION_LENGTH: usize = 0x04;
-const OFF_CORE_HASH: usize = 0x08;
-const OFF_LBA_OFFSET: usize = 0x0c;
-const OFF_TRACK_BASE: usize = 0x10;
 const OFF_SCENES: usize = 0x14; // current (low half), previous (high half)
-const OFF_FLAGS: usize = 0x18;
 const OFF_SWITCHES: usize = 0x1c;
 const OFF_SETTINGS: usize = 0x30;
 const SETTINGS_BYTES: usize = 64;
 const OFF_PRIVATE: usize = 0x80;
 const OFF_NOT_MAGIC: usize = 0xfc;
-/// Flag bit 0: the scene was entered by a switch.
-const FLAG_SWITCHED: u32 = 1 << 0;
 
 /// The collection's use of the scene-private area: one version byte, then the cover menu's last
 /// cart, the debug fly flag and the screen-follow option.
@@ -56,17 +52,9 @@ const PRIV_VERSION: usize = 0;
 const PRIV_LAST_CART: usize = 1;
 const PRIV_FLY: usize = 2;
 const PRIV_FOLLOW: usize = 3;
+const PRIVATE_BYTES: usize = 124;
 
 const _: () = assert!(RECORD_LEN <= SETTINGS_BYTES);
-
-/// Top of RAM the collection links for, the one build parameter (games/scene-ram.ld).
-const RAM_SIZE: u32 = parse_hex(env!("SCENE_RAM_SIZE"));
-/// The initial stack pointer: 100h below the top of RAM, as psoxide.ld puts it.
-const STACK_INIT: u32 = 0x8000_0000 + RAM_SIZE - 0x100;
-/// `STACK_INIT` as `lui` + `addiu` halves (the assembler's `%hi` of a constant this large
-/// evaluated to 0).
-const STACK_HI: u32 = STACK_INIT.wrapping_add(0x8000) >> 16;
-const STACK_LO: i32 = STACK_INIT as u16 as i16 as i32;
 
 /// The handoff block as the link map names it (games/scene-block.ld places `.scene_block` at
 /// 0x801FFF00, NOLOAD): the harness and the journeys read `SCENE_BLOCK` + offset. Only its address
@@ -75,23 +63,6 @@ const STACK_LO: i32 = STACK_INIT as u16 as i16 as i32;
 #[link_section = ".scene_block"]
 #[used]
 pub static mut SCENE_BLOCK: [u32; 64] = [0; 64];
-
-const fn parse_hex(s: &str) -> u32 {
-    let b = s.as_bytes();
-    let mut i = 2; // "0x"
-    let mut v = 0u32;
-    while i < b.len() {
-        let d = match b[i] {
-            c @ b'0'..=b'9' => c - b'0',
-            c @ b'a'..=b'f' => c - b'a' + 10,
-            c @ b'A'..=b'F' => c - b'A' + 10,
-            _ => panic!("bad hex digit"),
-        };
-        v = v * 16 + d as u32;
-        i += 1;
-    }
-    v
-}
 
 fn read(off: usize) -> u32 {
     // SAFETY: the handoff block is RAM above the stack, owned by the scene system.
@@ -128,37 +99,52 @@ pub struct Entry {
     pub previous: Option<SceneId>,
 }
 
-/// Call first in `main`, with the scene the image starts in. With a valid block left by a switch
-/// (flag bit 0, this scene current) it applies the block's settings; otherwise (a BIOS boot, a
-/// reset with a stale block in RAM, a foreign loader) it reads the memory card, as the collection
-/// always did at boot, and writes a fresh block. `previous` is `None` exactly on that second path,
-/// which is when the menu plays the splash.
-// Runs once, at the start of `main`: cold code, with `settings`.
+/// Call first in `main`. The core's `__core_boot` attached before `_start` and wrote the block's
+/// own fields (magic, version, core hash, disc base, scenes, flags, loaded mask). On a BIOS boot
+/// (previous scene 0xFFFF, or no valid block from the private layout's view) this reads the memory
+/// card, as the collection always did at boot, and writes the settings record and the collection's
+/// private bytes; otherwise it applies the block's settings. It also reads the scene table into
+/// RAM once ([`table`]). `previous` is `None` on a BIOS boot, which is when the menu plays the
+/// splash.
 #[link_section = ".psx_cold.scene_entered"]
 #[inline(never)]
-pub fn scene_entered(id: SceneId) -> Entry {
-    if valid() && read(OFF_FLAGS) & FLAG_SWITCHED != 0 && current_scene() == id {
+pub fn scene_entered() -> Entry {
+    read_table();
+    let previous = (read(OFF_SCENES) >> 16) as SceneId;
+    if psx_core::link::block_valid() && previous != NONE && valid() {
         settings();
-        write(OFF_FLAGS, read(OFF_FLAGS) & !FLAG_SWITCHED);
-        let previous = (read(OFF_SCENES) >> 16) as SceneId;
         return Entry {
-            previous: (previous != NONE).then_some(previous),
+            previous: Some(previous),
         };
     }
     save::load(); // no card or no file keeps the defaults
-    for off in (0..LENGTH as usize).step_by(4) {
+    for off in (OFF_PRIVATE..OFF_PRIVATE + PRIVATE_BYTES).step_by(4) {
         write(off, 0);
     }
-    write(OFF_MAGIC, MAGIC);
-    write(OFF_VERSION_LENGTH, VERSION | LENGTH << 16);
-    write(OFF_CORE_HASH, 0); // no core yet
-    write(OFF_LBA_OFFSET, psx_io::disc_base::lba_offset());
-    write(OFF_TRACK_BASE, psx_io::disc_base::cdda_track_base() as u32);
-    write(OFF_SCENES, id as u32 | (NONE as u32) << 16);
     write_byte(OFF_PRIVATE + PRIV_VERSION, PRIVATE_VERSION);
     store_settings();
-    write(OFF_NOT_MAGIC, !MAGIC);
     Entry { previous: None }
+}
+
+/// The program's RAM copy of its scene table (the core's v2 rule: read once at boot, passed to
+/// every `psx_core_switch`). The collection's switches are in-program calls, so nothing passes it
+/// yet; it is here for a switch to another program.
+static mut TABLE: [u32; TABLE_WORDS] = [0; TABLE_WORDS];
+/// Header plus four rows (the start scene and three in-program scenes; no image rows).
+const TABLE_WORDS: usize = 16 + 8 * 4;
+
+fn read_table() {
+    // SAFETY: single-threaded boot; nothing else holds the table.
+    let table = unsafe { &mut *core::ptr::addr_of_mut!(TABLE) };
+    if psx_core::link::read_table(table).is_err() {
+        psx_core::link::fatal(psx_core::abi::code::TABLE_MAGIC);
+    }
+}
+
+/// The scene table as read at boot.
+pub fn table() -> &'static [u32] {
+    // SAFETY: written once by `read_table` before any reader.
+    unsafe { &*core::ptr::addr_of!(TABLE) }
 }
 
 /// Make the block's settings the live ones: the psx-settings record (volumes, pixel scale,
@@ -215,34 +201,14 @@ pub fn current_scene() -> SceneId {
     read(OFF_SCENES) as SceneId
 }
 
-/// Switch to `scene`. Every scene of the collection is in this one resident image, so the switch
-/// reads nothing from the disc: it records the switch in the block (current, previous, counter,
-/// the settings) and returns, and the caller runs the scene. Under the core, a scene whose image is
-/// not resident would be loaded here first.
+/// Switch to `scene`. Every scene of the collection is in-program (its SCENES.TBL rows point at this
+/// Program), so the switch reads nothing from the disc and does not call the core: it records the
+/// switch in the block (current, previous, counter, the settings) and returns, and the caller runs
+/// the scene. (The SDK lane's psx-core helper for the in-program bookkeeping replaces the writes
+/// here when it lands.)
 pub fn switch_to(scene: SceneId) {
     store_settings();
     let current = read(OFF_SCENES) & 0xffff;
     write(OFF_SCENES, scene as u32 | current << 16);
     write(OFF_SWITCHES, read(OFF_SWITCHES).wrapping_add(1));
 }
-
-// The image's entry (games/scene-ram.ld sets psoxide.ld's `__initial_pc` to it): `$sp` to
-// `STACK_INIT` before anything uses the stack, then psx-rt's `_start`. The BIOS starts a disc's
-// program with `$sp` = 0x801FFFF0 (SYSTEM.CNF's STACK), inside the handoff block; the core's
-// `__core_boot` does this for every program (CORE-ABI.md 4.3). `$a0..$a3` untouched.
-#[cfg(target_arch = "mips")]
-core::arch::global_asm!(
-    r#"
-    .section .text.__scene_boot,"ax",@progbits
-    .globl __scene_boot
-    .set push
-    .set noreorder
-__scene_boot:
-    lui   $sp, {stack_hi}
-    j     _start
-    addiu $sp, $sp, {stack_lo}
-    .set pop
-"#,
-    stack_hi = const STACK_HI,
-    stack_lo = const STACK_LO,
-);

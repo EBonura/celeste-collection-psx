@@ -111,17 +111,21 @@ fn shell_phase(_phase: u32) {}
 fn main() {
     psx_rt::interrupts::install_vblank_counter();
     // The settings (volumes, pixel scale, borders, brightness) come from the handoff block, or from
-    // the memory card on a cold entry (no card / no save = defaults), once, before anything renders.
-    let entry = scene_core::scene_entered(MENU);
+    // the memory card on a BIOS boot (no card / no save = defaults), once, before anything renders.
+    let entry = scene_core::scene_entered();
     atmos::init(); // seed the menu's cloud/particle backdrops
     if entry.previous.is_none() {
-        show_intro(); // the SDK splash, once, from boot-only memory
+        show_intro(); // the SDK splash, once, after a BIOS boot
     }
-    let mut first = true; // play the intro->menu transition only on the first menu
+    scene_core::switch_to(MENU);
+    run(MENU, true)
+}
+
+/// The scene dispatch from `scene`: every scene is in this Program, so a switch is this call.
+/// `first` plays the intro->menu transition on the first menu.
+fn run(mut scene: SceneId, mut first: bool) -> ! {
     let mut sel = scene_core::last_cart(); // highlighted game, kept across every trip away
-    let mut scene = MENU;
     loop {
-        // The scene dispatch: every scene is resident, so a switch is this call.
         let next: SceneId = match scene {
             CLASSIC => {
                 celeste::run();
@@ -140,6 +144,24 @@ fn main() {
         scene_core::switch_to(next);
         scene = next;
     }
+}
+
+// The in-program scenes' entries, which SCENES.TBL names (games/celeste-collection/scenes.txt):
+// the core jumps to one, with `$sp` at STACK_INIT and no `_start`, only to start that scene from
+// another scene while this Program runs. The collection's own switches are the calls in `run`.
+#[no_mangle]
+pub extern "C" fn celeste_scene_menu() -> ! {
+    run(MENU, false)
+}
+
+#[no_mangle]
+pub extern "C" fn celeste_scene_classic() -> ! {
+    run(CLASSIC, false)
+}
+
+#[no_mangle]
+pub extern "C" fn celeste_scene_lani() -> ! {
+    run(LANI, false)
 }
 
 /// The menu scene: the cover menu, the credits and the settings, until a game is picked. Returns

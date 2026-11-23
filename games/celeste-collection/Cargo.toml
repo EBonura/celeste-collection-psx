@@ -54,3 +54,7 @@ psx-splash = { path = "../../.psoxide/sdk/crates/psx-splash" }
 psx-vram = { path = "../../.psoxide/sdk/crates/psx-vram" }
 psx-pad  = { path = "../../.psoxide/sdk/crates/psx-pad" }
 psx-font = { path = "../../.psoxide/sdk/crates/psx-font" }
+# The scene core (SDK lane/scene-core-1123, a lane-local checkout beside this one: read-only, not
+# the pinned SDK): its image, `__core_boot`, the calls and the scene table helper.
+psx-core = { path = "../../../sdk-core/sdk/crates/psx-core", features = ["link"] }
+psx-scene-abi = { path = "../../../sdk-core/sdk/crates/psx-scene-abi" }

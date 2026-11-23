@@ -8,7 +8,16 @@
 
 ROOT     := $(CURDIR)
 PSOXIDE  := $(ROOT)/.psoxide
-MKISOPSX := $(PSOXIDE)/tools/mkisopsx
+# The collection runs on the scene core (SDK lane/scene-core-1123, a lane-local checkout beside this
+# repository, read-only): its mkisopsx writes SCENES.TBL v2 (`--scenes`) and checks the core image.
+CORE_SDK ?= $(ROOT)/../sdk-core
+MKISOPSX := $(CORE_SDK)/tools/mkisopsx
+CORE_IMAGE := $(CORE_SDK)/sdk/crates/psx-core/prebuilt/psx-core.bin
+# `$(call scene_manifest,MAP,OUT)`: games/celeste-collection/scenes.txt with each @NAME@ replaced
+# by that function's address in MAP.
+scene_manifest = python3 -c 'import re,sys; m=open(sys.argv[1]).read(); \
+	print(re.sub(r"@(\w+)@", lambda g: "0x" + re.search(r"^\s*([0-9a-f]+)\s+\S+\s+\S+\s+\S+\s+" + g.group(1) + r"$$", m, re.M).group(1), open(sys.argv[2]).read()), end="")' \
+	$(1) $(COLLECTION_DIR)/scenes.txt > $(2)
 TARGET   := mipsel-sony-psx
 DIST     := $(ROOT)/dist
 
@@ -197,8 +206,9 @@ collection-gate: repro-rustc
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(GATE_DIST)/celeste-collection.map" cargo $(GATE_CARGO)
 	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
 		--sdk $(PSOXIDE) --crate games/celeste-collection --receipt $(COLLECTION_EXE) -- $(GATE_CARGO)
+	$(call scene_manifest,$(GATE_DIST)/celeste-collection.map,$(GATE_DIST)/scenes.txt)
 	cd $(MKISOPSX) && cargo run --release -- \
-		--exe $(COLLECTION_EXE) \
+		--exe $(COLLECTION_EXE) --scenes $(GATE_DIST)/scenes.txt --core-image $(CORE_IMAGE) \
 		--gate-file $(ROOT)/psx-gate.toml \
 		--out $(GATE_DIST)/celeste-collection.bin \
 		--volume CELESTECOLL --diag
@@ -206,8 +216,9 @@ collection-gate: repro-rustc
 
 collection-disc: collection
 	@mkdir -p $(DIST)
+	$(call scene_manifest,$(COLLECTION_MAP),$(DIST)/scenes.txt)
 	cd $(MKISOPSX) && cargo run --release -- \
-		--exe $(COLLECTION_EXE) \
+		--exe $(COLLECTION_EXE) --scenes $(DIST)/scenes.txt --core-image $(CORE_IMAGE) \
 		--gate-file $(ROOT)/psx-gate.toml \
 		--out $(DIST)/celeste-collection.bin \
 		--volume CELESTECOLL

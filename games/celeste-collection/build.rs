@@ -1,7 +1,8 @@
 //! Inject PSoXide's PSX linker scripts into the final link, by absolute path derived from this
-//! crate's location, in this order: the top of RAM the collection links for and its entry
-//! (`games/scene-ram.ld`, under the scene core's window), psoxide.ld, and the handoff block's
-//! section (`games/scene-block.ld`).
+//! crate's location, in this order: the top of RAM the collection links for
+//! (`games/scene-ram.ld`, under the scene core's window), the scene core (`psoxide-core.ld`),
+//! psoxide.ld, and the handoff block's section (`games/scene-block.ld`). The core's scripts come
+//! from the core's SDK checkout (`PSX_CORE_SDK`, default `../sdk-core` beside the repository).
 
 use std::path::PathBuf;
 
@@ -37,7 +38,14 @@ fn main() {
         .parent()
         .expect("crate lives at <repo>/games/<name>");
     let repo_root = games.parent().expect("crate lives at <repo>/games/<name>");
-    let sdk = repo_root.join(".psoxide/sdk");
+    // The scene core's scripts come from the core's SDK checkout (psoxide.ld there stores the
+    // core's image after .data and lays .bss over it), not from the pinned .psoxide.
+    println!("cargo:rerun-if-env-changed=PSX_CORE_SDK");
+    let core_sdk = std::env::var("PSX_CORE_SDK")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| repo_root.join("../sdk-core"));
+    let sdk = core_sdk.join("sdk");
+    let core_ld = sdk.join("psoxide-core.ld");
     let ld = sdk.join("psoxide.ld");
     let ld = ld.canonicalize().unwrap_or(ld);
     let block_ld = games.join("scene-block.ld");
@@ -46,17 +54,14 @@ fn main() {
     // The top of RAM, as a `-T` file ahead of psoxide.ld so the link map records it.
     let ram = ram_size(games);
     let ram_ld = out.join("scene-ram.ld");
-    std::fs::write(
-        &ram_ld,
-        format!("RAM_SIZE_OVERRIDE = {ram:#x};\n__initial_pc = __scene_boot;\n"),
-    )
-    .expect("write scene-ram.ld");
+    std::fs::write(&ram_ld, format!("RAM_SIZE_OVERRIDE = {ram:#x};\n"))
+        .expect("write scene-ram.ld");
     println!("cargo:rustc-env=SCENE_RAM_SIZE={ram:#x}");
     println!("cargo:rustc-link-arg=-T{}", ram_ld.display());
 
-    // The entry that moves `$sp` below the core's window before `_start` (scene_core.rs).
-    println!("cargo:rustc-link-arg=-u");
-    println!("cargo:rustc-link-arg=__scene_boot");
+    // The core (`__core_boot` is the entry; its stored image and .bss overlap on purpose).
+    println!("cargo:rustc-link-arg=-T{}", core_ld.display());
+    println!("cargo:rustc-link-arg=--no-check-sections");
 
     // `-T` selects the linker script; `--oformat=binary` dumps a flat
     // PSX-EXE image (the script lays out the executable header) instead
@@ -82,7 +87,7 @@ fn main() {
         println!("cargo:rustc-link-arg=-Map={}", PathBuf::from(map).display());
     }
     println!("cargo:rerun-if-env-changed=PSX_LINK_MAP");
-    for f in [&ld, &block_ld] {
+    for f in [&ld, &core_ld, &block_ld] {
         println!("cargo:rerun-if-changed={}", f.display());
     }
 }

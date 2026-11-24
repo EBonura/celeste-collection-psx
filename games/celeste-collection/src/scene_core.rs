@@ -64,6 +64,12 @@ const _: () = assert!(RECORD_LEN <= SETTINGS_BYTES);
 #[used]
 pub static mut SCENE_BLOCK: [u32; 64] = [0; 64];
 
+// The block's current-scene halfword (+0x14) as a symbol of its own, for a launcher's ready probe
+// on the shipping disc (the map names it; no code runs): 1 once the cover menu has been entered
+// (0 start, 1 menu, 2 Classic, 3 Lani).
+#[cfg(target_arch = "mips")]
+core::arch::global_asm!(".globl SCENE_CURRENT", ".set SCENE_CURRENT, SCENE_BLOCK + 0x14");
+
 fn read(off: usize) -> u32 {
     // SAFETY: the handoff block is RAM above the stack, owned by the scene system.
     unsafe { core::ptr::read_volatile((BLOCK + off) as *const u32) }

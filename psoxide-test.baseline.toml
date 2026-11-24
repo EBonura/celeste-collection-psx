@@ -1,27 +1,43 @@
 # Written by `psoxide-test bless`; edit only by blessing again (decision 4: a bar changes by editing
 # psoxide-test.toml with a reason, never by hand-editing these numbers).
 schema = 1
-blessed_commit = "dfa1afc166499a54437ffb573389dc134a32f366"
-sdk_pin = "6bfe478ff0e0c6e226cdf67b164df311c1658fec"
+blessed_commit = "4a9a0c4f0eecb4c1dcbd57aed9eecebdbcc53377"
+sdk_pin = "80d432926e69dc0bc6ac328c3c9b143a8d875754"
 
 [size.ship]
-text = 240276
-data = 230280
-bss = 48132
-free = 1479884
+text = 249728
+data = 112648
+bss = 162928
+free = 1465096
 
 [speed.classic]
 offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
 flips = [1560, 1560, 1560, 1556, 1556, 1556, 1556, 1556]
-work_per_frame = [517733, 517727, 517721, 519082, 519081, 519081, 519081, 519447]
-frame_work_p99 = [526030, 526030, 526030, 526031, 526736, 527834, 527834, 542722]
-vblanks = ["1:1549,5:10", "1:1549,5:10", "1:1549,5:10", "1:1545,5:10", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1543,2:1,5:11"]
+work_per_frame = [517769, 517764, 517758, 519123, 519122, 519118, 519118, 519118]
+frame_work_p99 = [507163, 507163, 507163, 507163, 512915, 513634, 513890, 518752]
+vblanks = ["1:1549,5:10", "1:1549,5:10", "1:1549,5:10", "1:1545,5:10", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11", "1:1544,5:11"]
 layouts = []
 
 [speed.classic.identity]
 tape = "pgo/classic.pxtape"
 tape_sha256 = "736bbbb50378c0fb0bea2961680ba5f66c145c53184019d5c63b27a42af68bb7"
 window = "polls 2800..6000"
+offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
+launch_args = []
+gate_revision = "97cd078f9d2a33eb6aff274541bccc118f5b12e8"
+
+[speed.lani]
+offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
+flips = [2900, 2900, 2900, 2900, 2900, 2900, 2900, 2900]
+work_per_frame = [528744, 528744, 528743, 528743, 528743, 528745, 528743, 528744]
+frame_work_p99 = [531112, 531112, 531112, 531112, 531112, 531112, 531112, 531112]
+vblanks = ["1:2899", "1:2899", "1:2899", "1:2899", "1:2899", "1:2899", "1:2899", "1:2899"]
+layouts = []
+
+[speed.lani.identity]
+tape = "pgo/lani.pxtape"
+tape_sha256 = "b548ad92c400ab405a928a3ec53f9e3d0815b192d160e3db614980ddc345cdef"
+window = "polls 1200..4100"
 offsets = [-48, -36, -24, -12, 0, 12, 24, 36]
 launch_args = []
 gate_revision = "97cd078f9d2a33eb6aff274541bccc118f5b12e8"
@@ -51,12 +67,41 @@ ticks = 1980
 open_loop = 13
 clock_waits = 0
 
+[journeys.scene-hops]
+ticks = 502
+open_loop = 0
+clock_waits = 0
+
 [journeys.smoke-boot-play]
-ticks = 414
+ticks = 415
 open_loop = 0
 clock_waits = 0
 
 [host]
 
 [maps]
-ship = "2bcbcea829226ffa4b9bcd397781e089cb21a58f685242f10600dd769b934c7c"
+ship = "e9012701c0046497ee040e71b8c229b0a6c67c0ec60e5f3288cb8289e73e5015"
+
+[load.boot-to-menu]
+vblanks = 78
+cycles = 44603299
+
+[load.boot-to-splash]
+vblanks = 8
+cycles = 4569890
+
+[load.classic-to-menu]
+vblanks = 17
+cycles = 9732782
+
+[load.lani-to-menu]
+vblanks = 17
+cycles = 9784597
+
+[load.menu-to-classic]
+vblanks = 19
+cycles = 10853560
+
+[load.menu-to-lani]
+vblanks = 18
+cycles = 10282318

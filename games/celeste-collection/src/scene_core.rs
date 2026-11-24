@@ -68,7 +68,10 @@ pub static mut SCENE_BLOCK: [u32; 64] = [0; 64];
 // on the shipping disc (the map names it; no code runs): 1 once the cover menu has been entered
 // (0 start, 1 menu, 2 Classic, 3 Lani).
 #[cfg(target_arch = "mips")]
-core::arch::global_asm!(".globl SCENE_CURRENT", ".set SCENE_CURRENT, SCENE_BLOCK + 0x14");
+core::arch::global_asm!(
+    ".globl SCENE_CURRENT",
+    ".set SCENE_CURRENT, SCENE_BLOCK + 0x14"
+);
 
 fn read(off: usize) -> u32 {
     // SAFETY: the handoff block is RAM above the stack, owned by the scene system.

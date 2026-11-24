@@ -61,7 +61,11 @@ fn main() {
 
     // The in-program scenes' entries (main.rs) are named by SCENES.TBL and referenced by nothing
     // else, so the linker is told to keep them.
-    for entry in ["celeste_scene_menu", "celeste_scene_classic", "celeste_scene_lani"] {
+    for entry in [
+        "celeste_scene_menu",
+        "celeste_scene_classic",
+        "celeste_scene_lani",
+    ] {
         println!("cargo:rustc-link-arg=-u");
         println!("cargo:rustc-link-arg={entry}");
     }

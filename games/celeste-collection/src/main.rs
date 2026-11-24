@@ -183,7 +183,7 @@ const ANY_FACE: u16 = button::CROSS | button::CIRCLE | button::START;
 
 /// Boot splash: the SDK's, with the studio mark above the line. Any face button skips it.
 /// Boot-only memory (psoxide-boot.ld), with psx-splash: run once after a BIOS boot.
-#[link_section = ".boot_only.show_intro"]
+#[link_section = ".text.boot_only.show_intro"]
 #[inline(never)]
 fn show_intro() {
     shell_phase(1);

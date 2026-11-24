@@ -8,11 +8,10 @@
 
 ROOT     := $(CURDIR)
 PSOXIDE  := $(ROOT)/.psoxide
-# The collection runs on the scene core (SDK lane/scene-core-1123, a lane-local checkout beside this
-# repository, read-only): its mkisopsx writes SCENES.TBL v2 (`--scenes`) and checks the core image.
-CORE_SDK ?= $(ROOT)/../sdk-core
-MKISOPSX := $(CORE_SDK)/tools/mkisopsx
-CORE_IMAGE := $(CORE_SDK)/sdk/crates/psx-core/prebuilt/psx-core.bin
+# The collection runs on the scene core: the pinned SDK's mkisopsx writes SCENES.TBL v2 (`--scenes`)
+# and checks the core image.
+MKISOPSX := $(PSOXIDE)/tools/mkisopsx
+CORE_IMAGE := $(PSOXIDE)/sdk/crates/psx-core/prebuilt/psx-core.bin
 # `$(call scene_manifest,MAP,OUT)`: games/celeste-collection/scenes.txt with each @NAME@ replaced
 # by that function's address in MAP.
 scene_manifest = python3 -c 'import re,sys; m=open(sys.argv[1]).read(); \
@@ -148,7 +147,12 @@ clean:
 # (mkisopsx packs exactly one). Under the SDK's scene core it is one resident image holding three
 # scenes (menu, Classic, Lani); its top of RAM is games/scene-ram.ld, below the core's window.
 COLLECTION_DIR := $(ROOT)/games/celeste-collection
-COLLECTION_EXE := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.exe
+# The link writes an ELF (the core's image and the boot-only memory are stored in one place and run
+# from another); psx-exe writes the PS-X EXE from it, every section at its load address. The EXE is
+# what the receipt, the disc and the harness take.
+COLLECTION_ELF := $(COLLECTION_DIR)/target/$(TARGET)/release/celeste-collection.exe
+COLLECTION_EXE := $(DIST)/celeste-collection.exe
+PSX_EXE = cargo run -q --release --manifest-path "$(PSOXIDE)/Cargo.toml" -p psoxide-hazard --bin psx-exe --
 COLLECTION_MAP ?= $(DIST)/celeste-collection.map
 # Functions that must be in the link map: `celeste::run` is inlined under fat LTO, so these are the
 # carts' update code (Celeste 1 and Celeste 2), which exists only if the cart's run chain was kept.
@@ -184,13 +188,14 @@ ifeq ($(COLLECTION_LAYOUT),off)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
 else
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(COLLECTION_FIRST_MAP)" cargo build --release
-	cp $(COLLECTION_EXE) $(COLLECTION_FIRST_EXE)
+	$(PSX_EXE) "$(COLLECTION_ELF)" "$(COLLECTION_FIRST_EXE)"
 	PSOXIDE="$(PSOXIDE)" $(PGO_TOOL) place "$(COLLECTION_LAYOUT)" "$(COLLECTION_FIRST_MAP)" \
 		"$(COLLECTION_FIRST_EXE)" "$(PSOXIDE)/sdk/psoxide.ld" "$(COLLECTION_ORDER)"
 	cd $(COLLECTION_DIR) && $(REPRO) $(ORDERED) PSX_LINK_MAP="$(COLLECTION_MAP)" cargo build --release
 	PSOXIDE="$(PSOXIDE)" $(PGO_TOOL) followed "$(COLLECTION_ORDER)" "$(COLLECTION_MAP)"
 endif
 	@for s in $(COLLECTION_PRESENT); do grep -qE "[[:space:]]$$s$$" "$(COLLECTION_MAP)" || { echo "collection: $$s is missing from the link map (a cart was dropped by LTO)"; exit 1; }; done
+	$(PSX_EXE) "$(COLLECTION_ELF)" "$(COLLECTION_EXE)"
 	$(ORDERED) $(call receipt,celeste-collection,$(COLLECTION_EXE))
 	@echo "EXE  -> $(COLLECTION_EXE)"
 
@@ -204,11 +209,12 @@ collection-gate: repro-rustc
 		--sdk $(PSOXIDE) --crate games/celeste-collection -- $(GATE_CARGO)
 	$(relink_collection)
 	cd $(COLLECTION_DIR) && $(REPRO) PSX_LINK_MAP="$(GATE_DIST)/celeste-collection.map" cargo $(GATE_CARGO)
+	$(PSX_EXE) "$(COLLECTION_ELF)" "$(GATE_DIST)/celeste-collection.exe"
 	cargo run -q --release --manifest-path $(PSOXIDE)/Cargo.toml -p psoxide-hazard --bin psx-gate -- \
-		--sdk $(PSOXIDE) --crate games/celeste-collection --receipt $(COLLECTION_EXE) -- $(GATE_CARGO)
+		--sdk $(PSOXIDE) --crate games/celeste-collection --receipt $(GATE_DIST)/celeste-collection.exe -- $(GATE_CARGO)
 	$(call scene_manifest,$(GATE_DIST)/celeste-collection.map,$(GATE_DIST)/scenes.txt)
 	cd $(MKISOPSX) && cargo run --release -- \
-		--exe $(COLLECTION_EXE) --scenes $(GATE_DIST)/scenes.txt --core-image $(CORE_IMAGE) \
+		--exe $(GATE_DIST)/celeste-collection.exe --scenes $(GATE_DIST)/scenes.txt --core-image $(CORE_IMAGE) \
 		--gate-file $(ROOT)/psx-gate.toml \
 		--out $(GATE_DIST)/celeste-collection.bin \
 		--volume CELESTECOLL --diag
@@ -230,8 +236,9 @@ collection-disc: collection
 # layout. The library path may contain a space, so quote it in the recipe.
 collection-install: collection
 	@mkdir -p "$(PSOXIDE_LIB)/$(COLLECTION_NAME)"
+	$(call scene_manifest,$(COLLECTION_MAP),$(DIST)/scenes.txt)
 	cd $(MKISOPSX) && cargo run --release -- \
-		--exe $(COLLECTION_EXE) \
+		--exe $(COLLECTION_EXE) --scenes $(DIST)/scenes.txt --core-image $(CORE_IMAGE) \
 		--gate-file $(ROOT)/psx-gate.toml \
 		--out "$(PSOXIDE_LIB)/$(COLLECTION_NAME)/$(COLLECTION_NAME).bin" \
 		--volume CELESTECOLL

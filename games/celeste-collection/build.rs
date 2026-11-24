@@ -2,8 +2,7 @@
 //! crate's location, in this order: the top of RAM the collection links for
 //! (`games/scene-ram.ld`, under the scene core's window), the scene core (`psoxide-core.ld`), the
 //! boot-only memory (`psoxide-boot.ld`), psoxide.ld, and the handoff block's section
-//! (`games/scene-block.ld`). The output is an ELF; the Makefile writes the PS-X EXE. The core's scripts come
-//! from the core's SDK checkout (`PSX_CORE_SDK`, default `../sdk-core` beside the repository).
+//! (`games/scene-block.ld`). The output is an ELF; the Makefile writes the PS-X EXE.
 
 use std::path::PathBuf;
 
@@ -39,13 +38,7 @@ fn main() {
         .parent()
         .expect("crate lives at <repo>/games/<name>");
     let repo_root = games.parent().expect("crate lives at <repo>/games/<name>");
-    // The scene core's scripts come from the core's SDK checkout (psoxide.ld there stores the
-    // core's image after .data and lays .bss over it), not from the pinned .psoxide.
-    println!("cargo:rerun-if-env-changed=PSX_CORE_SDK");
-    let core_sdk = std::env::var("PSX_CORE_SDK")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| repo_root.join("../sdk-core"));
-    let sdk = core_sdk.join("sdk");
+    let sdk = repo_root.join(".psoxide/sdk");
     let core_ld = sdk.join("psoxide-core.ld");
     let boot_ld = sdk.join("psoxide-boot.ld");
     let ld = sdk.join("psoxide.ld");
@@ -62,11 +55,16 @@ fn main() {
     println!("cargo:rustc-link-arg=-T{}", ram_ld.display());
 
     // The core (`__core_boot` is the entry), then the boot-only memory for the splash
-    // (`__boot_entry`, scene_core.rs, moves it up after the core's boot).
+    // (psx-rt's `__boot_entry` moves it up after the core's boot; the script references it).
     println!("cargo:rustc-link-arg=-T{}", core_ld.display());
     println!("cargo:rustc-link-arg=-T{}", boot_ld.display());
-    println!("cargo:rustc-link-arg=-u");
-    println!("cargo:rustc-link-arg=__boot_entry");
+
+    // The in-program scenes' entries (main.rs) are named by SCENES.TBL and referenced by nothing
+    // else, so the linker is told to keep them.
+    for entry in ["celeste_scene_menu", "celeste_scene_classic", "celeste_scene_lani"] {
+        println!("cargo:rustc-link-arg=-u");
+        println!("cargo:rustc-link-arg={entry}");
+    }
 
     // `-T` selects the linker script; `--oformat=binary` dumps a flat
     // PSX-EXE image (the script lays out the executable header) instead
@@ -75,7 +73,7 @@ fn main() {
     println!("cargo:rustc-link-arg=-T{}", block_ld.display());
     // The link is an ELF: the core's image and `.boot` are stored in one place and run from
     // another, which `--oformat=binary` cannot write. The Makefile writes the PS-X EXE from it
-    // with the core SDK's `psx-exe` (every section at its load address).
+    // with the SDK's `psx-exe` (every section at its load address).
     // `PSOXIDE_LINK_ORDER` (set by psoxide-pgo for a `+order` variant) names a
     // symbol-ordering file for this link only.
     println!("cargo:rerun-if-env-changed=PSOXIDE_LINK_ORDER");

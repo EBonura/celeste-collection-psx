@@ -10,7 +10,7 @@ repository = "EBonura/celeste-collection-psx"
 name = "ship"
 out = "build/ship"
 commands = [["make", "collection-disc"]]
-collect = { "celeste-collection.bin" = "dist/celeste-collection.bin", "celeste-collection.cue" = "dist/celeste-collection.cue", "celeste-collection.map" = "dist/celeste-collection.map", "celeste-collection.exe" = "games/celeste-collection/target/mipsel-sony-psx/release/celeste-collection.exe" }
+collect = { "celeste-collection.bin" = "dist/celeste-collection.bin", "celeste-collection.cue" = "dist/celeste-collection.cue", "celeste-collection.map" = "dist/celeste-collection.map", "celeste-collection.exe" = "dist/celeste-collection.exe" }
 disc = "celeste-collection.cue"
 map = "celeste-collection.map"
 
@@ -20,7 +20,7 @@ map = "celeste-collection.map"
 name = "gate"
 out = "build/gate"
 commands = [["make", "collection-gate"]]
-collect = { "celeste-collection.bin" = "dist/gate/celeste-collection.bin", "celeste-collection.cue" = "dist/gate/celeste-collection.cue", "celeste-collection.map" = "dist/gate/celeste-collection.map", "celeste-collection.exe" = "games/celeste-collection/target/mipsel-sony-psx/release/celeste-collection.exe" }
+collect = { "celeste-collection.bin" = "dist/gate/celeste-collection.bin", "celeste-collection.cue" = "dist/gate/celeste-collection.cue", "celeste-collection.map" = "dist/gate/celeste-collection.map", "celeste-collection.exe" = "dist/gate/celeste-collection.exe" }
 disc = "celeste-collection.cue"
 map = "celeste-collection.map"
 

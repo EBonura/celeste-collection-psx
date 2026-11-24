@@ -1,5 +1,5 @@
 # The collection's scene manifest for `mkisopsx --scenes` (SCENES.TBL v2): one Program, its start
-# scene and three in-program scenes. The Makefile fills each @NAME@ with the address of that
+# scene and three in-program scenes. The Makefile fills each name between at signs with the address of that
 # function from the link map.
 program PSX.EXE - reaches=START,MENU,CLASSIC,LANI
 scene START   PSX.EXE start

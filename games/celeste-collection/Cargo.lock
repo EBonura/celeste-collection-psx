@@ -28,11 +28,13 @@ dependencies = [
  "celeste",
  "celeste2",
  "pico8",
+ "psx-core",
  "psx-font",
  "psx-gpu",
  "psx-io",
  "psx-pad",
  "psx-rt",
+ "psx-scene-abi",
  "psx-splash",
  "psx-vram",
 ]
@@ -79,6 +81,13 @@ dependencies = [
  "psx-hw",
  "psx-math",
  "psxed-format",
+]
+
+[[package]]
+name = "psx-core"
+version = "0.1.0"
+dependencies = [
+ "psx-scene-abi",
 ]
 
 [[package]]
@@ -179,6 +188,10 @@ dependencies = [
  "psx-math",
  "psx-tick",
 ]
+
+[[package]]
+name = "psx-scene-abi"
+version = "0.1.0"
 
 [[package]]
 name = "psx-settings"

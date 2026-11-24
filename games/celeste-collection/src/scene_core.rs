@@ -84,12 +84,25 @@ fn write_byte(off: usize, value: u8) {
     unsafe { core::ptr::write_volatile((BLOCK + off) as *mut u8, value) }
 }
 
-/// Whether the block is one this image can read (magic, `!magic`, version, private layout).
+/// Whether the block is one this image can read (magic, `!magic`, version).
 fn valid() -> bool {
     read(OFF_MAGIC) == MAGIC
         && read(OFF_NOT_MAGIC) == !MAGIC
         && read(OFF_VERSION_LENGTH) & 0xffff >= VERSION
-        && read_byte(OFF_PRIVATE + PRIV_VERSION) == PRIVATE_VERSION
+}
+
+/// Whether the scene-private area holds this collection's layout (another program's scenes may
+/// have left theirs there).
+fn private_valid() -> bool {
+    read_byte(OFF_PRIVATE + PRIV_VERSION) == PRIVATE_VERSION
+}
+
+/// Start the scene-private area with this collection's layout, all zero.
+fn reset_private() {
+    for off in (OFF_PRIVATE..OFF_PRIVATE + PRIVATE_BYTES).step_by(4) {
+        write(off, 0);
+    }
+    write_byte(OFF_PRIVATE + PRIV_VERSION, PRIVATE_VERSION);
 }
 
 /// How a scene was entered.
@@ -101,25 +114,30 @@ pub struct Entry {
 
 /// Call first in `main`. The core's `__core_boot` attached before `_start` and wrote the block's
 /// own fields (magic, version, core hash, disc base, scenes, flags, loaded mask). On a BIOS boot
-/// (previous scene 0xFFFF, or no valid block from the private layout's view) this reads the memory
-/// card, as the collection always did at boot, and writes the settings record and the collection's
-/// private bytes; otherwise it applies the block's settings. `previous` is `None` on a BIOS boot, which is when the menu plays the
+/// (previous scene 0xFFFF, or no valid block) this reads the memory card, as the collection always
+/// did at boot, and writes the settings record and the collection's private bytes; otherwise (a
+/// switch from another program's scene on a disc) it applies the block's settings record, starts
+/// the private area if it is not this collection's, and reads the card only when the record does
+/// not decode. `previous` is `None` on a BIOS boot, which is when the menu plays the
 /// splash.
 #[link_section = ".text.boot_only.scene_entered"]
 #[inline(never)]
 pub fn scene_entered() -> Entry {
     let previous = (read(OFF_SCENES) >> 16) as SceneId;
     if psx_core::link::block_valid() && previous != NONE && valid() {
-        settings();
+        if !private_valid() {
+            reset_private();
+        }
+        if !settings() {
+            save::load(); // the record is not a psx-settings record: the card, or the defaults
+            store_settings();
+        }
         return Entry {
             previous: Some(previous),
         };
     }
     save::load(); // no card or no file keeps the defaults
-    for off in (OFF_PRIVATE..OFF_PRIVATE + PRIVATE_BYTES).step_by(4) {
-        write(off, 0);
-    }
-    write_byte(OFF_PRIVATE + PRIV_VERSION, PRIVATE_VERSION);
+    reset_private();
     store_settings();
     Entry { previous: None }
 }

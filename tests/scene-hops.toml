@@ -15,8 +15,8 @@ memcard = "none"
 max_ticks = 6000
 
 [[step]]
-label = "the image wrote the handoff block (a cold boot)"
-wait_until = { kind = "ram", sym = "SCENE_BLOCK", op = "eq", value = 0x42435350 }
+label = "main stored the settings in the handoff block (a cold boot)"
+wait_until = { kind = "ram", sym = "SHELL_PHASE", op = "eq", value = 1 }
 timeout = 3000
 
 [[step]]

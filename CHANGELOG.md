@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.9 | 2026-11-25
+
+The collection now runs on the PSoXide scene core: one program holds the cover menu, Celeste and
+Celeste 2 as scenes, and a switch between them is a plain call with no disc read, as before.
+Built on the current PSoXide SDK (main 80d432926e69, core 558d3246).
+
+- Gameplay, sound and frame time are unchanged: Classic's frame work over the eight tape phases
+  matches the 0.2.8 baseline, and Celeste 2 matches the previously installed build on the same tape (528,724 against 528,718 cycles per frame).
+- Switching between the menu and a game takes 17 to 19 frames, as in 0.2.8.
+- The boot splash is the SDK's current one.
+- A settings change made in the menu or a pause menu is kept in the scene core's handoff block, so
+  every scene sees it; the memory card is still read once at boot.
+
 ## 0.2.8 | 2026-10-16
 
 0.2.7 was built and pressed but never published, so its changes ship here
